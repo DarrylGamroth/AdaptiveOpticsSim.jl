@@ -1227,6 +1227,30 @@ end
         mark_ka_cpu_kernel!(:pyramid_pupil_phase_kernel!,
             :pyramid_modulation_batch_mask_kernel!)
 
+        @testset "Transposed Pyramid FFT kernels" begin
+            for T in (ComplexF32, ComplexF64), shape in ((1,1,1),(17,35,3),(32,32,2),(65,33,2))
+                source = reshape(T.(1:prod(shape)), shape)
+                destination = similar(source, T, (shape[2],shape[1],shape[3]))
+                WavefrontSensors._pyramid_transpose!(KA_CPU_STYLE, destination, source,
+                    Backends.launch_kernel!)
+                @test destination == permutedims(source,(2,1,3))
+                WavefrontSensors._pyramid_transpose!(KA_CPU_STYLE, source, destination,
+                    Backends.launch_kernel!)
+                @test source == reshape(T.(1:prod(shape)), shape)
+            end
+            mask = ComplexF64[cis(0.3i-0.2j) for i in 1:5,j in 1:5]
+            stack = reshape(ComplexF64.(1:75),5,5,3)
+            expected = copy(stack)
+            expected[:,:,1:2] .*= reshape(transpose(mask),5,5,1)
+            Backends.launch_kernel!(KA_CPU_STYLE,
+                WavefrontSensors.pyramid_modulation_transposed_mask_kernel!,
+                stack, mask, 5, 2; ndrange=(7,7))
+            @test stack ≈ expected rtol=1e-14 atol=1e-14
+            @test stack[:,:,3] == expected[:,:,3]
+        end
+        mark_ka_cpu_kernel!(:pyramid_modulation_transpose_kernel!,
+            :pyramid_modulation_transposed_mask_kernel!)
+
     end
 
     @testset "Bi-O-edge kernels" begin

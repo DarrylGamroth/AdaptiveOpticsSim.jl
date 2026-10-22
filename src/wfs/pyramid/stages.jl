@@ -52,10 +52,19 @@ end
 @inline _pyramid_modulation_batch_workspace_binding(
     ::NoPyramidModulationBatchWorkspace) = ()
 
+@inline _pyramid_modulation_fft_workspace_binding(
+    ::NoPyramidModulationFFTWorkspace) = ()
+
+@inline function _pyramid_modulation_fft_workspace_binding(
+    workspace::PyramidTransposeFFTWorkspace)
+    return (workspace.field_stack, workspace.fft_plan, workspace.bfft_plan)
+end
+
 @inline function _pyramid_modulation_batch_workspace_binding(
     batch::PyramidModulationBatchWorkspace)
     return (batch.field_stack, batch.pupil_phase, batch.operating_weights, batch.fft_plan,
-        batch.bfft_plan, batch.batch_size)
+        batch.bfft_plan, batch.batch_size,
+        _pyramid_modulation_fft_workspace_binding(batch.fft_workspace))
 end
 
 @inline function _pyramid_propagation_workspace_binding(workspace)

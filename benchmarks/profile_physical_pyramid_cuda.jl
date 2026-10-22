@@ -27,6 +27,10 @@ function physical_profile_main(args)
     phase_arrays = Tuple(getfield(modulation, name) for name in fieldnames(typeof(modulation))
         if getfield(modulation, name) isa CUDA.CuArray)
     phase_bytes = sum(a -> sizeof(eltype(a)) * length(a), phase_arrays)
+    fft_workspace = hasproperty(workspace,:fft_workspace) ? workspace.fft_workspace : nothing
+    fft_arrays = isnothing(fft_workspace) ? () : Tuple(getfield(fft_workspace,name)
+        for name in fieldnames(typeof(fft_workspace)) if getfield(fft_workspace,name) isa CUDA.CuArray)
+    fft_extra_bytes = sum(a -> sizeof(eltype(a))*length(a),fft_arrays;init=0)
     warmups = parse(Int,get(ENV,"AOS_PROFILE_WARMUPS","16"))
     samples = parse(Int,get(ENV,"AOS_PROFILE_SAMPLES","32"))
     repetitions = parse(Int,get(ENV,"AOS_PROFILE_REPLAYS","4"))
@@ -55,6 +59,7 @@ function physical_profile_main(args)
         "gpu"=>CUDA.name(CUDA.device()),"batch"=>workspace.batch_size,
         "padded_side"=>size(workspace.field_stack,1),
         "field_stack_bytes"=>sizeof(eltype(workspace.field_stack))*length(workspace.field_stack),
+        "fft_workspace_type"=>string(typeof(fft_workspace)),"extra_fft_array_bytes"=>fft_extra_bytes,
         "phase_bytes"=>phase_bytes,
         "pupil_phase_bytes"=>sizeof(eltype(workspace.pupil_phase))*length(workspace.pupil_phase),
         "device_used_bytes"=>memory_before,"host_allocated_bytes"=>allocations,

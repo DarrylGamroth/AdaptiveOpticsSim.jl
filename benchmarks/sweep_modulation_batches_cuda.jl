@@ -48,6 +48,13 @@ function batch_graph(c, strategy; T=Float32)
     prepare_algorithm_graph(definition;target=compute_device(opd),execution=CapturedGraphExecution())
 end
 
+# Benchmark-owned arrays only; native FFT internal work areas are additional.
+function _benchmark_fft_storage_bytes(owner)
+    sum(name -> sizeof(eltype(getfield(owner,name)))*length(getfield(owner,name)),
+        (name for name in fieldnames(typeof(owner)) if isdefined(owner,name) &&
+            getfield(owner,name) isa CUDA.CuArray); init=0)
+end
+
 function measure_batch(c,strategy,batch,reference; warmups=16,samples=48)
     MODULATION_BATCH[]=batch
     graph=batch_graph(c,strategy)
@@ -67,6 +74,10 @@ function measure_batch(c,strategy,batch,reference; warmups=16,samples=48)
         "p95_ms"=>quantile(times,.95),"maximum_ms"=>maximum(times),
         "host_bytes"=>bytes,"relative_l2"=>relative,"flux"=>sum(Float64,output),
         "field_stack_bytes"=>sizeof(eltype(workspace.field_stack))*length(workspace.field_stack),
+        "extra_fft_array_bytes"=>_benchmark_fft_storage_bytes(workspace.fft_plan)+
+            _benchmark_fft_storage_bytes(workspace.bfft_plan)+
+            (hasproperty(workspace,:fft_workspace) ? _benchmark_fft_storage_bytes(workspace.fft_workspace) : 0),
+        "device_used_bytes"=>CUDA.used_memory(),
         "padded_side"=>size(workspace.field_stack,1),"algorithm_nodes"=>captured_graph_node_count(graph))
     println("$(c.name) $(nameof(typeof(strategy))) batch=$actual median_ms=$(record["median_ms"]) relative=$relative");flush(stdout)
     return record,output

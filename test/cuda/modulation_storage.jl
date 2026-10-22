@@ -49,8 +49,12 @@ function modulation_storage_rate(sensor, pupil, source)
 end
 
 modulation_storage_batch_arrays(::WavefrontSensors.NoPyramidModulationBatchWorkspace) = ()
+modulation_storage_fft_arrays(::WavefrontSensors.NoPyramidModulationFFTWorkspace) = ()
+modulation_storage_fft_arrays(workspace::WavefrontSensors.PyramidTransposeFFTWorkspace) =
+    (workspace.field_stack,)
 modulation_storage_batch_arrays(batch::WavefrontSensors.PyramidModulationBatchWorkspace) =
-    (batch.field_stack, batch.pupil_phase, batch.operating_weights)
+    (batch.field_stack, batch.pupil_phase, batch.operating_weights,
+        modulation_storage_fft_arrays(batch.fft_workspace)...)
 
 modulation_storage_phase_arrays(owner::ModulationOptics.PreparedFocalPlaneModulation) =
     (owner.phases,)
@@ -103,7 +107,10 @@ end
                 (T(1.3), T(0.7), T(0)), (T(-0.4), T(1.1), T(2)),
                 (T(-0.9), T(-0.5), T(1)))),
         )
-        geometries = ((;), (rooftop=T(0.25), phase_mask_rotation_rad=T(0.1)))
+        geometries = ((;), (rooftop=T(0.25), phase_mask_rotation_rad=T(0.1)),
+            (phase_mask_rotation_rad=T(0.17),
+                pupil_shift_x_pixels=(T(0.15),T(-0.1),T(0.2),T(-0.25)),
+                pupil_shift_y_pixels=(T(-0.2),T(0.05),T(0.1),T(0.3))))
         for geometry in geometries, policy in policies
             @testset "$T geometry=$geometry policy=$policy" begin
                 cpu = modulation_storage_sensor(cpu_tel, T; geometry, policy)
@@ -254,7 +261,10 @@ end
     T = Float32
     telescope, pupil, source = modulation_storage_fixture(T, CUDABackend())
     initial_opd = Array(pupil.opd)
-    geometries = ((;), (rooftop=T(0.25), phase_mask_rotation_rad=T(0.1)))
+    geometries = ((;), (rooftop=T(0.25), phase_mask_rotation_rad=T(0.1)),
+            (phase_mask_rotation_rad=T(0.17),
+                pupil_shift_x_pixels=(T(0.15),T(-0.1),T(0.2),T(-0.25)),
+                pupil_shift_y_pixels=(T(-0.2),T(0.05),T(0.1),T(0.3))))
     for geometry in geometries
         @testset "geometry=$geometry" begin
             copyto!(pupil.opd, initial_opd)

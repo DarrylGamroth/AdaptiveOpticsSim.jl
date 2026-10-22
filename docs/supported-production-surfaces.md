@@ -79,6 +79,13 @@ sm86 devices with 5 MiB L2; other cases retain the existing divisor selection
 with a 32-point limit and 256 MiB field-stack budget. Physical sampling and
 modulation weights are unchanged. The [batch sweep and validation](../benchmarks/results/platform/2026-10-22-modulation-batches/README.md)
 record the qualified combinations, numerical differences and external reference.
+The qualified fine `(FFT side, points)` pairs `(2880, 192)` and `(3072, 256)`
+use sixteen-point tiles and a 1536 MiB main field-stack bound. The 2880 case
+also retains transposed frequency planes between axis FFTs; its additional
+transposed stack is outside that bound. FFT layout and tile size are selected
+at preparation. Resizing retains the prepared layout family; fresh preparation
+applies the backend policy again. The [fine FFT investigation](../benchmarks/results/platform/2026-10-22-fft-layout/README.md)
+records timing, direct workspace storage, calibration and closed-loop parity.
 Accelerator Pyramid propagation stores each physical pupil tilt as two separable
 complex factor arrays, computes the common OPD phasor once per pupil propagation,
 and reuses mask values across modulation planes. These implementation choices
@@ -89,9 +96,9 @@ to captured execution. CPU and Bi-O-edge dense modulation APIs are unchanged.
 The accelerator graph surface includes opt-in CUDA Graph and HIP Graph replay
 of a complete graph step when every node is qualified. The maintained captured
 fixtures cover finite multilayer atmosphere replay, the regular-grid separable
-Gaussian DM, pupil-OPD composition, diffractive Shack-Hartmann optics, both
-maintained Pyramid modulation strategies, and the built-in CCD, CMOS, and
-EMCCD complete-frame detector nodes. Captured execution does not interleave
+Gaussian DM, pupil-OPD composition, diffractive Shack-Hartmann optics, physical
+Pyramid modulation, and the built-in CCD, CMOS, and EMCCD complete-frame detector
+nodes. Captured execution does not interleave
 unqualified stream nodes.
 
 Dense and measured influence-matrix DM nodes also admit captured execution

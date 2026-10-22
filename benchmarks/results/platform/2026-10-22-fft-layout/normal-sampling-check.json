@@ -1,0 +1,72 @@
+{
+  "copper_fast": {
+    "current_median_ms": 2.8582165,
+    "old_campaign_median_ms": 2.8680505,
+    "rate_identical_to_previous": true,
+    "host_allocation_bytes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "case": {
+      "edge": 1,
+      "n": 240,
+      "name": "copper_fast",
+      "points": 96,
+      "pupils": 30,
+      "separation": 2
+    },
+    "padded_side": 512,
+    "batch": 2,
+    "scope": "One captured physical AOS photon-rate node through completion; excludes detector, RTC, transfers, setup; unpaced single outstanding service",
+    "timing_comparison_scope": "Current sanity check versus earlier campaign, not an interleaved causal performance comparison"
+  },
+  "copper_default": {
+    "current_median_ms": 4.993373,
+    "old_campaign_median_ms": 5.0797985,
+    "rate_identical_to_previous": true,
+    "host_allocation_bytes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "case": {
+      "edge": 1,
+      "n": 480,
+      "name": "copper_default",
+      "points": 32,
+      "pupils": 30,
+      "separation": 2
+    },
+    "padded_side": 1024,
+    "batch": 32,
+    "scope": "One captured physical AOS photon-rate node through completion; excludes detector, RTC, transfers, setup; unpaced single outstanding service",
+    "timing_comparison_scope": "Current sanity check versus earlier campaign, not an interleaved causal performance comparison"
+  }
+}

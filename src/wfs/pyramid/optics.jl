@@ -150,17 +150,52 @@ end
     return inverse_scale * inverse_scale
 end
 
+@inline _finish_pyramid_transpose!(::typeof(launch_kernel_async!), style) = nothing
+@inline _finish_pyramid_transpose!(::typeof(launch_kernel!), style) =
+    synchronize_backend!(style)
+
+@inline function _pyramid_transpose!(style::AcceleratorStyle, destination, source,
+    launch::L) where {L}
+    pyramid_modulation_transpose_kernel!(style.backend, (32, 8, 1))(
+        destination, source; ndrange=(cld(size(source, 1), 32) * 32,
+            cld(size(source, 2), 32) * 8, size(source, 3)))
+    _finish_pyramid_transpose!(launch, style)
+    return destination
+end
+
+@inline function _pyramid_fft_mask_bfft!(::NoPyramidModulationFFTWorkspace,
+    batch, mask, style, launch::L, execute_fft!::F) where {L,F}
+    execute_fft!(batch.field_stack, batch.fft_plan)
+    launch(style, pyramid_modulation_batch_mask_kernel!, batch.field_stack, mask,
+        size(mask, 1), batch.batch_size; ndrange=size(mask))
+    execute_fft!(batch.field_stack, batch.bfft_plan)
+    return nothing
+end
+
+@inline function _pyramid_fft_mask_bfft!(workspace::PyramidTransposeFFTWorkspace,
+    batch, mask, style, launch::L, execute_fft!::F) where {L,F}
+    stack = batch.field_stack
+    transposed = workspace.field_stack
+    execute_fft!(stack, batch.fft_plan)
+    _pyramid_transpose!(style, transposed, stack, launch)
+    execute_fft!(transposed, workspace.fft_plan)
+    launch(style, pyramid_modulation_transposed_mask_kernel!, transposed, mask,
+        size(mask, 1), batch.batch_size; ndrange=size(mask))
+    execute_fft!(transposed, workspace.bfft_plan)
+    _pyramid_transpose!(style, stack, transposed, launch)
+    execute_fft!(stack, batch.bfft_plan)
+    return nothing
+end
+
 @inline function _propagate_pyramid_modulation_batch!(out,
     front_end::PyramidOpticalFrontEnd,
     batch::PyramidModulationBatchWorkspace, style::AcceleratorStyle)
     stack = batch.field_stack
     pad = size(out, 1)
     intensity_scale = pyramid_bfft_intensity_scale(eltype(out), pad)
-    execute_fft_plan!(stack, batch.fft_plan)
-    launch_kernel!(style, pyramid_modulation_batch_mask_kernel!,
-        stack, pyramid_propagation_workspace(front_end).pyramid_mask,
-        pad, batch.batch_size; ndrange=size(out))
-    execute_fft_plan!(stack, batch.bfft_plan)
+    _pyramid_fft_mask_bfft!(batch.fft_workspace, batch,
+        pyramid_propagation_workspace(front_end).pyramid_mask,
+        style, launch_kernel!, execute_fft_plan!)
     launch_kernel!(style, pyramid_modulation_batch_intensity_kernel!,
         out, stack, intensity_scale, pad, batch.batch_size;
         ndrange=size(out))
@@ -255,11 +290,8 @@ end
             propagation.phasor, amplitude_scale, offset,
             resolution, first_point, pad, batch.batch_size;
             ndrange=size(batch.field_stack))
-        enqueue_fft_plan!(batch.field_stack, batch.fft_plan)
-        launch_kernel_async!(style, pyramid_modulation_batch_mask_kernel!,
-            batch.field_stack, propagation.pyramid_mask, pad,
-            batch.batch_size; ndrange=size(out))
-        enqueue_fft_plan!(batch.field_stack, batch.bfft_plan)
+        _pyramid_fft_mask_bfft!(batch.fft_workspace, batch,
+            propagation.pyramid_mask, style, launch_kernel_async!, enqueue_fft_plan!)
         launch_kernel_async!(style,
             pyramid_modulation_batch_intensity_kernel!, out,
             batch.field_stack, intensity_scale, pad, batch.batch_size;

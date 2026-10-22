@@ -1,0 +1,228 @@
+{
+  "scope": "Fixed physical sampling; fine COPPER frozen calibration and complete captured GPI loops",
+  "copper": {
+    "rates": {
+      "relative_l2": 9.128600340835797e-08,
+      "maximum_absolute": 0.0078125,
+      "identical": false
+    },
+    "maximum_probe_flux_relative_error": 6.252520279304008e-09,
+    "slopes": {
+      "relative_l2": 8.078405638196041e-07,
+      "maximum_absolute": 2.2510269243915249e-07,
+      "identical": false
+    },
+    "interaction": {
+      "relative_l2": 5.389799913866651e-06,
+      "maximum_absolute": 9.848323226065986,
+      "identical": false
+    },
+    "maximum_column_relative_error": 0.00012079629470615743,
+    "atmosphere_rates": {
+      "relative_l2": 8.712912932800707e-08,
+      "maximum_absolute": 0.015625,
+      "identical": false
+    },
+    "atmosphere_frames": {
+      "relative_l2": 0.0,
+      "maximum_absolute": 0.0,
+      "identical": true
+    },
+    "frozen_calibration_loop": {
+      "commands": {
+        "relative_l2": 1.4661463914283213e-07,
+        "maximum_absolute": 9.237055564881302e-14,
+        "identical": false
+      },
+      "slopes": {
+        "relative_l2": 2.4411302934057094e-07,
+        "maximum_absolute": 3.446911863158597e-07,
+        "identical": false
+      },
+      "diagnostics": {
+        "relative_l2": 2.1661782368057943e-08,
+        "maximum_absolute": 3.151210548058003e-08,
+        "identical": false
+      },
+      "maximum_wfe_difference_m": 3.2617443883008315e-15,
+      "maximum_strehl_difference": 3.151210548058003e-08
+    }
+  },
+  "gpi": {
+    "default": {
+      "interaction": {
+        "relative_l2": 0.0,
+        "maximum_absolute": 0.0,
+        "identical": true
+      },
+      "maximum_column_relative_error": 0.0,
+      "runs": {
+        "moving_noiseless": {
+          "coefficients": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "identical": true
+          },
+          "maximum_residual_wavefront_difference_m": 0.0,
+          "tail_residual_wavefront_difference_rms_m": 0.0,
+          "maximum_wfe_difference_m": 0.0,
+          "tail_wfe_before_m": 1.3983655822653795e-07,
+          "tail_wfe_after_m": 1.3983655822653795e-07,
+          "provisional_0p05_nm_vector_check_passed": true,
+          "last_frame": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "identical": true
+          }
+        },
+        "moving_noisy": {
+          "coefficients": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "identical": true
+          },
+          "maximum_residual_wavefront_difference_m": 0.0,
+          "tail_residual_wavefront_difference_rms_m": 0.0,
+          "maximum_wfe_difference_m": 0.0,
+          "tail_wfe_before_m": 1.3992271554587316e-07,
+          "tail_wfe_after_m": 1.3992271554587316e-07,
+          "provisional_0p05_nm_vector_check_passed": true,
+          "comparison_scope": "One seeded noisy realization; statistical equivalence not established",
+          "wavefront_difference_rms_m": 0.0,
+          "realized_noise_effect_rms_m": 6.74875430432369e-09,
+          "last_frame": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "identical": true
+          }
+        },
+        "static": {
+          "coefficients": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "identical": true
+          },
+          "maximum_residual_wavefront_difference_m": 0.0,
+          "tail_residual_wavefront_difference_rms_m": 0.0,
+          "maximum_wfe_difference_m": 0.0,
+          "tail_wfe_before_m": 2.291044139276742e-14,
+          "tail_wfe_after_m": 2.291044139276742e-14,
+          "provisional_0p05_nm_vector_check_passed": true,
+          "last_frame": {
+            "relative_l2": 0.0,
+            "maximum_absolute": 0.0,
+            "identical": true
+          }
+        }
+      }
+    },
+    "fine": {
+      "interaction": {
+        "relative_l2": 7.552418710763205e-07,
+        "maximum_absolute": 0.0025098300457102596,
+        "identical": false
+      },
+      "maximum_column_relative_error": 3.236090471163449e-06,
+      "runs": {
+        "moving_noiseless": {
+          "coefficients": {
+            "relative_l2": 1.7242086692752437e-07,
+            "maximum_absolute": 7.460698725481052e-14,
+            "identical": false
+          },
+          "maximum_residual_wavefront_difference_m": 9.475781147632579e-14,
+          "tail_residual_wavefront_difference_rms_m": 3.683903497683553e-14,
+          "maximum_wfe_difference_m": 2.3533209441311306e-14,
+          "tail_wfe_before_m": 1.396295626908711e-07,
+          "tail_wfe_after_m": 1.3962956047956518e-07,
+          "provisional_0p05_nm_vector_check_passed": true,
+          "last_frame": {
+            "relative_l2": 1.9903974694516094e-07,
+            "maximum_absolute": 9.5367431640625e-06,
+            "identical": false
+          }
+        },
+        "moving_noisy": {
+          "coefficients": {
+            "relative_l2": 0.0001285626039915095,
+            "maximum_absolute": 7.984723993104126e-11,
+            "identical": false
+          },
+          "maximum_residual_wavefront_difference_m": 9.94908751112366e-11,
+          "tail_residual_wavefront_difference_rms_m": 5.181916283828479e-11,
+          "maximum_wfe_difference_m": 2.0449898515302448e-11,
+          "tail_wfe_before_m": 1.3971058192932224e-07,
+          "tail_wfe_after_m": 1.3970985061726826e-07,
+          "provisional_0p05_nm_vector_check_passed": false,
+          "comparison_scope": "One seeded noisy realization; statistical equivalence not established",
+          "wavefront_difference_rms_m": 4.186260659149052e-11,
+          "realized_noise_effect_rms_m": 6.724269784226429e-09,
+          "last_frame": {
+            "relative_l2": 0.005049103582068879,
+            "maximum_absolute": 1.4677610397338867,
+            "identical": false
+          }
+        },
+        "static": {
+          "coefficients": {
+            "relative_l2": 2.9169384251795312e-08,
+            "maximum_absolute": 3.552713678800501e-15,
+            "identical": false
+          },
+          "maximum_residual_wavefront_difference_m": 6.838679611543947e-15,
+          "tail_residual_wavefront_difference_rms_m": 2.2907809823301215e-15,
+          "maximum_wfe_difference_m": 1.516743861078094e-15,
+          "tail_wfe_before_m": 2.3092638912203256e-14,
+          "tail_wfe_after_m": 2.2955589399700368e-14,
+          "provisional_0p05_nm_vector_check_passed": true,
+          "last_frame": {
+            "relative_l2": 1.793534673405121e-07,
+            "maximum_absolute": 3.337860107421875e-06,
+            "identical": false
+          }
+        }
+      }
+    },
+    "transfer": {
+      "runs": {
+        "moving_noiseless": {
+          "coefficients": {
+            "relative_l2": 5.1303040449770206e-08,
+            "maximum_absolute": 2.842170943040401e-14,
+            "identical": false
+          },
+          "maximum_residual_wavefront_difference_m": 3.500653633531441e-14,
+          "tail_residual_wavefront_difference_rms_m": 1.77151363529519e-14,
+          "maximum_wfe_difference_m": 1.218243243799256e-14,
+          "tail_wfe_before_m": 1.3974084661998355e-07,
+          "tail_wfe_after_m": 1.3974084914345362e-07,
+          "provisional_0p05_nm_vector_check_passed": true,
+          "last_frame": {
+            "relative_l2": 2.073278866622907e-07,
+            "maximum_absolute": 9.5367431640625e-06,
+            "identical": false
+          }
+        },
+        "static": {
+          "coefficients": {
+            "relative_l2": 2.8630246364920595e-08,
+            "maximum_absolute": 3.552713678800501e-15,
+            "identical": false
+          },
+          "maximum_residual_wavefront_difference_m": 6.594234129173954e-15,
+          "tail_residual_wavefront_difference_rms_m": 2.512031440378166e-15,
+          "maximum_wfe_difference_m": 1.840343043098554e-15,
+          "tail_wfe_before_m": 2.3024216127992717e-14,
+          "tail_wfe_after_m": 2.2817716744798718e-14,
+          "provisional_0p05_nm_vector_check_passed": true,
+          "last_frame": {
+            "relative_l2": 1.8072083771775728e-07,
+            "maximum_absolute": 3.337860107421875e-06,
+            "identical": false
+          }
+        }
+      }
+    }
+  },
+  "passed": true
+}

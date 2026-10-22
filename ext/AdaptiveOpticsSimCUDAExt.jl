@@ -22,17 +22,25 @@ Backends.compute_device_identifier(array::CUDA.CuArray) =
 # class. A broader cache-size rule regressed at side 560: do not interpolate
 # this table to other FFT sizes or point counts. Other devices and precisions
 # keep the existing limit. See the modulation-batches benchmark results.
+function _pyramid_modulation_batch_device_qualified(field)
+    device = CUDA.device(field)
+    CUDA.capability(device) == v"8.6" || return false
+    CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_L2_CACHE_SIZE) == 5 * 1024 * 1024 ||
+        return false
+    return size(field, 1) == size(field, 2)
+end
+
 function WavefrontSensors._pyramid_modulation_batch_limit(
     ::Backends.AcceleratorStyle{CUDA.CUDABackend},
     field::AbstractMatrix{ComplexF32}, point_count::Int, plane_bytes::Int,
 )
     default_limit = WavefrontSensors._PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT
-    device = CUDA.device(field)
-    CUDA.capability(device) == v"8.6" || return default_limit
-    cache_bytes = CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_L2_CACHE_SIZE)
-    cache_bytes == 5 * 1024 * 1024 || return default_limit
-    size(field, 1) == size(field, 2) || return default_limit
+    _pyramid_modulation_batch_device_qualified(field) || return default_limit
     side = size(field, 1)
+    if (side == 2880 && point_count == 192) ||
+            (side == 3072 && point_count == 256)
+        return 16
+    end
     limit = if (side == 256 && point_count == 32) ||
             (side == 272 && point_count in (24, 30, 32))
         8
@@ -48,6 +56,36 @@ function WavefrontSensors._pyramid_modulation_batch_limit(
     # A prime point count must not collapse to one FFT per launch merely to
     # satisfy the smaller limit.
     return candidate >= 2 ? candidate : default_limit
+end
+
+# The finer physical propagation grids benefit from sixteen transforms per
+# batch. This raises the main field-stack bound only for measured combinations;
+# neighboring sizes, precisions, point counts and device classes retain 256 MiB.
+function WavefrontSensors._pyramid_modulation_batch_budget_bytes(
+    ::Backends.AcceleratorStyle{CUDA.CUDABackend},
+    field::AbstractMatrix{ComplexF32}, point_count::Int, plane_bytes::Int,
+)
+    default_budget = WavefrontSensors._PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES
+    _pyramid_modulation_batch_device_qualified(field) || return default_budget
+    side = size(field, 1)
+    if (side == 2880 && point_count == 192) ||
+            (side == 3072 && point_count == 256)
+        return 1536 * 1024 * 1024
+    end
+    return default_budget
+end
+
+# Keep the frequency planes transposed between the forward and inverse axis
+# transforms only where the complete captured physical path was measured.
+function WavefrontSensors._prepare_pyramid_modulation_fft(
+    ::Backends.AcceleratorStyle{CUDA.CUDABackend},
+    field_stack::CUDA.CuArray{ComplexF32,3}, point_count::Int,
+)
+    if point_count == 192 && size(field_stack, 1) == 2880 &&
+            _pyramid_modulation_batch_device_qualified(field_stack)
+        return WavefrontSensors._prepare_pyramid_transpose_fft(field_stack)
+    end
+    return WavefrontSensors._prepare_pyramid_native_fft(field_stack)
 end
 
 # Synchronous kernel phases retain their current-stream completion boundary.

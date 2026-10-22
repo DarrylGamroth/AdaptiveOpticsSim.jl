@@ -82,6 +82,39 @@ end
     end
 end
 
+@kernel function pyramid_modulation_transpose_kernel!(destination, source)
+    x, y, _ = @index(Local, NTuple)
+    bx, by, plane = @index(Group, NTuple)
+    tile = @localmem eltype(source) (33, 32)
+    source_x = (bx - 1) * 32 + x
+    source_y = (by - 1) * 32 + y
+    for offset in 0:8:24
+        if source_x <= size(source, 1) && source_y + offset <= size(source, 2)
+            @inbounds tile[x, y + offset] = source[source_x, source_y + offset, plane]
+        end
+    end
+    @synchronize
+    destination_x = (by - 1) * 32 + x
+    destination_y = (bx - 1) * 32 + y
+    for offset in 0:8:24
+        if destination_x <= size(destination, 1) && destination_y + offset <= size(destination, 2)
+            @inbounds destination[destination_x, destination_y + offset, plane] =
+                tile[y + offset, x]
+        end
+    end
+end
+
+@kernel function pyramid_modulation_transposed_mask_kernel!(stack, mask,
+    pad::Int, batch_size::Int)
+    i, j = @index(Global, NTuple)
+    if i <= pad && j <= pad
+        mask_value = @inbounds mask[j, i]
+        @inbounds for batch_index in 1:batch_size
+            stack[i, j, batch_index] *= mask_value
+        end
+    end
+end
+
 @kernel function pyramid_modulation_batch_intensity_kernel!(out, stack,
     intensity_scale, pad::Int, batch_size::Int)
     i, j = @index(Global, NTuple)
@@ -135,14 +168,25 @@ end
 """Marker for scalar or uncentered propagation without modulation batching."""
 struct NoPyramidModulationBatchWorkspace end
 
+"""Native two-dimensional transforms need no additional FFT scratch."""
+struct NoPyramidModulationFFTWorkspace end
+
+"""Owned transposed modulation planes and their one-dimensional FFT handles."""
+struct PyramidTransposeFFTWorkspace{C,Pf,Pb}
+    field_stack::C
+    fft_plan::Pf
+    bfft_plan::Pb
+end
+
 """Accelerator scratch and plans for one bounded modulation-point tile."""
-struct PyramidModulationBatchWorkspace{C,P,V,Pf,Pb}
+struct PyramidModulationBatchWorkspace{C,P,V,Pf,Pb,F}
     field_stack::C
     pupil_phase::P
     operating_weights::V
     fft_plan::Pf
     bfft_plan::Pb
     batch_size::Int
+    fft_workspace::F
 end
 
 """
@@ -186,9 +230,10 @@ struct PreparedPyramidPropagation{
 end
 
 # Larger batches amortize FFT submission and intermediate kernels, while this
-# scratch budget prevents the prepared field stack from scaling without bound
+# field-stack budget prevents the prepared stack from scaling without bound
 # on larger propagation grids. The largest divisor within both limits is fixed
 # during preparation; the repeated path performs no device query or tuning.
+# A transposed FFT workspace owns another stack outside this main-stack bound.
 const _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT = 32
 const _PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES = 256 * 1024 * 1024
 
@@ -196,6 +241,7 @@ function _pyramid_modulation_batch_size(
     point_count::Int,
     plane_bytes::Int,
     batch_limit::Int=_PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT,
+    budget_bytes::Int=_PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES,
 )
     point_count >= 1 || throw(InvalidConfiguration(
         "Pyramid modulation requires at least one point",
@@ -206,10 +252,10 @@ function _pyramid_modulation_batch_size(
     batch_limit >= 1 || throw(InvalidConfiguration(
         "Pyramid modulation batch limit must be positive",
     ))
-    memory_limit = max(1, div(
-        _PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES,
-        plane_bytes,
+    budget_bytes >= 1 || throw(InvalidConfiguration(
+        "Pyramid modulation batch scratch budget must be positive",
     ))
+    memory_limit = max(1, div(budget_bytes, plane_bytes))
     candidate_limit = min(
         point_count,
         batch_limit,
@@ -225,11 +271,17 @@ end
     point_count::Int, plane_bytes::Int) =
     _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT
 
+@inline _pyramid_modulation_batch_budget_bytes(::ExecutionStyle, field,
+    point_count::Int, plane_bytes::Int) =
+    _PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES
+
 @inline function _pyramid_modulation_batch_size(field, point_count::Int)
     plane_bytes = Base.checked_mul(sizeof(eltype(field)), length(field))
-    limit = _pyramid_modulation_batch_limit(execution_style(field), field,
+    style = execution_style(field)
+    limit = _pyramid_modulation_batch_limit(style, field, point_count, plane_bytes)
+    budget_bytes = _pyramid_modulation_batch_budget_bytes(style, field,
         point_count, plane_bytes)
-    return _pyramid_modulation_batch_size(point_count, plane_bytes, limit)
+    return _pyramid_modulation_batch_size(point_count, plane_bytes, limit, budget_bytes)
 end
 
 @inline function _prepare_pyramid_modulation_batch(
@@ -238,8 +290,35 @@ end
     return NoPyramidModulationBatchWorkspace()
 end
 
+@inline function _prepare_pyramid_native_fft(field_stack)
+    return (plan_repeated_fft_backend!(field_stack, (1, 2)),
+        plan_repeated_bfft_backend!(field_stack, (1, 2)),
+        NoPyramidModulationFFTWorkspace())
+end
+
+function _prepare_pyramid_transpose_fft(field_stack)
+    transposed = similar(field_stack, eltype(field_stack), size(field_stack, 2),
+        size(field_stack, 1), size(field_stack, 3))
+    workspace = PyramidTransposeFFTWorkspace(transposed,
+        plan_repeated_fft_backend!(transposed, (1,)),
+        plan_repeated_bfft_backend!(transposed, (1,)))
+    return (plan_repeated_fft_backend!(field_stack, (1,)),
+        plan_repeated_bfft_backend!(field_stack, (1,)), workspace)
+end
+
+@inline _prepare_pyramid_modulation_fft(::ExecutionStyle, field_stack,
+    point_count::Int) = _prepare_pyramid_native_fft(field_stack)
+
+# A resized propagation owner preserves its concrete FFT workspace family,
+# just as it preserves its prepared modulation batch size. Fresh preparation
+# selects the qualified backend policy again.
+@inline _resize_pyramid_modulation_fft(::NoPyramidModulationFFTWorkspace,
+    field_stack) = _prepare_pyramid_native_fft(field_stack)
+@inline _resize_pyramid_modulation_fft(::PyramidTransposeFFTWorkspace,
+    field_stack) = _prepare_pyramid_transpose_fft(field_stack)
+
 function _prepare_pyramid_modulation_batch(
-    ::AcceleratorStyle, field, phase_mask, modulation,
+    style::AcceleratorStyle, field, phase_mask, modulation,
     ::PyramidPupilTiltStrategy)
     phase_mask.psf_centering ||
         return NoPyramidModulationBatchWorkspace()
@@ -251,8 +330,8 @@ function _prepare_pyramid_modulation_batch(
     pupil_phase = similar(field, eltype(field), resolution, resolution)
     operating_weights = similar(field, real(eltype(field)), point_count)
     copyto!(operating_weights, collect(modulation.amplitude_weights))
-    fft_plan = plan_repeated_fft_backend!(field_stack, (1, 2))
-    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
+    fft_plan, bfft_plan, fft_workspace = _prepare_pyramid_modulation_fft(
+        style, field_stack, point_count)
     return PyramidModulationBatchWorkspace(
         field_stack,
         pupil_phase,
@@ -260,6 +339,7 @@ function _prepare_pyramid_modulation_batch(
         fft_plan,
         bfft_plan,
         batch_size,
+        fft_workspace,
     )
 end
 
@@ -279,8 +359,8 @@ function _resize_pyramid_modulation_batch(
         pad,
         batch.batch_size,
     )
-    fft_plan = plan_repeated_fft_backend!(field_stack, (1, 2))
-    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
+    fft_plan, bfft_plan, fft_workspace = _resize_pyramid_modulation_fft(
+        batch.fft_workspace, field_stack)
     return PyramidModulationBatchWorkspace(
         field_stack,
         batch.pupil_phase,
@@ -288,6 +368,7 @@ function _resize_pyramid_modulation_batch(
         fft_plan,
         bfft_plan,
         batch.batch_size,
+        fft_workspace,
     )
 end
 

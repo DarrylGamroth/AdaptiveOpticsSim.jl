@@ -5,10 +5,13 @@ using AdaptiveOpticsSim
 const ModulationBatchWFS = AdaptiveOpticsSim.WavefrontSensors
 const MODULATION_BATCH = Ref(0)
 @eval ModulationBatchWFS function _pyramid_modulation_batch_size(points::Int, bytes::Int,
-    limit::Int=_PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT)
+    limit::Int=_PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT,
+    budget_bytes::Int=_PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES)
     points >= 1 && bytes >= 1 || throw(InvalidConfiguration("invalid modulation batch dimensions"))
     requested = Main.MODULATION_BATCH[]
-    bound = max(1, div(_PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES, bytes))
+    selected_budget = requested == 0 ?
+        _PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES : budget_bytes
+    bound = max(1, div(selected_budget, bytes))
     if requested > 0
         1 <= requested <= bound && points % requested == 0 ||
             throw(InvalidConfiguration("benchmark batch must divide points and fit scratch budget"))

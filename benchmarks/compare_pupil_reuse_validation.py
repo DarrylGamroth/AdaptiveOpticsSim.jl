@@ -16,12 +16,10 @@ def metadata(directory):
     return tomllib.loads((directory / "validation.toml").read_text())
 
 
-def compare(old_root, new_root):
-    result = {"scope": "Fixed physical sampling; implementation parity, not instrument fidelity"}
-    old_dir, new_dir = old_root / "copper-after", new_root / "copper-after"
+def compare_copper(old_dir, new_dir, key="n240-m96"):
     old, new = metadata(old_dir), metadata(new_dir)
     assert old["complete"] and new["complete"]
-    old, new = old["cases"]["n240-m96"], new["cases"]["n240-m96"]
+    old, new = old["cases"][key], new["cases"][key]
     copper = {}
     for name in ("rates", "slopes", "interaction", "atmosphere_rates", "atmosphere_frames"):
         a, b = load_array(old_dir, old[name]), load_array(new_dir, new[name])
@@ -49,9 +47,10 @@ def compare(old_root, new_root):
     assert loop["maximum_wfe_difference_m"] < 5e-11
     assert loop["maximum_strehl_difference"] < 1e-4
     copper["frozen_calibration_loop"] = loop
-    result["copper"] = copper
+    return copper
 
-    old_dir, new_dir = old_root/"gpi-after", new_root/"gpi-after"
+
+def compare_gpi(old_dir, new_dir):
     a, b = metadata(old_dir), metadata(new_dir)
     assert a["complete"] and b["complete"]
     gram = load_array(old_dir,a["basis_gram"])
@@ -109,9 +108,13 @@ def compare(old_root, new_root):
             runs[run_name] = rr
         rec["runs"] = runs
         gpi[case] = rec
-    result["gpi"] = gpi
-    result["passed"] = True
-    return result
+    return gpi
+
+
+def compare(old_root, new_root):
+    return {"scope": "Fixed physical sampling; implementation parity, not instrument fidelity",
+            "copper": compare_copper(old_root/"copper-after",new_root/"copper-after"),
+            "gpi": compare_gpi(old_root/"gpi-after",new_root/"gpi-after"), "passed": True}
 
 
 if __name__ == "__main__":

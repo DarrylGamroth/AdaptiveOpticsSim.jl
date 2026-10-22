@@ -1,0 +1,299 @@
+{
+  "complete": true,
+  "source_checks": {
+    "gpi_closed_loop_cuda.jl": true,
+    "gpi_closed_loop_inputs.jl": true
+  },
+  "cases": {
+    "default": {
+      "retained_rank": 35,
+      "condition_number": 6.547772821676484,
+      "RD_error": 5.902090373061768e-15,
+      "spectral_radius": 0.6500000059604709,
+      "half_amplitude_relative_l2": 0.0071693054791426266,
+      "runs": {
+        "moving_noiseless": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 1.2252860977625488e-19,
+            "controlled_error_rms_m": 7.059490219772559e-20,
+            "all_mode_fitting_floor_rms_m": 1.461661229605702e-19,
+            "common_fine_open_rms_m": 1.8899422635611576e-20
+          },
+          "tail_residual_nm": 139.83655822660015,
+          "tail_floor_nm": 123.33445430220812,
+          "tail_open_nm": 405.0497082446397,
+          "last_camera_error": 0.007043528663269231,
+          "last_update_parity_m": 4.3393987049364846e-15,
+          "reported_all_frame_update_max_m": 1.4217360087055594e-14,
+          "saturation_samples": 0,
+          "physical_command_max_m": 5.757487997470889e-07,
+          "own_vs_common_max_nm": 0.03475103554376234,
+          "host_allocations": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "uninterrupted_medians_ms": [
+            3.428666,
+            3.434998,
+            3.4301135
+          ]
+        },
+        "moving_noisy": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 1.2084777877154713e-19,
+            "controlled_error_rms_m": 7.149487470418329e-20,
+            "all_mode_fitting_floor_rms_m": 1.461661229605702e-19,
+            "common_fine_open_rms_m": 1.8899422635611576e-20
+          },
+          "tail_residual_nm": 139.9227155459357,
+          "tail_floor_nm": 123.33445430220812,
+          "tail_open_nm": 405.0497082446397,
+          "last_camera_error": 0.009549235292486465,
+          "last_update_parity_m": 6.756631948355449e-15,
+          "reported_all_frame_update_max_m": 1.3792391746017291e-14,
+          "saturation_samples": 0,
+          "physical_command_max_m": 5.75592764562316e-07,
+          "own_vs_common_max_nm": 0.036065676474749016,
+          "host_allocations": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "uninterrupted_medians_ms": [
+            3.4472505,
+            3.4498655,
+            3.448283
+          ]
+        },
+        "static": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 2.880470645574315e-14,
+            "controlled_error_rms_m": 1.7471351840966686e-20,
+            "all_mode_fitting_floor_rms_m": 3.043369039450191e-14,
+            "common_fine_open_rms_m": 2.117582368135751e-22
+          },
+          "tail_residual_nm": 5.154496608578153e-05,
+          "tail_floor_nm": 1.96205025865255e-05,
+          "tail_open_nm": 120.00000000232512,
+          "last_camera_error": 2.76105580723673e-09,
+          "last_update_parity_m": 1.1897519803642673e-15,
+          "reported_all_frame_update_max_m": 1.9328988909715592e-15,
+          "saturation_samples": 0,
+          "physical_command_max_m": 1.9635947978713375e-07,
+          "own_vs_common_max_nm": 0.00025047477256174883,
+          "host_allocations": null,
+          "uninterrupted_medians_ms": []
+        }
+      }
+    },
+    "fine": {
+      "retained_rank": 35,
+      "condition_number": 6.543216909226189,
+      "RD_error": 4.760284686624103e-15,
+      "spectral_radius": 0.6500000059604689,
+      "half_amplitude_relative_l2": 0.007174207183285454,
+      "runs": {
+        "moving_noiseless": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 1.22343321319043e-19,
+            "controlled_error_rms_m": 7.071401620593323e-20,
+            "all_mode_fitting_floor_rms_m": 1.461661229605702e-19,
+            "common_fine_open_rms_m": 1.8899422635611576e-20
+          },
+          "tail_residual_nm": 139.6295604796276,
+          "tail_floor_nm": 123.33445430220812,
+          "tail_open_nm": 405.0497082446397,
+          "last_camera_error": 0.007033896279234914,
+          "last_update_parity_m": 5.432147228101548e-15,
+          "reported_all_frame_update_max_m": 1.5635117004966705e-14,
+          "saturation_samples": 0,
+          "physical_command_max_m": 5.766025878983783e-07,
+          "own_vs_common_max_nm": 1.3770977694319518e-05,
+          "host_allocations": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "uninterrupted_medians_ms": [
+            307.015269,
+            307.0137125,
+            307.011032
+          ]
+        },
+        "moving_noisy": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 1.2124482546557258e-19,
+            "controlled_error_rms_m": 7.161398871239092e-20,
+            "all_mode_fitting_floor_rms_m": 1.461661229605702e-19,
+            "common_fine_open_rms_m": 1.8899422635611576e-20
+          },
+          "tail_residual_nm": 139.70985061733117,
+          "tail_floor_nm": 123.33445430220812,
+          "tail_open_nm": 405.0497082446397,
+          "last_camera_error": 0.009545250917811271,
+          "last_update_parity_m": 6.673970347140037e-15,
+          "reported_all_frame_update_max_m": 1.3821698662475816e-14,
+          "saturation_samples": 0,
+          "physical_command_max_m": 5.766780759586254e-07,
+          "own_vs_common_max_nm": 1.3135605125103606e-05,
+          "host_allocations": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "uninterrupted_medians_ms": [
+            307.0437055,
+            307.0508935,
+            307.048633
+          ]
+        },
+        "static": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 2.8953051532430755e-14,
+            "controlled_error_rms_m": 1.6799668675395114e-20,
+            "all_mode_fitting_floor_rms_m": 3.043369039450191e-14,
+            "common_fine_open_rms_m": 2.117582368135751e-22
+          },
+          "tail_residual_nm": 5.148371239083871e-05,
+          "tail_floor_nm": 1.96205025865255e-05,
+          "tail_open_nm": 120.00000000232512,
+          "last_camera_error": 2.7244188606191e-09,
+          "last_update_parity_m": 1.1806584000786676e-15,
+          "reported_all_frame_update_max_m": 1.7746591934680507e-15,
+          "saturation_samples": 0,
+          "physical_command_max_m": 1.9635947978713375e-07,
+          "own_vs_common_max_nm": 5.397277747746976e-06,
+          "host_allocations": null,
+          "uninterrupted_medians_ms": []
+        }
+      }
+    },
+    "transfer": {
+      "retained_rank": 35,
+      "condition_number": 6.543216909226189,
+      "RD_error": 4.760284686624103e-15,
+      "spectral_radius": 0.6502927756579726,
+      "half_amplitude_relative_l2": 0.007174207183285454,
+      "runs": {
+        "moving_noiseless": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 1.228594820212761e-19,
+            "controlled_error_rms_m": 7.066107664672984e-20,
+            "all_mode_fitting_floor_rms_m": 1.461661229605702e-19,
+            "common_fine_open_rms_m": 1.8899422635611576e-20
+          },
+          "tail_residual_nm": 139.740849143516,
+          "tail_floor_nm": 123.33445430220812,
+          "tail_open_nm": 405.0497082446397,
+          "last_camera_error": 0.007033313087994044,
+          "last_update_parity_m": 5.493067055277939e-15,
+          "reported_all_frame_update_max_m": 1.2794813303706879e-14,
+          "saturation_samples": 0,
+          "physical_command_max_m": 5.762422006228007e-07,
+          "own_vs_common_max_nm": 1.3147940571793588e-05,
+          "host_allocations": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "uninterrupted_medians_ms": [
+            307.0077025,
+            307.0019905,
+            307.0010035
+          ]
+        },
+        "static": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 2.8765881277220556e-14,
+            "controlled_error_rms_m": 1.723084400391355e-20,
+            "all_mode_fitting_floor_rms_m": 3.043369039450191e-14,
+            "common_fine_open_rms_m": 2.117582368135751e-22
+          },
+          "tail_residual_nm": 5.149903264482782e-05,
+          "tail_floor_nm": 1.96205025865255e-05,
+          "tail_open_nm": 120.00000000232512,
+          "last_camera_error": 2.7205754095648308e-09,
+          "last_update_parity_m": 1.2236127378531337e-15,
+          "reported_all_frame_update_max_m": 1.8225644106950773e-15,
+          "saturation_samples": 0,
+          "physical_command_max_m": 1.9635947978713375e-07,
+          "own_vs_common_max_nm": 5.2545288996722995e-06,
+          "host_allocations": null,
+          "uninterrupted_medians_ms": []
+        }
+      }
+    }
+  },
+  "raw_digest_count": 40,
+  "basis_reconstruction_sha_exact": false,
+  "julia_oracle_basis_sha_exact": true,
+  "independent_python_basis_max_abs_difference": 7.566178711375181e-17,
+  "gram_max_abs_error": 5.186961971048731e-13,
+  "basis_rms_max_deviation": 1.7794168805096433e-08
+}

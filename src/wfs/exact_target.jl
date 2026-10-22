@@ -452,6 +452,22 @@ function _require_exact_focal_plane_modulation_target(
     return modulation
 end
 
+@inline function _require_exact_pyramid_modulation_fft_target(
+    ::NoPyramidModulationFFTWorkspace,
+    ::AbstractComputeDevice,
+)
+    return nothing
+end
+
+function _require_exact_pyramid_modulation_fft_target(
+    workspace::PyramidTransposeFFTWorkspace,
+    target::AbstractComputeDevice,
+)
+    _require_exact_wfs_storage_target(workspace.field_stack, target,
+        :wfs_optics, "Pyramid transposed modulation field stack")
+    return nothing
+end
+
 @inline function _require_exact_pyramid_modulation_batch_target(
     ::NoPyramidModulationBatchWorkspace,
     ::AbstractComputeDevice,
@@ -477,6 +493,7 @@ function _require_exact_pyramid_modulation_batch_target(
         target,
         :wfs_optics,
     )
+    _require_exact_pyramid_modulation_fft_target(batch.fft_workspace, target)
     return nothing
 end
 

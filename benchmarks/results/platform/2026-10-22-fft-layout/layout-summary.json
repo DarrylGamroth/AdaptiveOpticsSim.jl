@@ -1,0 +1,238 @@
+{
+  "scope": "Unpaced completed captured physical rate nodes; logical traffic is not measured DRAM traffic",
+  "cases": {
+    "gpi_fine": {
+      "native": {
+        "8": {
+          "round_medians_ms": [
+            312.3010825,
+            314.5920095
+          ],
+          "maximum_native_relative_l2": 0.0,
+          "maximum_native_flux_relative_error": 0.0,
+          "field_stack_bytes": 530841600,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 313.446546
+        },
+        "16": {
+          "round_medians_ms": [
+            310.8691645,
+            312.76720650000004
+          ],
+          "maximum_native_relative_l2": 6.885829786268815e-08,
+          "maximum_native_flux_relative_error": 3.431440687151621e-10,
+          "field_stack_bytes": 1061683200,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 311.8181855
+        },
+        "4": {
+          "round_medians_ms": [
+            316.44140500000003,
+            317.7422945
+          ],
+          "maximum_native_relative_l2": 7.625859347625052e-08,
+          "maximum_native_flux_relative_error": 6.473873659373908e-10,
+          "field_stack_bytes": 265420800,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 317.09184975000005
+        }
+      },
+      "axis": {
+        "16": {
+          "round_medians_ms": [
+            315.39143850000005,
+            316.713131
+          ],
+          "maximum_native_relative_l2": 7.013699045544654e-08,
+          "maximum_native_flux_relative_error": 8.333045364850022e-11,
+          "field_stack_bytes": 1061683200,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 316.05228475
+        },
+        "4": {
+          "round_medians_ms": [
+            321.0522055,
+            321.23537699999997
+          ],
+          "maximum_native_relative_l2": 7.776911133029321e-08,
+          "maximum_native_flux_relative_error": 6.257190321434791e-10,
+          "field_stack_bytes": 265420800,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 321.14379125
+        }
+      },
+      "transpose": {
+        "16": {
+          "round_medians_ms": [
+            655.238513,
+            657.646716
+          ],
+          "maximum_native_relative_l2": 1.750834691734851e-07,
+          "maximum_native_flux_relative_error": 8.252390759633244e-08,
+          "field_stack_bytes": 1061683200,
+          "derived_extra_array_bytes": 2123366400,
+          "median_of_round_medians_ms": 656.4426145
+        },
+        "4": {
+          "round_medians_ms": [
+            662.0279345,
+            663.1936035
+          ],
+          "maximum_native_relative_l2": 1.773250639715582e-07,
+          "maximum_native_flux_relative_error": 8.311348387302075e-08,
+          "field_stack_bytes": 265420800,
+          "derived_extra_array_bytes": 530841600,
+          "median_of_round_medians_ms": 662.610769
+        }
+      },
+      "tiled-transpose": {
+        "16": {
+          "round_medians_ms": [
+            381.596327,
+            381.821185
+          ],
+          "maximum_native_relative_l2": 1.750834691734851e-07,
+          "maximum_native_flux_relative_error": 8.252390759633244e-08,
+          "field_stack_bytes": 1061683200,
+          "derived_extra_array_bytes": 2123366400,
+          "median_of_round_medians_ms": 381.708756
+        }
+      },
+      "tiled-pair": {
+        "16": {
+          "round_medians_ms": [
+            306.52230050000003,
+            306.56971599999997
+          ],
+          "maximum_native_relative_l2": 1.7431873576668973e-07,
+          "maximum_native_flux_relative_error": 8.282864283337688e-08,
+          "field_stack_bytes": 1061683200,
+          "derived_extra_array_bytes": 1061683200,
+          "median_of_round_medians_ms": 306.54600825
+        }
+      }
+    },
+    "copper_fine": {
+      "native": {
+        "4": {
+          "round_medians_ms": [
+            438.304038,
+            438.784556
+          ],
+          "maximum_native_relative_l2": 0.0,
+          "maximum_native_flux_relative_error": 0.0,
+          "field_stack_bytes": 301989888,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 438.54429700000003
+        },
+        "16": {
+          "round_medians_ms": [
+            432.8406495,
+            433.52338499999996
+          ],
+          "maximum_native_relative_l2": 7.665241546776968e-08,
+          "maximum_native_flux_relative_error": 4.474299819534622e-10,
+          "field_stack_bytes": 1207959552,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 433.18201724999994
+        },
+        "2": {
+          "round_medians_ms": [
+            452.615885,
+            452.812114
+          ],
+          "maximum_native_relative_l2": 9.102896643288227e-08,
+          "maximum_native_flux_relative_error": 9.556520019771142e-10,
+          "field_stack_bytes": 150994944,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 452.7139995
+        },
+        "8": {
+          "round_medians_ms": [
+            435.200375,
+            435.2267635
+          ],
+          "maximum_native_relative_l2": 7.732785349329296e-08,
+          "maximum_native_flux_relative_error": 6.885034764536613e-10,
+          "field_stack_bytes": 603979776,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 435.21356925
+        }
+      },
+      "axis": {
+        "16": {
+          "round_medians_ms": [
+            434.541569,
+            435.036749
+          ],
+          "maximum_native_relative_l2": 7.631111832626481e-08,
+          "maximum_native_flux_relative_error": 9.91993043264472e-10,
+          "field_stack_bytes": 1207959552,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 434.789159
+        },
+        "2": {
+          "round_medians_ms": [
+            456.7936185,
+            456.95783900000004
+          ],
+          "maximum_native_relative_l2": 9.21988696784736e-08,
+          "maximum_native_flux_relative_error": 3.042954443976953e-09,
+          "field_stack_bytes": 150994944,
+          "derived_extra_array_bytes": 0,
+          "median_of_round_medians_ms": 456.87572875
+        }
+      },
+      "transpose": {
+        "16": {
+          "round_medians_ms": [
+            1011.4846305000001,
+            1018.40887
+          ],
+          "maximum_native_relative_l2": 1.3059537093827185e-07,
+          "maximum_native_flux_relative_error": 2.473193649876748e-09,
+          "field_stack_bytes": 1207959552,
+          "derived_extra_array_bytes": 2415919104,
+          "median_of_round_medians_ms": 1014.94675025
+        },
+        "2": {
+          "round_medians_ms": [
+            1038.8034779999998,
+            1038.860984
+          ],
+          "maximum_native_relative_l2": 1.360995137379772e-07,
+          "maximum_native_flux_relative_error": 3.0096276582014525e-09,
+          "field_stack_bytes": 150994944,
+          "derived_extra_array_bytes": 301989888,
+          "median_of_round_medians_ms": 1038.8322309999999
+        }
+      },
+      "tiled-transpose": {
+        "16": {
+          "round_medians_ms": [
+            583.31443,
+            583.6249620000001
+          ],
+          "maximum_native_relative_l2": 1.3059537093827185e-07,
+          "maximum_native_flux_relative_error": 2.473193649876748e-09,
+          "field_stack_bytes": 1207959552,
+          "derived_extra_array_bytes": 2415919104,
+          "median_of_round_medians_ms": 583.4696960000001
+        }
+      },
+      "tiled-pair": {
+        "16": {
+          "round_medians_ms": [
+            468.7340605,
+            469.065859
+          ],
+          "maximum_native_relative_l2": 1.303467698184561e-07,
+          "maximum_native_flux_relative_error": 3.14857473426855e-09,
+          "field_stack_bytes": 1207959552,
+          "derived_extra_array_bytes": 1207959552,
+          "median_of_round_medians_ms": 468.89995975
+        }
+      }
+    }
+  }
+}

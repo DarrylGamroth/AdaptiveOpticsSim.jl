@@ -1,0 +1,240 @@
+{
+  "scope": "Completed unpaced captured optical node; shared host, uncontrolled clocks; not WCET or fixed-rate latency",
+  "cases": {
+    "gpi_fine": {
+      "relative_l2": 1.7525470694623687e-07,
+      "flux_relative_error": 8.218125557846179e-08,
+      "timings": {
+        "before": {
+          "round_medians_ms": [
+            316.99161349999997,
+            316.77762
+          ],
+          "median_of_round_medians_ms": 316.88461674999996,
+          "field_stack_bytes": 265420800,
+          "extra_fft_array_bytes": 0,
+          "observed_pool_bytes": [
+            747949316,
+            748179716
+          ]
+        },
+        "after": {
+          "round_medians_ms": [
+            306.5558685,
+            306.531112
+          ],
+          "median_of_round_medians_ms": 306.54349025,
+          "field_stack_bytes": 1061683200,
+          "extra_fft_array_bytes": 1061683200,
+          "observed_pool_bytes": [
+            2605894916,
+            2605894916
+          ]
+        }
+      },
+      "reduction_percent": 3.2633728345855317,
+      "profiles": {
+        "before": {
+          "replays": 4,
+          "kernel_instances": 1352,
+          "distinct_kernel_nodes": 338,
+          "memset_instances": 4,
+          "recorded_memcpy_instances": 0,
+          "stages": {
+            "pupil_phase": {
+              "instances": 4,
+              "total_ns": 45057,
+              "mean_frame_ms": 0.01126425
+            },
+            "fill": {
+              "instances": 192,
+              "total_ns": 88366889,
+              "mean_frame_ms": 22.09172225
+            },
+            "fft": {
+              "instances": 768,
+              "total_ns": 930571118,
+              "mean_frame_ms": 232.6427795
+            },
+            "mask": {
+              "instances": 192,
+              "total_ns": 167877022,
+              "mean_frame_ms": 41.9692555
+            },
+            "intensity": {
+              "instances": 192,
+              "total_ns": 90801076,
+              "mean_frame_ms": 22.700269
+            },
+            "bin": {
+              "instances": 4,
+              "total_ns": 1487370,
+              "mean_frame_ms": 0.3718425
+            }
+          },
+          "kernel_busy_fraction_of_recorded_span": 0.9983152837595413
+        },
+        "after": {
+          "replays": 4,
+          "kernel_instances": 440,
+          "distinct_kernel_nodes": 110,
+          "memset_instances": 4,
+          "recorded_memcpy_instances": 0,
+          "stages": {
+            "pupil_phase": {
+              "instances": 4,
+              "total_ns": 42880,
+              "mean_frame_ms": 0.01072
+            },
+            "fill": {
+              "instances": 48,
+              "total_ns": 95934478,
+              "mean_frame_ms": 23.9836195
+            },
+            "fft": {
+              "instances": 192,
+              "total_ns": 593203628,
+              "mean_frame_ms": 148.300907
+            },
+            "transpose": {
+              "instances": 96,
+              "total_ns": 302049608,
+              "mean_frame_ms": 75.512402
+            },
+            "mask": {
+              "instances": 48,
+              "total_ns": 159444149,
+              "mean_frame_ms": 39.86103725
+            },
+            "intensity": {
+              "instances": 48,
+              "total_ns": 76895109,
+              "mean_frame_ms": 19.22377725
+            },
+            "bin": {
+              "instances": 4,
+              "total_ns": 1484362,
+              "mean_frame_ms": 0.3710905
+            }
+          },
+          "kernel_busy_fraction_of_recorded_span": 0.9991978599924238
+        }
+      }
+    },
+    "copper_fine": {
+      "relative_l2": 8.627892465878687e-08,
+      "flux_relative_error": 5.082219090013496e-10,
+      "timings": {
+        "before": {
+          "round_medians_ms": [
+            451.9909345,
+            452.1995835
+          ],
+          "median_of_round_medians_ms": 452.095259,
+          "field_stack_bytes": 150994944,
+          "extra_fft_array_bytes": 0,
+          "observed_pool_bytes": [
+            735206404,
+            735206404
+          ]
+        },
+        "after": {
+          "round_medians_ms": [
+            433.536028,
+            433.01017549999995
+          ],
+          "median_of_round_medians_ms": 433.27310174999997,
+          "field_stack_bytes": 1207959552,
+          "extra_fft_array_bytes": 0,
+          "observed_pool_bytes": [
+            1810849796,
+            1810849796
+          ]
+        }
+      },
+      "reduction_percent": 4.163316662871718,
+      "profiles": {
+        "before": {
+          "replays": 4,
+          "kernel_instances": 3592,
+          "distinct_kernel_nodes": 898,
+          "memset_instances": 4,
+          "recorded_memcpy_instances": 0,
+          "stages": {
+            "pupil_phase": {
+              "instances": 4,
+              "total_ns": 158049,
+              "mean_frame_ms": 0.03951225
+            },
+            "fill": {
+              "instances": 512,
+              "total_ns": 151382268,
+              "mean_frame_ms": 37.845567
+            },
+            "fft": {
+              "instances": 2048,
+              "total_ns": 1227297767,
+              "mean_frame_ms": 306.82444175
+            },
+            "mask": {
+              "instances": 512,
+              "total_ns": 281588386,
+              "mean_frame_ms": 70.3970965
+            },
+            "intensity": {
+              "instances": 512,
+              "total_ns": 165242234,
+              "mean_frame_ms": 41.3105585
+            },
+            "bin": {
+              "instances": 4,
+              "total_ns": 2276944,
+              "mean_frame_ms": 0.569236
+            }
+          },
+          "kernel_busy_fraction_of_recorded_span": 0.9973548702189533
+        },
+        "after": {
+          "replays": 4,
+          "kernel_instances": 456,
+          "distinct_kernel_nodes": 114,
+          "memset_instances": 4,
+          "recorded_memcpy_instances": 0,
+          "stages": {
+            "pupil_phase": {
+              "instances": 4,
+              "total_ns": 151169,
+              "mean_frame_ms": 0.03779225
+            },
+            "fill": {
+              "instances": 64,
+              "total_ns": 156037663,
+              "mean_frame_ms": 39.00941575
+            },
+            "fft": {
+              "instances": 256,
+              "total_ns": 1241243726,
+              "mean_frame_ms": 310.3109315
+            },
+            "mask": {
+              "instances": 64,
+              "total_ns": 240263561,
+              "mean_frame_ms": 60.06589025
+            },
+            "intensity": {
+              "instances": 64,
+              "total_ns": 116597705,
+              "mean_frame_ms": 29.14942625
+            },
+            "bin": {
+              "instances": 4,
+              "total_ns": 2271664,
+              "mean_frame_ms": 0.567916
+            }
+          },
+          "kernel_busy_fraction_of_recorded_span": 0.9994344663552083
+        }
+      }
+    }
+  }
+}

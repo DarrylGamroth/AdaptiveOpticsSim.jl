@@ -61,6 +61,14 @@ function modulation_record(graph, n, points)
         "baseline_dense_phase_bytes"=>n*n*points*sizeof(ComplexF32),
         "scope"=>"direct retained modulation arrays; excludes policy, shared propagation, masks, FFT plans, capture and allocator reserve")
 end
+function modulation_batch_record(graph)
+    prepared = AG.prepared_graph_node(graph, :pwfs).prepared
+    batch = prepared.workspace.modulation_batch
+    Dict("batch_size"=>batch.batch_size, "stack_shape"=>collect(size(batch.field_stack)),
+        "field_stack_bytes"=>sizeof(eltype(batch.field_stack))*length(batch.field_stack),
+        "fft_workspace_type"=>hasproperty(batch,:fft_workspace) ? string(typeof(batch.fft_workspace)) : "native")
+end
+
 function prepare_case(n, points, target; calibration, execution)
     definition = REVOLTCopperSim._graph_definition(:grid_gaussian, target;
         calibration, pupil_resolution=n, modulation_points=points)
@@ -150,7 +158,8 @@ function run_case!(directory,n,points,target,convergence,progress!)
     system=convergence.prepare_case(n,points;target)
     result=Dict{String,Any}("resolution"=>n,"points"=>points,
         "pool_before"=>before,"pool_after"=>pool_record(),
-        "modulation"=>modulation_record(system.graph,n,points))
+        "modulation"=>modulation_record(system.graph,n,points),
+        "modulation_batch"=>modulation_batch_record(system.graph))
     progress!(result)
     rates=convergence.probe_rates(system,n)
     divisor=convergence.flat_divisor(rates[:,:,1])
@@ -235,7 +244,8 @@ function main(args)
         system=convergence.prepare_case(n,points;target)
         result["memory_only"]=Dict("resolution"=>n,"points"=>points,
             "pool_before"=>before,"pool_after"=>pool_record(),
-            "modulation"=>modulation_record(system.graph,n,points))
+            "modulation"=>modulation_record(system.graph,n,points),
+        "modulation_batch"=>modulation_batch_record(system.graph))
     end
     result["complete"]=true
     persist(directory,result)
