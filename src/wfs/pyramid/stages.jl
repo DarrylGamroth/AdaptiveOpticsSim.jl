@@ -54,7 +54,7 @@ end
 
 @inline function _pyramid_modulation_batch_workspace_binding(
     batch::PyramidModulationBatchWorkspace)
-    return (batch.field_stack, batch.operating_weights, batch.fft_plan,
+    return (batch.field_stack, batch.pupil_phase, batch.operating_weights, batch.fft_plan,
         batch.bfft_plan, batch.batch_size)
 end
 
@@ -280,10 +280,10 @@ function _pyramid_native_rate!(front_end::PyramidOpticalFrontEnd,
     ) && return propagation.intensity
     @inbounds for point in 1:modulation_point_count(front_end.modulation)
         fill!(propagation.field, zero(eltype(propagation.field)))
-        weight = front_end.modulation.amplitude_weights[point]
-        @views @. propagation.field[offset+1:offset+resolution,
-            offset+1:offset+resolution] = weight * input.values *
-            front_end.modulation.phases[:, :, point]
+        _pyramid_modulated_electric_field!(
+            view(propagation.field, offset+1:offset+resolution,
+                offset+1:offset+resolution), input.values,
+            front_end.modulation, point)
         copyto!(propagation.focal_field, propagation.field)
         accumulate_pyramid_focal_intensity!(propagation.intensity, front_end)
     end

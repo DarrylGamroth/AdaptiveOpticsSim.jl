@@ -20,8 +20,16 @@
     end
 end
 
+@kernel function pyramid_pupil_phase_kernel!(phase, opd, opd_to_cycles,
+    resolution::Int)
+    i, j = @index(Global, NTuple)
+    if i <= resolution && j <= resolution
+        @inbounds phase[i, j] = cispi(opd_to_cycles * opd[i, j])
+    end
+end
+
 @kernel function pyramid_pupil_modulation_batch_kernel!(stack, amplitude,
-    opd, phases, weights, phasor, amplitude_scale, opd_to_cycles,
+    pupil_phase, phases, weights, phasor, amplitude_scale,
     offset::Int, resolution::Int, first_point::Int, pad::Int,
     batch_size::Int)
     i, j, batch_index = @index(Global, NTuple)
@@ -33,8 +41,8 @@ end
             @inbounds begin
                 value = amplitude_scale * weights[point] *
                     amplitude[pupil_i, pupil_j] *
-                    phases[pupil_i, pupil_j, point] *
-                    cispi(opd_to_cycles * opd[pupil_i, pupil_j])
+                    Optics._modulation_phase(phases, pupil_i, pupil_j, point) *
+                    pupil_phase[pupil_i, pupil_j]
                 stack[i, j, batch_index] = value * phasor[i, j]
             end
         else
@@ -54,7 +62,7 @@ end
             point = first_point + batch_index - 1
             @inbounds begin
                 value = weights[point] * field[pupil_i, pupil_j] *
-                    phases[pupil_i, pupil_j, point]
+                    Optics._modulation_phase(phases, pupil_i, pupil_j, point)
                 stack[i, j, batch_index] = value * phasor[i, j]
             end
         else
@@ -65,9 +73,12 @@ end
 
 @kernel function pyramid_modulation_batch_mask_kernel!(stack, mask,
     pad::Int, batch_size::Int)
-    i, j, batch_index = @index(Global, NTuple)
-    if i <= pad && j <= pad && batch_index <= batch_size
-        @inbounds stack[i, j, batch_index] *= mask[i, j]
+    i, j = @index(Global, NTuple)
+    if i <= pad && j <= pad
+        mask_value = @inbounds mask[i, j]
+        @inbounds for batch_index in 1:batch_size
+            stack[i, j, batch_index] *= mask_value
+        end
     end
 end
 
@@ -93,10 +104,23 @@ struct PyramidPupilTiltStrategy <:
 
 @inline _pyramid_modulation_resolution(modulation::PreparedFocalPlaneModulation) =
     size(modulation.phases, 1)
+@inline _pyramid_modulation_resolution(
+    modulation::Optics.PreparedSeparableFocalPlaneModulation) =
+    size(modulation.axis_1_factors, 1)
+
 @inline function _prepare_pyramid_modulation(::PyramidPupilTiltStrategy,
     policy, resolution, field, ::Type{T}) where {T}
-    return prepare_focal_plane_modulation(policy, resolution, field, T)
+    return _prepare_pyramid_modulation(execution_style(field), policy,
+        resolution, field, T)
 end
+
+@inline _prepare_pyramid_modulation(::ScalarCPUStyle, policy, resolution,
+    field, ::Type{T}) where {T} =
+    prepare_focal_plane_modulation(policy, resolution, field, T)
+
+@inline _prepare_pyramid_modulation(::AcceleratorStyle, policy, resolution,
+    field, ::Type{T}) where {T} =
+    Optics.prepare_separable_focal_plane_modulation(policy, resolution, field, T)
 
 """Run-immutable numerical contract for pyramid-mask propagation."""
 struct PyramidPropagationPlan{M<:PyramidPhaseMask,T<:AbstractFloat,
@@ -112,8 +136,9 @@ end
 struct NoPyramidModulationBatchWorkspace end
 
 """Accelerator scratch and plans for one bounded modulation-point tile."""
-struct PyramidModulationBatchWorkspace{C,V,Pf,Pb}
+struct PyramidModulationBatchWorkspace{C,P,V,Pf,Pb}
     field_stack::C
+    pupil_phase::P
     operating_weights::V
     fft_plan::Pf
     bfft_plan::Pb
@@ -222,12 +247,15 @@ function _prepare_pyramid_modulation_batch(
     pad = size(field, 1)
     batch_size = _pyramid_modulation_batch_size(field, point_count)
     field_stack = similar(field, eltype(field), pad, pad, batch_size)
+    resolution = _pyramid_modulation_resolution(modulation)
+    pupil_phase = similar(field, eltype(field), resolution, resolution)
     operating_weights = similar(field, real(eltype(field)), point_count)
     copyto!(operating_weights, collect(modulation.amplitude_weights))
     fft_plan = plan_repeated_fft_backend!(field_stack, (1, 2))
     bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
     return PyramidModulationBatchWorkspace(
         field_stack,
+        pupil_phase,
         operating_weights,
         fft_plan,
         bfft_plan,
@@ -255,6 +283,7 @@ function _resize_pyramid_modulation_batch(
     bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
     return PyramidModulationBatchWorkspace(
         field_stack,
+        batch.pupil_phase,
         batch.operating_weights,
         fft_plan,
         bfft_plan,

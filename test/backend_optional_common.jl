@@ -2393,8 +2393,13 @@ function run_optional_pyramid_fractional_shift_checks(
             @test device_rate.values isa BackendArray
             @test Array(pyramid_focal_mask(device_sensor)) ≈
                 pyramid_focal_mask(cpu_sensor) rtol=3f-5 atol=1f-6
-            @test Array(device_sensor.front_end.modulation.phases) ≈
-                cpu_sensor.front_end.modulation.phases rtol=3f-5 atol=1f-6
+            device_modulation = device_sensor.front_end.modulation
+            axis_1 = Array(device_modulation.axis_1_factors)
+            axis_2 = Array(device_modulation.axis_2_factors)
+            for point in axes(cpu_sensor.front_end.modulation.phases, 3)
+                @test axis_1[:, point] * transpose(axis_2[:, point]) ≈
+                    cpu_sensor.front_end.modulation.phases[:, :, point] rtol=3f-5 atol=1f-6
+            end
             @test Array(device_rate.values) ≈ cpu_rate.values rtol=3f-4 atol=1f-6
             @test sum(Array(device_rate.values)) ≈ sum(cpu_rate.values) rtol=3f-5
         end

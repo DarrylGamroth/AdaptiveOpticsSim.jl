@@ -118,11 +118,35 @@ struct PreparedFocalPlaneModulation{P<:AbstractFocalPlaneModulation,A,V}
     amplitude_weights::V
 end
 
+# A physical pupil tilt separates along its two spatial axes. Accelerator
+# Pyramid propagation consumes these factors directly, avoiding an N×N×P cube.
+struct PreparedSeparableFocalPlaneModulation{P<:AbstractFocalPlaneModulation,A,B,V}
+    policy::P
+    axis_1_factors::A
+    axis_2_factors::B
+    amplitude_weights::V
+end
+
+@inline _modulation_phase_storage(prepared::PreparedFocalPlaneModulation) =
+    prepared.phases
+@inline _modulation_phase_storage(prepared::PreparedSeparableFocalPlaneModulation) =
+    (prepared.axis_1_factors, prepared.axis_2_factors)
+
+@inline _modulation_phase(phases::AbstractArray{<:Complex,3}, i, j, point) =
+    @inbounds phases[i, j, point]
+@inline function _modulation_phase(factors::Tuple{A,B}, i, j, point) where {
+    A<:AbstractMatrix,B<:AbstractMatrix,
+}
+    @inbounds return factors[1][i, point] * factors[2][j, point]
+end
+
 @inline modulation_point_count(::NoModulation) = 1
 @inline modulation_point_count(policy::CircularModulation) = policy.samples
 @inline modulation_point_count(policy::SampledModulation) = length(policy.points)
 @inline modulation_point_count(prepared::PreparedFocalPlaneModulation) =
     size(prepared.phases, 3)
+@inline modulation_point_count(prepared::PreparedSeparableFocalPlaneModulation) =
+    size(prepared.axis_1_factors, 2)
 
 @inline modulation_offset(::NoModulation, ::Int, ::Type{T}) where {T} =
     (zero(T), zero(T))
@@ -179,6 +203,137 @@ function _prepare_modulation_phases!(::ScalarCPUStyle, phases,
         end
     end
     return phases
+end
+
+function prepare_separable_focal_plane_modulation(
+    policy::AbstractFocalPlaneModulation, resolution::Int,
+    backend_storage::AbstractArray, ::Type{T}) where {T<:AbstractFloat}
+    resolution >= 1 || throw(InvalidConfiguration(
+        "modulation pupil resolution must be positive"))
+    point_count = modulation_point_count(policy)
+    axis_1_factors = similar(backend_storage, Complex{T}, resolution, point_count)
+    axis_2_factors = similar(axis_1_factors)
+    amplitude_weights = Vector{T}(undef, point_count)
+    @inbounds for point in 1:point_count
+        amplitude_weights[point] = sqrt(modulation_weight(policy, point, T))
+    end
+    _prepare_separable_modulation_factors!(execution_style(axis_1_factors),
+        axis_1_factors, axis_2_factors, policy, T)
+    return PreparedSeparableFocalPlaneModulation(policy, axis_1_factors,
+        axis_2_factors, FixedSizeVectorDefault{T}(amplitude_weights))
+end
+
+function _prepare_separable_modulation_factors!(::ScalarCPUStyle,
+    axis_1_factors, axis_2_factors, policy::AbstractFocalPlaneModulation,
+    ::Type{T}) where {T<:AbstractFloat}
+    coordinates = range(-T(pi), T(pi); length=size(axis_1_factors, 1))
+    @inbounds for point in axes(axis_1_factors, 2)
+        offset_x, offset_y = modulation_offset(policy, point, T)
+        for axis in axes(axis_1_factors, 1)
+            axis_1_factors[axis, point] = cis(offset_y * coordinates[axis])
+            axis_2_factors[axis, point] = cis(offset_x * coordinates[axis])
+        end
+    end
+    return nothing
+end
+
+@kernel function sampled_separable_modulation_factors_kernel!(
+    axis_1_factors, axis_2_factors, offsets, coordinates)
+    axis, point = @index(Global, NTuple)
+    if axis <= size(axis_1_factors, 1) && point <= size(axis_1_factors, 2)
+        @inbounds begin
+            coordinate = coordinates[axis]
+            axis_1_factors[axis, point] = cis(offsets[2, point] * coordinate)
+            axis_2_factors[axis, point] = cis(offsets[1, point] * coordinate)
+        end
+    end
+end
+
+function _prepare_separable_modulation_factors!(style::AcceleratorStyle,
+    axis_1_factors, axis_2_factors, policy::AbstractFocalPlaneModulation,
+    ::Type{T}) where {T<:AbstractFloat}
+    resolution, point_count = size(axis_1_factors)
+    host_coordinates = collect(range(-T(pi), T(pi); length=resolution))
+    host_offsets = Matrix{T}(undef, 2, point_count)
+    @inbounds for point in 1:point_count
+        offset_x, offset_y = modulation_offset(policy, point, T)
+        host_offsets[1, point] = offset_x
+        host_offsets[2, point] = offset_y
+    end
+    coordinates = similar(axis_1_factors, T, resolution)
+    offsets = similar(axis_1_factors, T, 2, point_count)
+    copyto!(coordinates, host_coordinates)
+    copyto!(offsets, host_offsets)
+    launch_kernel!(style, sampled_separable_modulation_factors_kernel!,
+        axis_1_factors, axis_2_factors, offsets, coordinates;
+        ndrange=size(axis_1_factors))
+    return nothing
+end
+
+@kernel function circular_separable_modulation_factors_kernel!(
+    axis_1_factors, axis_2_factors, radius, phase_offset_rad, coordinates,
+    point_count::Int)
+    axis, point = @index(Global, NTuple)
+    if axis <= size(axis_1_factors, 1) && point <= point_count
+        angle = phase_offset_rad + typeof(radius)(2pi * (point - 1) / point_count)
+        sine, cosine = sincos(angle)
+        @inbounds begin
+            coordinate = coordinates[axis]
+            axis_1_factors[axis, point] = cis(radius * sine * coordinate)
+            axis_2_factors[axis, point] = cis(radius * cosine * coordinate)
+        end
+    end
+end
+
+function _update_cycle_averaged_circular_modulation!(
+    ::ScalarCPUStyle, prepared::PreparedSeparableFocalPlaneModulation,
+    radius::T, phase_offset_rad::T) where {T<:AbstractFloat}
+    axis_1_factors = prepared.axis_1_factors
+    axis_2_factors = prepared.axis_2_factors
+    resolution, point_count = size(axis_1_factors)
+    coordinates = range(-T(pi), T(pi); length=resolution)
+    @inbounds for point in axes(axis_1_factors, 2)
+        angle = phase_offset_rad + T(2pi * (point - 1) / point_count)
+        sine, cosine = sincos(angle)
+        for axis in axes(axis_1_factors, 1)
+            axis_1_factors[axis, point] = cis(radius * sine * coordinates[axis])
+            axis_2_factors[axis, point] = cis(radius * cosine * coordinates[axis])
+        end
+    end
+    return prepared
+end
+
+function _update_cycle_averaged_circular_modulation!(
+    style::AcceleratorStyle, prepared::PreparedSeparableFocalPlaneModulation,
+    radius::T, phase_offset_rad::T) where {T<:AbstractFloat}
+    resolution, point_count = size(prepared.axis_1_factors)
+    # The isbits range retains the host's compensated coordinate rounding
+    # without an allocated staging buffer or changing captured array pointers.
+    coordinates = range(-T(pi), T(pi); length=resolution)
+    launch_kernel!(style, circular_separable_modulation_factors_kernel!,
+        prepared.axis_1_factors, prepared.axis_2_factors, radius,
+        phase_offset_rad, coordinates, point_count;
+        ndrange=size(prepared.axis_1_factors))
+    return prepared
+end
+
+function update_cycle_averaged_circular_modulation!(
+    prepared::PreparedSeparableFocalPlaneModulation{<:CircularModulation},
+    radius::T; enabled::Bool=true) where {T<:AbstractFloat}
+    isfinite(radius) && radius >= zero(T) || throw(InvalidConfiguration(
+        "cycle-averaged circular modulation radius must be finite and nonnegative"))
+    eltype(prepared.amplitude_weights) === T || throw(InvalidConfiguration(
+        "cycle-averaged circular modulation radius precision must match its prepared weights"))
+    size(prepared.axis_1_factors) == size(prepared.axis_2_factors) || throw(
+        InvalidConfiguration(
+            "cycle-averaged circular modulation factors must use matching pupil grids"))
+    size(prepared.axis_1_factors, 2) == prepared.policy.samples || throw(
+        InvalidConfiguration(
+            "cycle-averaged circular modulation point count changed after preparation"))
+    effective_radius = enabled ? radius : zero(T)
+    return _update_cycle_averaged_circular_modulation!(
+        execution_style(prepared.axis_1_factors), prepared, effective_radius,
+        T(prepared.policy.phase_offset_rad))
 end
 
 @kernel function sampled_modulation_phases_kernel!(phases, offsets, coordinates)

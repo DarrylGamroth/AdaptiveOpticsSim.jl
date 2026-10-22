@@ -1,0 +1,50 @@
+{
+  "validation": {
+    "saved_ramp_signal": {
+      "relative_l2": 0.0,
+      "gain": 1.0,
+      "cosine": 1.0000000000000002,
+      "orthogonal_relative_l2": 0.0
+    },
+    "analytic_tip_vs_saved_central_difference": {
+      "relative_l2": 9.961372822834164e-09,
+      "gain": 0.9999999900386274,
+      "cosine": 0.9999999999999988,
+      "orthogonal_relative_l2": 2.1279137669023893e-14
+    }
+  },
+  "cuda_f32_pupil_reuse": {
+    "ramp_slopes": {
+      "relative_l2": 1.7999442862006965e-06,
+      "gain": 0.9999998830083455,
+      "cosine": 0.999999999998387,
+      "orthogonal_relative_l2": 1.7961381868006169e-06
+    },
+    "tip_slopes": {
+      "relative_l2": 5.340579423782067e-05,
+      "gain": 0.9999903755176237,
+      "cosine": 0.9999999986201994,
+      "orthogonal_relative_l2": 5.253140201026433e-05
+    },
+    "tip_image": {
+      "relative_l2": 7.376865301319184e-05,
+      "gain": 0.9999904063565833,
+      "cosine": 0.9999999973250566,
+      "orthogonal_relative_l2": 7.314216412883753e-05
+    }
+  },
+  "oopao_provenance": {
+    "head": "085d5e50ace0d20fe13cc2da20129d5400166973",
+    "status": " M precision_oopao.npy\n?? AGENTS.md\n?? Containerfile\n?? docs/\n?? environment.yml\n",
+    "sha256": {
+      "precision_oopao.npy": "78fcc834fef1e3247fb5d84b4d1c77bd07d2c89579dc781845ab4d640a740841",
+      "OOPAO/__init__.py": "505cfb3cd12b7d491601dea0316721f4d72c2fba6682c94939adbec73d71e436",
+      "OOPAO/Pyramid.py": "d15169ac1bfb85fa027ed0fce383094a71b98c044067a66a7f40da80028c09fe",
+      "OOPAO/Telescope.py": "63bf621c3996b9f1547242e341909cf879d85ff8557af6dda54e45a0ce801ae8",
+      "OOPAO/Source.py": "dd56386290af7da5d276f77aefdb568fbf2c89002b92d18722de8a29e409370b",
+      "OOPAO/Detector.py": "fd31fe0cb5d2e946bfb0f4e750c18973d2e5b8ea69b494cdf69d972107e56b08"
+    },
+    "precision_value": 64,
+    "precision_write": "OOPAO/__init__.py unconditionally writes 64 on import; no restoration attempted"
+  }
+}

@@ -6,6 +6,33 @@
     return out
 end
 
+@inline function _pyramid_modulated_pupil_field!(out, amplitude, opd,
+    modulation::Optics.PreparedSeparableFocalPlaneModulation, point,
+    amplitude_scale, opd_to_cycles)
+    weight = modulation.amplitude_weights[point]
+    axis_1 = view(modulation.axis_1_factors, :, point)
+    axis_2 = transpose(view(modulation.axis_2_factors, :, point))
+    @. out = amplitude_scale * weight * amplitude * (axis_1 * axis_2) *
+        cispi(opd_to_cycles * opd)
+    return out
+end
+
+@inline function _pyramid_modulated_electric_field!(out, field,
+    modulation::PreparedFocalPlaneModulation, point)
+    weight = modulation.amplitude_weights[point]
+    @views @. out = weight * field * modulation.phases[:, :, point]
+    return out
+end
+
+@inline function _pyramid_modulated_electric_field!(out, field,
+    modulation::Optics.PreparedSeparableFocalPlaneModulation, point)
+    weight = modulation.amplitude_weights[point]
+    axis_1 = view(modulation.axis_1_factors, :, point)
+    axis_2 = transpose(view(modulation.axis_2_factors, :, point))
+    @. out = weight * field * (axis_1 * axis_2)
+    return out
+end
+
 function build_pyramid_phasor!(phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     _build_pyramid_phasor!(execution_style(phasor), phasor)
     return phasor
@@ -132,7 +159,7 @@ end
     execute_fft_plan!(stack, batch.fft_plan)
     launch_kernel!(style, pyramid_modulation_batch_mask_kernel!,
         stack, pyramid_propagation_workspace(front_end).pyramid_mask,
-        pad, batch.batch_size; ndrange=size(stack))
+        pad, batch.batch_size; ndrange=size(out))
     execute_fft_plan!(stack, batch.bfft_plan)
     launch_kernel!(style, pyramid_modulation_batch_intensity_kernel!,
         out, stack, intensity_scale, pad, batch.batch_size;
@@ -156,11 +183,14 @@ function _pyramid_pupil_modulation_batch!(
     style = execution_style(out)
     pad = size(out, 1)
     point_count = modulation_point_count(modulation)
+    launch_kernel!(style, pyramid_pupil_phase_kernel!, batch.pupil_phase,
+        opd, opd_to_cycles, resolution; ndrange=size(batch.pupil_phase))
+    phases = Optics._modulation_phase_storage(modulation)
     @inbounds for first_point in 1:batch.batch_size:point_count
         launch_kernel!(style, pyramid_pupil_modulation_batch_kernel!,
-            batch.field_stack, amplitude, opd, modulation.phases, weights,
+            batch.field_stack, amplitude, batch.pupil_phase, phases, weights,
             pyramid_propagation_workspace(front_end).phasor,
-            amplitude_scale, opd_to_cycles, offset, resolution, first_point,
+            amplitude_scale, offset, resolution, first_point,
             pad, batch.batch_size; ndrange=size(batch.field_stack))
         _propagate_pyramid_modulation_batch!(out, front_end, batch, style)
     end
@@ -186,7 +216,7 @@ function _pyramid_electric_field_modulation_batch!(
     @inbounds for first_point in 1:batch.batch_size:point_count
         launch_kernel!(style,
             pyramid_electric_field_modulation_batch_kernel!,
-            batch.field_stack, field, modulation.phases, weights,
+            batch.field_stack, field, Optics._modulation_phase_storage(modulation), weights,
             pyramid_propagation_workspace(front_end).phasor,
             offset, resolution, first_point, pad, batch.batch_size;
             ndrange=size(batch.field_stack))
@@ -215,17 +245,20 @@ end
     intensity_scale = pyramid_bfft_intensity_scale(T, pad)
 
     fill!(out, zero(T))
+    launch_kernel_async!(style, pyramid_pupil_phase_kernel!, batch.pupil_phase,
+        input.opd, opd_to_cycles, resolution; ndrange=size(batch.pupil_phase))
+    phases = Optics._modulation_phase_storage(front_end.modulation)
     @inbounds for first_point in 1:batch.batch_size:point_count
         launch_kernel_async!(style, pyramid_pupil_modulation_batch_kernel!,
-            batch.field_stack, input.amplitude, input.opd,
-            front_end.modulation.phases, batch.operating_weights,
-            propagation.phasor, amplitude_scale, opd_to_cycles, offset,
+            batch.field_stack, input.amplitude, batch.pupil_phase,
+            phases, batch.operating_weights,
+            propagation.phasor, amplitude_scale, offset,
             resolution, first_point, pad, batch.batch_size;
             ndrange=size(batch.field_stack))
         enqueue_fft_plan!(batch.field_stack, batch.fft_plan)
         launch_kernel_async!(style, pyramid_modulation_batch_mask_kernel!,
             batch.field_stack, propagation.pyramid_mask, pad,
-            batch.batch_size; ndrange=size(batch.field_stack))
+            batch.batch_size; ndrange=size(out))
         enqueue_fft_plan!(batch.field_stack, batch.bfft_plan)
         launch_kernel_async!(style,
             pyramid_modulation_batch_intensity_kernel!, out,
@@ -243,7 +276,8 @@ end
 
 function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS,
     pupil::PupilFunction, src::AbstractSource,
-    modulation::PreparedFocalPlaneModulation) where {T<:AbstractFloat}
+    modulation::Union{PreparedFocalPlaneModulation,
+        Optics.PreparedSeparableFocalPlaneModulation}) where {T<:AbstractFloat}
     return pyramid_intensity_core!(execution_style(out), out, wfs, pupil, src,
         modulation)
 end
@@ -290,7 +324,8 @@ end
 
 function pyramid_intensity_core!(::AcceleratorStyle,
     out::AbstractMatrix{T}, wfs::PyramidWFS, pupil::PupilFunction,
-    src::AbstractSource, modulation::PreparedFocalPlaneModulation) where {
+    src::AbstractSource, modulation::Union{PreparedFocalPlaneModulation,
+        Optics.PreparedSeparableFocalPlaneModulation}) where {
     T<:AbstractFloat,
 }
     prepare_pyramid_sampling!(wfs, pupil)

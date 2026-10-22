@@ -113,6 +113,7 @@ import ..Optics:
     PhotonRateNormalization,
     PointSampledMeasure,
     PreparedFocalPlaneModulation,
+    PreparedSeparableFocalPlaneModulation,
     PreparedMicrolensPropagation,
     PupilFunction,
     PupilPlane,

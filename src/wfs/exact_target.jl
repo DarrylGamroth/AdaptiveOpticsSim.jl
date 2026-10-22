@@ -440,6 +440,18 @@ function _require_exact_focal_plane_modulation_target(
     return modulation
 end
 
+function _require_exact_focal_plane_modulation_target(
+    modulation::PreparedSeparableFocalPlaneModulation,
+    target::AbstractComputeDevice,
+    label::AbstractString,
+)
+    _require_exact_wfs_storage_target(
+        modulation.axis_1_factors, target, :wfs_optics, "$label axis 1 factors")
+    _require_exact_wfs_storage_target(
+        modulation.axis_2_factors, target, :wfs_optics, "$label axis 2 factors")
+    return modulation
+end
+
 @inline function _require_exact_pyramid_modulation_batch_target(
     ::NoPyramidModulationBatchWorkspace,
     ::AbstractComputeDevice,
@@ -454,10 +466,12 @@ function _require_exact_pyramid_modulation_batch_target(
     _require_exact_wfs_array_targets(
         (
             batch.field_stack,
+            batch.pupil_phase,
             batch.operating_weights,
         ),
         (
             "Pyramid modulation field stack",
+            "Pyramid modulation pupil phase",
             "Pyramid operating modulation weights",
         ),
         target,

@@ -1148,8 +1148,18 @@ end
             Optics._prepare_modulation_phases!(KA_CPU_STYLE, generated,
                 policy, Float64)
             @test ka_cpu_close(generated, scalar.phases)
+            separable = Optics.prepare_separable_focal_plane_modulation(
+                policy, 8, zeros(8, 8), Float64)
+            Optics._prepare_separable_modulation_factors!(KA_CPU_STYLE,
+                separable.axis_1_factors, separable.axis_2_factors,
+                policy, Float64)
+            points = length(separable.amplitude_weights)
+            reconstructed = reshape(separable.axis_1_factors, 8, 1, points) .*
+                reshape(separable.axis_2_factors, 1, 8, points)
+            @test ka_cpu_close(reconstructed, scalar.phases)
         end
-        mark_ka_cpu_kernel!(:sampled_modulation_phases_kernel!)
+        mark_ka_cpu_kernel!(:sampled_modulation_phases_kernel!,
+            :sampled_separable_modulation_factors_kernel!)
 
         modulation_policy = CircularModulation(2.0;
             samples=5, phase_offset_rad=0.3)
@@ -1166,6 +1176,56 @@ end
         mark_ka_cpu_kernel!(:circular_modulation_phases_kernel!)
         @test ka_cpu_close(
             ka_modulation.phases, scalar_modulation.phases)
+        separable_modulation = Optics.prepare_separable_focal_plane_modulation(
+            modulation_policy, 8, zeros(8, 8), Float64)
+        Optics._update_cycle_averaged_circular_modulation!(KA_CPU_STYLE,
+            separable_modulation, 1.5, 0.3)
+        mark_ka_cpu_kernel!(:circular_separable_modulation_factors_kernel!)
+        reconstructed = reshape(separable_modulation.axis_1_factors, 8, 1, 5) .*
+            reshape(separable_modulation.axis_2_factors, 1, 8, 5)
+        @test ka_cpu_close(reconstructed, scalar_modulation.phases)
+
+        @testset "Cached pupil phase and reused mask $T" for T in (Float32, Float64)
+            resolution = 5
+            opd = [T(35e-9) * (T(i - 3) + T(0.4) * T(j - 3))
+                for i in 1:resolution, j in 1:resolution]
+            phase = fill(Complex{T}(T(NaN), T(NaN)), resolution, resolution)
+            phase_address = pointer(phase)
+            opd_to_cycles = T(2) / T(0.75e-6)
+            rtol = T === Float32 ? T(3e-5) : T(2e-12)
+            atol = T === Float32 ? T(1e-6) : T(1e-13)
+            for scale in (one(T), T(-0.6))
+                current_opd = scale .* opd
+                Backends.launch_kernel!(KA_CPU_STYLE,
+                    WavefrontSensors.pyramid_pupil_phase_kernel!,
+                    phase, current_opd, opd_to_cycles, resolution;
+                    ndrange=(resolution + 2, resolution + 2))
+                expected = [cispi(opd_to_cycles * current_opd[i, j])
+                    for i in 1:resolution, j in 1:resolution]
+                @test phase ≈ expected rtol=rtol atol=atol
+                @test pointer(phase) == phase_address
+            end
+            mask = [cis(T(0.3) * T(i - 1) - T(0.2) * T(j - 1))
+                for i in 1:resolution, j in 1:resolution]
+            for batch_size in (1, 2, 4)
+                # Keep an inactive slice to ensure the two-dimensional launch
+                # visits exactly the requested number of modulation points.
+                stack = [Complex{T}(T(i + 2j + b) / T(7), T(i - j - b) / T(5))
+                    for i in 1:resolution, j in 1:resolution, b in 1:(batch_size + 1)]
+                expected = copy(stack)
+                for b in 1:batch_size, j in 1:resolution, i in 1:resolution
+                    expected[i, j, b] *= mask[i, j]
+                end
+                Backends.launch_kernel!(KA_CPU_STYLE,
+                    WavefrontSensors.pyramid_modulation_batch_mask_kernel!,
+                    stack, mask, resolution, batch_size;
+                    ndrange=(resolution + 2, resolution + 2))
+                @test stack ≈ expected rtol=rtol atol=atol
+                @test stack[:, :, end] == expected[:, :, end]
+            end
+        end
+        mark_ka_cpu_kernel!(:pyramid_pupil_phase_kernel!,
+            :pyramid_modulation_batch_mask_kernel!)
 
     end
 
@@ -1293,7 +1353,6 @@ end
             :moving_layer_replay_kernel!,
             :pyramid_electric_field_modulation_batch_kernel!,
             :pyramid_modulation_batch_intensity_kernel!,
-            :pyramid_modulation_batch_mask_kernel!,
             :pyramid_pupil_modulation_batch_kernel!,
             :zernike_phasor_kernel!,
         ])

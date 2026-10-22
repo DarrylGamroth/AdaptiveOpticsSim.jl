@@ -1,0 +1,119 @@
+{
+  "timing_scope": "Unpaced completed optical node; shared host/uncontrolled clocks; small deltas are descriptive",
+  "performance": {
+    "copper_fast": {
+      "before_ms": 2.9416865000000003,
+      "after_ms": 2.8680505,
+      "dense_phase_bytes": 44236800,
+      "factor_bytes": 368640,
+      "pupil_phase_cache_bytes": 460800,
+      "observed_pool_before_bytes": 68128644,
+      "observed_pool_after_bytes": 24721284
+    },
+    "gpi_default": {
+      "before_ms": 3.465497,
+      "after_ms": 3.4889585,
+      "dense_phase_bytes": 11059200,
+      "factor_bytes": 92160,
+      "pupil_phase_cache_bytes": 460800,
+      "observed_pool_before_bytes": 244847204,
+      "observed_pool_after_bytes": 234340964
+    },
+    "copper_default": {
+      "before_ms": 5.1631055,
+      "after_ms": 5.0797985,
+      "dense_phase_bytes": 58982400,
+      "factor_bytes": 245760,
+      "pupil_phase_cache_bytes": 1843200,
+      "observed_pool_before_bytes": 393574532,
+      "observed_pool_after_bytes": 336681092
+    },
+    "gpi_fine": {
+      "before_ms": 319.033253,
+      "after_ms": 316.33973749999996,
+      "dense_phase_bytes": 796262400,
+      "factor_bytes": 2211840,
+      "pupil_phase_cache_bytes": 4147200,
+      "observed_pool_before_bytes": 1542748676,
+      "observed_pool_after_bytes": 748179716,
+      "repeat_before_ms": 319.1026975,
+      "repeat_after_ms": 316.42171499999995
+    },
+    "copper_fine": {
+      "before_ms": 456.586809,
+      "after_ms": 451.4586205,
+      "dense_phase_bytes": 4246732800,
+      "factor_bytes": 5898240,
+      "pupil_phase_cache_bytes": 16588800,
+      "observed_pool_before_bytes": 4978130948,
+      "observed_pool_after_bytes": 735206404,
+      "repeat_before_ms": 456.5475175,
+      "repeat_after_ms": 452.235967
+    }
+  },
+  "storage_diagnostics": {
+    "copper_fast": {
+      "dense": {
+        "median_ms": 2.8478285,
+        "storage_bytes": 44236800,
+        "relative_l2": 0.0,
+        "identical_to_dense": true,
+        "long_warmup_median_ms": 2.68342
+      },
+      "separable": {
+        "median_ms": 2.8680505,
+        "storage_bytes": 368640,
+        "relative_l2": 6.760968718563083e-08,
+        "identical_to_dense": false,
+        "long_warmup_median_ms": 2.6842715
+      },
+      "computed": {
+        "median_ms": 2.8695035,
+        "storage_bytes": 1728,
+        "relative_l2": 0.0,
+        "identical_to_dense": true,
+        "long_warmup_median_ms": 2.7145080000000004
+      }
+    },
+    "gpi_fine": {
+      "dense": {
+        "median_ms": 316.5606405,
+        "storage_bytes": 796262400,
+        "relative_l2": 0.0,
+        "identical_to_dense": true
+      },
+      "separable": {
+        "median_ms": 316.33973749999996,
+        "storage_bytes": 2211840,
+        "relative_l2": 6.26017126904673e-08,
+        "identical_to_dense": false
+      },
+      "computed": {
+        "median_ms": 316.6944815,
+        "storage_bytes": 4416,
+        "relative_l2": 0.0,
+        "identical_to_dense": true
+      }
+    },
+    "copper_fine": {
+      "dense": {
+        "median_ms": 457.17472399999997,
+        "storage_bytes": 4246732800,
+        "relative_l2": 0.0,
+        "identical_to_dense": true
+      },
+      "separable": {
+        "median_ms": 451.4586205,
+        "storage_bytes": 5898240,
+        "relative_l2": 6.79045266979146e-08,
+        "identical_to_dense": false
+      },
+      "computed": {
+        "median_ms": 455.24425399999996,
+        "storage_bytes": 7808,
+        "relative_l2": 0.0,
+        "identical_to_dense": true
+      }
+    }
+  }
+}

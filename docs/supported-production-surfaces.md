@@ -79,6 +79,12 @@ sm86 devices with 5 MiB L2; other cases retain the existing divisor selection
 with a 32-point limit and 256 MiB field-stack budget. Physical sampling and
 modulation weights are unchanged. The [batch sweep and validation](../benchmarks/results/platform/2026-10-22-modulation-batches/README.md)
 record the qualified combinations, numerical differences and external reference.
+Accelerator Pyramid propagation stores each physical pupil tilt as two separable
+complex factor arrays, computes the common OPD phasor once per pupil propagation,
+and reuses mask values across modulation planes. These implementation choices
+retain every physical tilt and both FFTs; they do not select a reduced optical
+model. Prepared factors and pupil-phase scratch remain device-resident and bound
+to captured execution. CPU and Bi-O-edge dense modulation APIs are unchanged.
 
 The accelerator graph surface includes opt-in CUDA Graph and HIP Graph replay
 of a complete graph step when every node is qualified. The maintained captured

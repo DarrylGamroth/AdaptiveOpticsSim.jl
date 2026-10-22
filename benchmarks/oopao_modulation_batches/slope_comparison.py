@@ -30,13 +30,15 @@ def metrics(a,b):
 f=load('flat_frame');r=load('ramp_frame');d=load('tip_frame_derivative')
 ref_tip=load('tip_signal_derivative');ref_ramp=load('ramp_signal')-load('flat_signal')
 report={'validation':{'saved_ramp_signal':metrics(signal(r)-signal(f),ref_ramp),'analytic_tip_vs_saved_central_difference':metrics(tangent(f,d),ref_tip)}}
-for strategy in ('pupil_tilt','shifted_mask'):
- for batch in ('baseline','selected'):
-  prefix=f'cuda_f32_{strategy}_{batch}'
-  ff=load(prefix+'_flat_frame');rr=load(prefix+'_ramp_frame');dd=load(prefix+'_tip_frame_derivative')
-  report[prefix]={'ramp_slopes':metrics(signal(rr)-signal(ff),ref_ramp),'tip_slopes':metrics(tangent(ff,dd),ref_tip),'tip_image':metrics(dd.ravel(),d.ravel())}
+default_prefixes=[f'cuda_f32_{strategy}_{batch}'
+                  for strategy in ('pupil_tilt','shifted_mask')
+                  for batch in ('baseline','selected')]
+prefixes=os.environ.get('AOS_ORACLE_PREFIXES',','.join(default_prefixes)).split(',')
+for prefix in prefixes:
+ ff=load(prefix+'_flat_frame');rr=load(prefix+'_ramp_frame');dd=load(prefix+'_tip_frame_derivative')
+ report[prefix]={'ramp_slopes':metrics(signal(rr)-signal(ff),ref_ramp),'tip_slopes':metrics(tangent(ff,dd),ref_tip),'tip_image':metrics(dd.ravel(),d.ravel())}
 files=['precision_oopao.npy','OOPAO/__init__.py','OOPAO/Pyramid.py','OOPAO/Telescope.py','OOPAO/Source.py','OOPAO/Detector.py']
 report['oopao_provenance']={'head':subprocess.check_output(['git','-C',str(checkout),'rev-parse','HEAD'],text=True).strip(),'status':subprocess.check_output(['git','-C',str(checkout),'status','--short'],text=True),'sha256':{f:hashlib.sha256((checkout/f).read_bytes()).hexdigest() for f in files},'precision_value':int(np.load(checkout/'precision_oopao.npy')),'precision_write':'OOPAO/__init__.py unconditionally writes 64 on import; no restoration attempted'}
 assert report['validation']['saved_ramp_signal']['relative_l2'] < 1e-12
 assert report['validation']['analytic_tip_vs_saved_central_difference']['relative_l2'] < 1e-6
-(root/'slope-comparison.json').write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))
+Path(os.environ.get('AOS_SLOPE_RESULTS',root/'slope-comparison.json')).write_text(json.dumps(report,indent=2));print(json.dumps(report,indent=2))

@@ -23,7 +23,10 @@ function physical_profile_main(args)
     graph = batch_graph(c,WavefrontSensors.PyramidPupilTiltStrategy())
     prepared = AlgorithmGraphs.prepared_graph_node(graph,:pwfs).prepared
     workspace = prepared.workspace.modulation_batch
-    phases = prepared.front_end.modulation.phases
+    modulation = prepared.front_end.modulation
+    phase_arrays = Tuple(getfield(modulation, name) for name in fieldnames(typeof(modulation))
+        if getfield(modulation, name) isa CUDA.CuArray)
+    phase_bytes = sum(a -> sizeof(eltype(a)) * length(a), phase_arrays)
     warmups = parse(Int,get(ENV,"AOS_PROFILE_WARMUPS","16"))
     samples = parse(Int,get(ENV,"AOS_PROFILE_SAMPLES","32"))
     repetitions = parse(Int,get(ENV,"AOS_PROFILE_REPLAYS","4"))
@@ -46,13 +49,14 @@ function physical_profile_main(args)
     after = Array(graph_output(graph,:rate))
     after == reference || error("deterministic replay changed rate map")
     record=Dict("case"=>Dict(string(k)=>v for (k,v) in pairs(c)),
-        "revision"=>readchomp(`git -C $(@__DIR__) rev-parse HEAD`),
+        "revision"=>readchomp(`git -C $(dirname(dirname(pathof(AdaptiveOpticsSim)))) rev-parse HEAD`),
         "harness_sha256"=>bytes2hex(sha256(read(@__FILE__))),
         "julia"=>string(VERSION),"runtime"=>sprint(io->CUDA.versioninfo(io)),
         "gpu"=>CUDA.name(CUDA.device()),"batch"=>workspace.batch_size,
         "padded_side"=>size(workspace.field_stack,1),
         "field_stack_bytes"=>sizeof(eltype(workspace.field_stack))*length(workspace.field_stack),
-        "phase_bytes"=>sizeof(eltype(phases))*length(phases),
+        "phase_bytes"=>phase_bytes,
+        "pupil_phase_bytes"=>sizeof(eltype(workspace.pupil_phase))*length(workspace.pupil_phase),
         "device_used_bytes"=>memory_before,"host_allocated_bytes"=>allocations,
         "warmups"=>warmups,"samples_ms"=>times,"median_ms"=>median(times),
         "p95_ms"=>quantile(times,.95),"maximum_ms"=>maximum(times),
@@ -62,6 +66,9 @@ function physical_profile_main(args)
         "profile_enabled"=>get(ENV,"AOS_PROFILE_EXTERNAL","0")=="1",
         "boundary"=>"One captured physical AOS photon-rate node through completion; excludes detector, RTC, transfers, setup; unpaced single outstanding service")
     mkpath(dirname(abspath(args[1])))
+    rate_path = args[1] * ".rate.f32"
+    open(io -> write(io, vec(after)), rate_path, "w")
+    record["rate_file"] = basename(rate_path)
     open(io->TOML.print(io,record;sorted=true),args[1],"w")
     println("$(c.name): pad=$(record["padded_side"]) batch=$(record["batch"]) median_ms=$(record["median_ms"]) phase_bytes=$(record["phase_bytes"])")
 end
