@@ -1,0 +1,157 @@
+{
+  "complete": {
+    "stream": {
+      "median_ms": 2.7174519999999998,
+      "min_run_median_ms": 2.7164075,
+      "max_run_median_ms": 2.7326335000000004,
+      "host_bytes": [
+        12320
+      ]
+    },
+    "captured": {
+      "median_ms": 2.628863,
+      "min_run_median_ms": 2.6285195000000003,
+      "max_run_median_ms": 2.6381145000000004,
+      "host_bytes": [
+        0
+      ]
+    }
+  },
+  "node_device_intervals_us": {
+    "nodes_stream": {
+      "atmosphere": 56.32000043988228,
+      "detector": 134.65599715709686,
+      "pdm": 40.95999896526337,
+      "pupil_opd_composition": 10.239999741315842,
+      "pwfs": 2548.736095428467
+    },
+    "nodes_captured": {
+      "atmosphere": 58.36800113320351,
+      "detector": 55.296000093221664,
+      "pdm": 34.81600061058998,
+      "pupil_opd_composition": 10.239999741315842,
+      "pwfs": 2539.520025253296
+    }
+  },
+  "native_trace_busy": {
+    "stream": "Device-side activity: GPU was busy for 10.63 ms (62.11% of the trace)",
+    "captured": "Device-side activity: GPU was busy for 10.56 ms (97.80% of the trace)"
+  },
+  "native_captured_kernels": [
+    {
+      "name": "void regular_fft<1024u, EPT<16u>, 8u, 2u, ",
+      "calls": 8,
+      "mean_us_per_frame": 839.475
+    },
+    {
+      "name": "void vector_fft<1024u, EPT<16u>, 1u, 11u, ",
+      "calls": 8,
+      "mean_us_per_frame": 804.54
+    },
+    {
+      "name": "gpu_pyramid_separable_shifted_mask_batch_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 428.7375
+    },
+    {
+      "name": "gpu_pyramid_modulation_batch_intensity_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 395.18
+    },
+    {
+      "name": "gpu_moving_layer_replay_kernel_",
+      "calls": 20,
+      "mean_us_per_frame": 42.96000000000001
+    },
+    {
+      "name": "gpu_bin2d_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 41.01
+    },
+    {
+      "name": "gpu__counter_poisson_noise_kernel_",
+      "calls": 8,
+      "mean_us_per_frame": 19.61
+    },
+    {
+      "name": "gpu_pyramid_unmodulated_pupil_field_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 18.660000000000004
+    },
+    {
+      "name": "gpu_dm_separable_right_pupil_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 9.54
+    },
+    {
+      "name": "[set device memory]",
+      "calls": 8,
+      "mean_us_per_frame": 7.3910475
+    },
+    {
+      "name": "gpu__copy_packed_array_kernel_",
+      "calls": 12,
+      "mean_us_per_frame": 4.882499999999999
+    },
+    {
+      "name": "gpu_broadcast_kernel_cartesian",
+      "calls": 4,
+      "mean_us_per_frame": 4.11
+    },
+    {
+      "name": "gpu__advance_random_draw_kernel_",
+      "calls": 12,
+      "mean_us_per_frame": 3.6909174999999994
+    },
+    {
+      "name": "gpu_dm_separable_left_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 3.52
+    },
+    {
+      "name": "gpu_apply_atmosphere_pupil_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 2.8
+    },
+    {
+      "name": "gpu__add_enqueued_detector_scratch_kernel_",
+      "calls": 8,
+      "mean_us_per_frame": 2.5009174999999995
+    },
+    {
+      "name": "gpu_advance_moving_screen_replay_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 2.205
+    },
+    {
+      "name": "gpu__counter_randn_fill_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 1.9100000000000001
+    },
+    {
+      "name": "gpu__scatter_grid_dm_command_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 1.6099999999999999
+    },
+    {
+      "name": "gpu__prepare_enqueued_detector_frame_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 1.31
+    },
+    {
+      "name": "gpu__clamp_enqueued_detector_frame_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 1.1909175
+    },
+    {
+      "name": "gpu__fill_enqueued_detector_scratch_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 1.1309175
+    },
+    {
+      "name": "gpu__quantize_enqueued_detector_frame_kernel_",
+      "calls": 4,
+      "mean_us_per_frame": 1.1309175
+    }
+  ]
+}

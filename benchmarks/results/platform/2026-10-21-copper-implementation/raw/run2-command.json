@@ -1,0 +1,21 @@
+{
+  "argv": [
+    "taskset",
+    "-c",
+    "2",
+    "julia",
+    "--project=/home/dgamroth/workspaces/codex/copper-atmospheric-evidence/profile-env",
+    "--threads=1,0",
+    "--gcthreads=1",
+    "--startup-file=no",
+    "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim-copper-review/benchmarks/profile_copper_cuda.jl",
+    "/home/dgamroth/workspaces/codex/REVOLTCopperSim-atmospheric",
+    "/home/dgamroth/workspaces/codex/copper-atmospheric-evidence/aos-profiles/run2.toml",
+    "128"
+  ],
+  "cwd": "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim-copper-review",
+  "environment": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "AOS_COPPER_PROFILE": "0"
+  }
+}
