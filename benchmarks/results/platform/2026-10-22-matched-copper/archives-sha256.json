@@ -1,0 +1,32 @@
+[
+  {
+    "path": "raw-aos.tar.zst",
+    "size_bytes": 24720090,
+    "sha256": "1fad8d59899ff504b199ac156a218d915aa4ee4500f8876bfcfb89c3c493019c"
+  },
+  {
+    "path": "raw-oopao.tar.zst",
+    "size_bytes": 23603477,
+    "sha256": "64367b5148a11ba8a95f3a4879b99a8ba59edc77fc5e037c427052b6e8530947"
+  },
+  {
+    "path": "raw-specula.tar.zst",
+    "size_bytes": 15777928,
+    "sha256": "19224ca7912d8470761555defb426740d525a39fb3751c652b076d0f88b7522e"
+  },
+  {
+    "path": "analysis.tar.zst",
+    "size_bytes": 44285961,
+    "sha256": "c42082ac16547e426e7ebd1a315ab067ee4933d3da823fac780c0b1a9df16150"
+  },
+  {
+    "path": "fixture.tar.zst",
+    "size_bytes": 5898766,
+    "sha256": "e151084660cc7993f25b46ae3ca0062eafed72ca8781a603d8cd35a7a0d41874"
+  },
+  {
+    "path": "core.tar.zst",
+    "size_bytes": 902947,
+    "sha256": "9b1fd79f76575ee1d1828175bb64eb5a249b371f4e504beaa4704808b46df010"
+  }
+]

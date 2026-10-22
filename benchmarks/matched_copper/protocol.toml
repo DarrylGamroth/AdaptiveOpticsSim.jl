@@ -1,0 +1,36 @@
+version = 1
+scope = "Completed optical photon-rate node from resident native-unit OPD, including native phase formation, propagation, normalization and 64x64 sum rebin; excludes input staging, detector, slope processing, calibration reduction, RTC, preparation and diagnostic copies."
+arrival = "Unpaced single outstanding call; completed service time, not fixed-arrival latency or WCET"
+precision = "Float32 input/output and ComplexF32 FFT data; record cold-construction arithmetic and actual FFT dtype"
+optics = "Copper N240/M96, nominal modulation5lambda/D, lambda550nm, D1.22m, pupil30/separation2/edge1, square512 FFT to64 detector pixels"
+modulation_sampling = "Endpoint coordinate -pi..pi on240 samples, common to all engines; sampled physical tilt radius is nominal5*240/239lambda/D"
+readout = "One shared host Float64 I4Q implementation, fixed 30-circle support, fixed analytic incident-flux divisor; raw slopes without reference subtraction; not native external estimator/calibration API validation"
+corrections = "No fitted gain, flux scaling, registration, transpose, pixel shift or column rescaling"
+comparability = "SPECULA common-prescription adapter is explicit; unmodified native diagnostic is not timing-ranked as matched optics"
+
+[validation]
+metric_definition = "Rate L2 uses full64x64 reference norm. Raw slopes use common.py fixed716 support; all probes require absolute gate, excited probes additionally relative gate. Flat/piston are absolute-only. Calibration central difference all277 columns; denominator max(reference column norm,1e-12*maximum reference column norm); no columns omitted."
+rate_relative_l2 = 5.0e-5
+flux_relative_error = 1.0e-5
+slope_absolute_error = 2.0e-6
+excited_slopes_relative_l2 = 2.0e-4
+calibration_relative_l2 = 5.0e-4
+calibration_column_relative_l2 = 2.0e-3
+column_denominator_floor_fraction = 1.0e-12
+piston_rate_relative_l2 = 1.0e-5
+photon_conservation_relative_error = 5.0e-5
+cpu_cuda_rate_relative_l2 = 2.0e-6
+cpu_cuda_calibration_relative_l2 = 2.0e-4
+interpretation = "Predefined engineering equivalence thresholds; not analytic floating-point bounds or instrument-fidelity qualification"
+
+[performance]
+warmups = 32
+samples = 128
+fresh_rounds = 3
+order_seed = 823
+julia_threads = 1
+blas_threads = 1
+cpu_single_affinity = "2"
+cpu_parallel_affinity = "0,2,4,6,8,10,12,14"
+gpu_affinity = "2"
+clock_policy = "Uncontrolled shared host; record telemetry; no permission, clock or power changes"

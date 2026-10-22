@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "name": "OOPAO",
+      "url": "https://github.com/cheritier/OOPAO.git",
+      "revision": "168fad2a8d98721a270c1b066b813b716680b5ea",
+      "path": "oopao"
+    },
+    {
+      "name": "SPECULA",
+      "url": "https://github.com/ArcetriAdaptiveOptics/SPECULA.git",
+      "revision": "a06bb495ae29a6ec160628069598b32631b9f44f",
+      "path": "specula"
+    }
+  ]
+}
