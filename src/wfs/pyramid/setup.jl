@@ -211,6 +211,51 @@ struct PyramidPupilTiltStrategy <:
 struct PyramidShiftedMaskStrategy <:
        AbstractPyramidModulationPropagationStrategy end
 
+"""Compact pupil coordinates and quadrature offsets for shifted-mask propagation.
+
+No pupil phase cube is retained. Diagnostic pupil tilts are evaluated into the
+existing propagation field from these backend-resident arrays.
+"""
+struct PreparedPyramidShiftedModulation{P,C,O,V}
+    policy::P
+    coordinates::C
+    offsets::O
+    amplitude_weights::V
+end
+
+@inline Optics.modulation_point_count(modulation::PreparedPyramidShiftedModulation) =
+    length(modulation.amplitude_weights)
+@inline _pyramid_modulation_resolution(modulation::PreparedFocalPlaneModulation) =
+    size(modulation.phases, 1)
+@inline _pyramid_modulation_resolution(modulation::PreparedPyramidShiftedModulation) =
+    length(modulation.coordinates)
+
+@inline function _prepare_pyramid_modulation(::PyramidPupilTiltStrategy,
+    policy, resolution, field, ::Type{T}) where {T}
+    return prepare_focal_plane_modulation(policy, resolution, field, T)
+end
+
+function _prepare_pyramid_modulation(::PyramidShiftedMaskStrategy,
+    policy, resolution, field, ::Type{T}) where {T}
+    resolution > 1 || throw(InvalidConfiguration(
+        "Pyramid shifted-mask modulation requires a pupil resolution greater than one"))
+    count = modulation_point_count(policy)
+    coordinates = similar(field, T, resolution)
+    offsets = similar(field, T, 2, count)
+    weights = Vector{T}(undef, count)
+    host_offsets = Matrix{T}(undef, 2, count)
+    for point in 1:count
+        x, y = modulation_offset(policy, point, T)
+        host_offsets[1, point] = x
+        host_offsets[2, point] = y
+        weights[point] = sqrt(Optics.modulation_weight(policy, point, T))
+    end
+    copyto!(coordinates, collect(range(-T(pi), T(pi); length=resolution)))
+    copyto!(offsets, host_offsets)
+    return PreparedPyramidShiftedModulation(policy, coordinates, offsets,
+        FixedSizeVectorDefault{T}(weights))
+end
+
 """Run-immutable numerical contract for pyramid-mask propagation."""
 struct PyramidPropagationPlan{M<:PyramidPhaseMask,T<:AbstractFloat,
     S<:AbstractPyramidModulationPropagationStrategy}
@@ -378,7 +423,7 @@ function _prepare_pyramid_modulation_batch(
     batch_size = _pyramid_modulation_batch_size(field, point_count)
     field_stack = similar(field, eltype(field), pad, pad, batch_size)
     operating_weights = similar(field, real(eltype(field)), point_count)
-    copyto!(operating_weights, modulation.amplitude_weights)
+    copyto!(operating_weights, collect(modulation.amplitude_weights))
     fft_plan = plan_repeated_fft_backend!(field_stack, (1, 2))
     bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
     return PyramidModulationBatchWorkspace(
@@ -397,7 +442,7 @@ function _prepare_pyramid_modulation_batch(
     phase_mask.psf_centering || throw(InvalidConfiguration(
         "Pyramid shifted-mask modulation requires psf_centering=true",
     ))
-    resolution = size(modulation.phases, 1)
+    resolution = _pyramid_modulation_resolution(modulation)
     resolution > 1 || throw(InvalidConfiguration(
         "Pyramid shifted-mask modulation requires a pupil resolution greater than one",
     ))
@@ -417,7 +462,7 @@ function _prepare_pyramid_modulation_batch(
         host_axis_1_shifts_rad[point] = coordinate_scale * offset_y
         host_axis_2_shifts_rad[point] = coordinate_scale * offset_x
     end
-    copyto!(operating_weights, modulation.amplitude_weights)
+    copyto!(operating_weights, collect(modulation.amplitude_weights))
     copyto!(axis_1_shifts_rad, host_axis_1_shifts_rad)
     copyto!(axis_2_shifts_rad, host_axis_2_shifts_rad)
     bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
@@ -775,8 +820,8 @@ function _prepare_pyramid_diffractive_storage(backend, ::Type{T}, tel,
     style = execution_style(field)
     fft_plan = plan_repeated_fft_backend!(focal_field)
     ifft_plan = plan_repeated_ifft_backend!(pupil_field)
-    modulation = prepare_focal_plane_modulation(operating_policy,
-        tel.params.resolution, field, T)
+    modulation = _prepare_pyramid_modulation(modulation_propagation_strategy,
+        operating_policy, tel.params.resolution, field, T)
     modulation_batch = _prepare_pyramid_modulation_batch(
         style, field, phase_mask, modulation,
         modulation_propagation_strategy)

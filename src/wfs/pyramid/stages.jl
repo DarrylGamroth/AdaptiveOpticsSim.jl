@@ -154,7 +154,7 @@ function prepare_wfs_optics(front_end::PyramidOpticalFrontEnd,
     input.metadata.dimensions == (resolution, resolution) ||
         throw(WFSPreparationError(:wfs_optics, :shape,
             "pyramid pupil input must be square"))
-    size(front_end.modulation.phases, 1) == resolution ||
+    _pyramid_modulation_resolution(front_end.modulation) == resolution ||
         throw(WFSPreparationError(:wfs_optics, :shape,
             "pyramid modulation was prepared for another pupil resolution"))
     expected = pyramid_output_dimensions(front_end, resolution)
@@ -265,11 +265,10 @@ function _pyramid_native_rate!(front_end::PyramidOpticalFrontEnd,
     ) && return propagation.intensity
     @inbounds for point in 1:modulation_point_count(front_end.modulation)
         fill!(propagation.field, zero(eltype(propagation.field)))
-        weight = front_end.modulation.amplitude_weights[point]
-        @views @. propagation.field[offset+1:offset+resolution,
-            offset+1:offset+resolution] = amplitude_scale * weight *
-            input.amplitude * front_end.modulation.phases[:, :, point] *
-            cispi(opd_to_cycles * input.opd)
+        _pyramid_modulated_pupil_field!(
+            view(propagation.field, offset+1:offset+resolution,
+                offset+1:offset+resolution), input.amplitude, input.opd,
+            front_end.modulation, point, amplitude_scale, opd_to_cycles)
         copyto!(propagation.focal_field, propagation.field)
         accumulate_pyramid_focal_intensity!(propagation.intensity, front_end)
     end

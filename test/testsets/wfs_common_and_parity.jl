@@ -216,7 +216,7 @@ end
         AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
         full_batch,
         shifted_mask,
-        PupilFunction(tel),
+        tel.params.resolution,
     )
     for point in 1:point_count
         separable_mask = separable_batch.axis_1_factors[:, point] *

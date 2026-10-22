@@ -74,6 +74,7 @@ import ..Backends:
     require_same_backend,
     synchronize_backend!
 
+import ..Optics
 import ..Optics:
     AbstractCombinationPolicy,
     AbstractOpticalElement,

@@ -156,21 +156,61 @@ function prepare_focal_plane_modulation(policy::AbstractFocalPlaneModulation,
     point_count = modulation_point_count(policy)
     phases = similar(backend_storage, Complex{T}, resolution, resolution,
         point_count)
-    host_phases = Array{Complex{T}}(undef, resolution, resolution, point_count)
     amplitude_weights = Vector{T}(undef, point_count)
-    coordinates = range(-T(pi), T(pi); length=resolution)
     @inbounds for point_index in 1:point_count
-        offset_x, offset_y = modulation_offset(policy, point_index, T)
         amplitude_weights[point_index] = sqrt(modulation_weight(policy,
             point_index, T))
+    end
+    _prepare_modulation_phases!(execution_style(phases), phases, policy, T)
+    return PreparedFocalPlaneModulation(policy, phases,
+        FixedSizeVectorDefault{T}(amplitude_weights))
+end
+
+function _prepare_modulation_phases!(::ScalarCPUStyle, phases,
+    policy::AbstractFocalPlaneModulation, ::Type{T}) where {T<:AbstractFloat}
+    resolution = size(phases, 1)
+    coordinates = range(-T(pi), T(pi); length=resolution)
+    @inbounds for point_index in axes(phases, 3)
+        offset_x, offset_y = modulation_offset(policy, point_index, T)
         for axis_2 in 1:resolution, axis_1 in 1:resolution
             phase = offset_x * coordinates[axis_2] +
                 offset_y * coordinates[axis_1]
-            host_phases[axis_1, axis_2, point_index] = cis(phase)
+            phases[axis_1, axis_2, point_index] = cis(phase)
         end
     end
-    copyto!(phases, host_phases)
-    return PreparedFocalPlaneModulation(policy, phases, amplitude_weights)
+    return phases
+end
+
+@kernel function sampled_modulation_phases_kernel!(phases, offsets, coordinates)
+    axis_1, axis_2, point = @index(Global, NTuple)
+    if axis_1 <= size(phases, 1) && axis_2 <= size(phases, 2) &&
+       point <= size(phases, 3)
+        @inbounds phases[axis_1, axis_2, point] = cis(
+            offsets[1, point] * coordinates[axis_2] +
+            offsets[2, point] * coordinates[axis_1])
+    end
+end
+
+function _prepare_modulation_phases!(style::AcceleratorStyle, phases,
+    policy::AbstractFocalPlaneModulation, ::Type{T}) where {T<:AbstractFloat}
+    resolution = size(phases, 1)
+    point_count = size(phases, 3)
+    # Preserve the host quadrature and range rounding while transferring only
+    # O(resolution + point_count) values instead of a dense phase cube.
+    host_coordinates = collect(range(-T(pi), T(pi); length=resolution))
+    host_offsets = Matrix{T}(undef, 2, point_count)
+    @inbounds for point in 1:point_count
+        offset_x, offset_y = modulation_offset(policy, point, T)
+        host_offsets[1, point] = offset_x
+        host_offsets[2, point] = offset_y
+    end
+    coordinates = similar(phases, T, resolution)
+    offsets = similar(phases, T, 2, point_count)
+    copyto!(coordinates, host_coordinates)
+    copyto!(offsets, host_offsets)
+    launch_kernel!(style, sampled_modulation_phases_kernel!, phases,
+        offsets, coordinates; ndrange=size(phases))
+    return phases
 end
 
 @inline function _circular_modulation_coordinate_step(

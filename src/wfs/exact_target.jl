@@ -440,6 +440,18 @@ function _require_exact_focal_plane_modulation_target(
     return modulation
 end
 
+function _require_exact_focal_plane_modulation_target(
+    modulation::PreparedPyramidShiftedModulation,
+    target::AbstractComputeDevice,
+    label::AbstractString,
+)
+    _require_exact_wfs_storage_target(
+        modulation.coordinates, target, :wfs_optics, "$label coordinates")
+    _require_exact_wfs_storage_target(
+        modulation.offsets, target, :wfs_optics, "$label offsets")
+    return modulation
+end
+
 @inline function _require_exact_pyramid_modulation_batch_target(
     ::NoPyramidModulationBatchWorkspace,
     ::AbstractComputeDevice,
