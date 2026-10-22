@@ -369,6 +369,7 @@ const _PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES = 256 * 1024 * 1024
 function _pyramid_modulation_batch_size(
     point_count::Int,
     plane_bytes::Int,
+    batch_limit::Int=_PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT,
 )
     point_count >= 1 || throw(InvalidConfiguration(
         "Pyramid modulation requires at least one point",
@@ -376,13 +377,16 @@ function _pyramid_modulation_batch_size(
     plane_bytes >= 1 || throw(InvalidConfiguration(
         "Pyramid modulation field planes must occupy at least one byte",
     ))
+    batch_limit >= 1 || throw(InvalidConfiguration(
+        "Pyramid modulation batch limit must be positive",
+    ))
     memory_limit = max(1, div(
         _PYRAMID_ACCELERATOR_MODULATION_BATCH_BUDGET_BYTES,
         plane_bytes,
     ))
     candidate_limit = min(
         point_count,
-        _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT,
+        batch_limit,
         memory_limit,
     )
     for candidate in candidate_limit:-1:1
@@ -391,9 +395,15 @@ function _pyramid_modulation_batch_size(
     return 1
 end
 
+@inline _pyramid_modulation_batch_limit(::ExecutionStyle, field,
+    point_count::Int, plane_bytes::Int) =
+    _PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT
+
 @inline function _pyramid_modulation_batch_size(field, point_count::Int)
     plane_bytes = Base.checked_mul(sizeof(eltype(field)), length(field))
-    return _pyramid_modulation_batch_size(point_count, plane_bytes)
+    limit = _pyramid_modulation_batch_limit(execution_style(field), field,
+        point_count, plane_bytes)
+    return _pyramid_modulation_batch_size(point_count, plane_bytes, limit)
 end
 
 @inline _pyramid_shifted_mask_batch_size(

@@ -1,0 +1,86 @@
+{
+  "scope": "Same discretization, seeds, calibration and controller; finite recorded workloads",
+  "copper_240_96": {
+    "rates": {
+      "relative_l2": 8.389112862385498e-08,
+      "maximum_absolute": 0.0078125,
+      "identical": false
+    },
+    "maximum_probe_flux_relative_error": 2.3439139518188767e-09,
+    "slopes": {
+      "relative_l2": 7.71503476113629e-07,
+      "maximum_absolute": 2.2507857689452182e-07,
+      "identical": false
+    },
+    "interaction": {
+      "relative_l2": 5.023983027987673e-06,
+      "maximum_absolute": 7.033458155041444,
+      "identical": false
+    },
+    "maximum_column_relative_error": 0.00011582517091083587,
+    "maximum_error_column_1based": 7,
+    "atmosphere_rates": {
+      "relative_l2": 7.654227690649183e-08,
+      "maximum_absolute": 0.0234375,
+      "identical": false
+    },
+    "atmosphere_frames": {
+      "relative_l2": 0.0,
+      "maximum_absolute": 0.0,
+      "identical": true
+    },
+    "closed_loop": {
+      "commands": {
+        "relative_l2": 1.6700663704302082e-07,
+        "maximum_absolute": 1.1368683772161603e-13,
+        "identical": false
+      },
+      "slopes": {
+        "relative_l2": 2.4702666882661436e-07,
+        "maximum_absolute": 4.079369200216121e-07,
+        "identical": false
+      },
+      "diagnostics": {
+        "relative_l2": 2.0541376128855505e-08,
+        "maximum_absolute": 2.7867270824266654e-08,
+        "identical": false
+      },
+      "maximum_residual_wfe_difference_m": 2.7518758041419718e-15,
+      "maximum_strehl_difference": 2.7867270824266654e-08,
+      "tail_residual_before_m": 7.513486186575145e-08,
+      "tail_residual_after_m": 7.513486194822252e-08
+    },
+    "calibration_captured": {
+      "before_median_ms": 1.8720325,
+      "after_median_ms": 1.5628980000000001
+    },
+    "atmosphere_captured": {
+      "before_median_ms": 1.9182584999999999,
+      "after_median_ms": 1.6825825
+    }
+  },
+  "gpi_240_24": {
+    "identical_saved_arrays": 17,
+    "files": [
+      "basis-commands.f32",
+      "basis-gram.f64",
+      "default/flat.f32",
+      "default/interaction-half.f64",
+      "default/interaction.f64",
+      "default/moving_noiseless/coefficients-next.f32",
+      "default/moving_noiseless/coefficients-used.f32",
+      "default/moving_noiseless/last-frame.f32",
+      "default/moving_noisy/coefficients-next.f32",
+      "default/moving_noisy/coefficients-used.f32",
+      "default/moving_noisy/last-frame.f32",
+      "default/reconstructor.f64",
+      "default/static/coefficients-next.f32",
+      "default/static/coefficients-used.f32",
+      "default/static/last-frame.f32",
+      "spectral-imag.f64",
+      "spectral-real.f64"
+    ],
+    "scope": "All saved coefficient histories, calibration arrays and final frames; unsaved intermediate images excluded"
+  },
+  "passed": true
+}

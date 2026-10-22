@@ -40,6 +40,13 @@ real remaining qualification gap.
 
 ## Known Scope Limits
 
+- The 2026-10-22 [independent Pyramid comparison](../benchmarks/results/platform/2026-10-22-modulation-batches/README.md)
+  found a pre-existing shifted-mask discrepancy: approximately 17.4% tip-response
+  and 19.0% ramp-slope relative error in one matched OOPAO case. A single fitted
+  gain leaves an 8.2% tip-response residual. Self-calibrated loop stability does
+  not qualify this path for accuracy-focused RTC validation. The corresponding
+  physical pupil-tilt tip response agrees within approximately 0.0053%; these
+  finite cases do not qualify a complete instrument or a deployed controller.
 - Pyramid per-face pupil shifts preserve fractional values in the sensor
   numeric type. For the default mask, signed shifts and detector binning are
   checked against an independent Fourier-ramp propagation and block-integration

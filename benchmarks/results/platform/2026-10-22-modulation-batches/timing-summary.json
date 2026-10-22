@@ -1,0 +1,2457 @@
+{
+  "scope": "Unpaced completed captured AOS photon-rate node; two policies randomized within each round; initial timings excluded from speedup",
+  "process_count": 2,
+  "case_strategy_count": 34,
+  "timed_completions_including_initial": 34816,
+  "zero_allocation_observations": 2176,
+  "cases": [
+    {
+      "name": "small",
+      "strategy": "shifted",
+      "fft_side": 144,
+      "points": 8,
+      "baseline_batch": 8,
+      "selected_batch": 8,
+      "baseline_stack_bytes": 1327104,
+      "selected_stack_bytes": 1327104,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.032365500000000005,
+            0.0322705,
+            0.0334675
+          ],
+          "selected_round_medians_ms": [
+            0.032351,
+            0.034239000000000006,
+            0.0324005
+          ],
+          "baseline_median_ms": 0.032365500000000005,
+          "selected_median_ms": 0.0324005,
+          "reduction_percent": -0.1081398402619893,
+          "baseline_p95_ms": [
+            0.033724,
+            0.0332495,
+            0.034443
+          ],
+          "selected_p95_ms": [
+            0.03366685,
+            0.035766849999999996,
+            0.033633
+          ],
+          "baseline_maximum_ms": 0.035226,
+          "selected_maximum_ms": 0.040977
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.033558000000000004,
+            0.0328165,
+            0.032591
+          ],
+          "selected_round_medians_ms": [
+            0.033488000000000004,
+            0.032730999999999996,
+            0.032535999999999995
+          ],
+          "baseline_median_ms": 0.0328165,
+          "selected_median_ms": 0.032730999999999996,
+          "reduction_percent": 0.2605396675453009,
+          "baseline_p95_ms": [
+            0.041803049999999994,
+            0.033949999999999994,
+            0.033395499999999995
+          ],
+          "selected_p95_ms": [
+            0.03450335,
+            0.03329,
+            0.03343385
+          ],
+          "baseline_maximum_ms": 0.058649,
+          "selected_maximum_ms": 0.038623
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 0.032591,
+      "selected_median_ms": 0.03256575,
+      "reduction_percent": 0.07747537663773674
+    },
+    {
+      "name": "small",
+      "strategy": "pupil",
+      "fft_side": 144,
+      "points": 8,
+      "baseline_batch": 8,
+      "selected_batch": 8,
+      "baseline_stack_bytes": 1327104,
+      "selected_stack_bytes": 1327104,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.039789500000000005,
+            0.039163,
+            0.038066
+          ],
+          "selected_round_medians_ms": [
+            0.038206000000000004,
+            0.038597,
+            0.0382315
+          ],
+          "baseline_median_ms": 0.039163,
+          "selected_median_ms": 0.0382315,
+          "reduction_percent": 2.37852054234865,
+          "baseline_p95_ms": [
+            0.04138135,
+            0.03998,
+            0.038763
+          ],
+          "selected_p95_ms": [
+            0.03914785,
+            0.0401075,
+            0.039488999999999996
+          ],
+          "baseline_maximum_ms": 0.051998,
+          "selected_maximum_ms": 0.044954
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.0380715,
+            0.038176,
+            0.039434
+          ],
+          "selected_round_medians_ms": [
+            0.038216,
+            0.038141,
+            0.0385275
+          ],
+          "baseline_median_ms": 0.038176,
+          "selected_median_ms": 0.038216,
+          "reduction_percent": -0.10477787091365265,
+          "baseline_p95_ms": [
+            0.039147,
+            0.0390995,
+            0.041668699999999996
+          ],
+          "selected_p95_ms": [
+            0.039189,
+            0.0401645,
+            0.03989335
+          ],
+          "baseline_maximum_ms": 0.049402,
+          "selected_maximum_ms": 0.041738
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 0.0386695,
+      "selected_median_ms": 0.03822375,
+      "reduction_percent": 1.1527172577871503
+    },
+    {
+      "name": "medium",
+      "strategy": "shifted",
+      "fft_side": 272,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 8,
+      "baseline_stack_bytes": 18939904,
+      "selected_stack_bytes": 4734976,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.2069925,
+            0.2077635,
+            0.206637
+          ],
+          "selected_round_medians_ms": [
+            0.1680895,
+            0.1669225,
+            0.16829
+          ],
+          "baseline_median_ms": 0.2069925,
+          "selected_median_ms": 0.1680895,
+          "reduction_percent": 18.79440076331268,
+          "baseline_p95_ms": [
+            0.20940399999999998,
+            0.21166970000000002,
+            0.20929884999999998
+          ],
+          "selected_p95_ms": [
+            0.170063,
+            0.1682475,
+            0.17447154999999998
+          ],
+          "baseline_maximum_ms": 0.215804,
+          "selected_maximum_ms": 0.179125
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.206777,
+            0.206396,
+            0.207663
+          ],
+          "selected_round_medians_ms": [
+            0.167774,
+            0.166636,
+            0.16794
+          ],
+          "baseline_median_ms": 0.206777,
+          "selected_median_ms": 0.167774,
+          "reduction_percent": 18.862349294167135,
+          "baseline_p95_ms": [
+            0.20913685,
+            0.20788299999999998,
+            0.21138769999999998
+          ],
+          "selected_p95_ms": [
+            0.16952735,
+            0.168438,
+            0.17158505
+          ],
+          "baseline_maximum_ms": 0.216976,
+          "selected_maximum_ms": 0.178234
+        }
+      ],
+      "maximum_output_relative_l2": 6.287095437005617e-08,
+      "baseline_median_ms": 0.20688475,
+      "selected_median_ms": 0.16793175,
+      "reduction_percent": 18.828357334216285
+    },
+    {
+      "name": "medium",
+      "strategy": "pupil",
+      "fft_side": 272,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 8,
+      "baseline_stack_bytes": 18939904,
+      "selected_stack_bytes": 4734976,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.39146749999999997,
+            0.3910315,
+            0.392074
+          ],
+          "selected_round_medians_ms": [
+            0.309269,
+            0.309965,
+            0.310481
+          ],
+          "baseline_median_ms": 0.39146749999999997,
+          "selected_median_ms": 0.309965,
+          "reduction_percent": 20.819735993409406,
+          "baseline_p95_ms": [
+            0.39985975,
+            0.3952792,
+            0.3959575
+          ],
+          "selected_p95_ms": [
+            0.31382285,
+            0.31177115,
+            0.311832
+          ],
+          "baseline_maximum_ms": 0.419566,
+          "selected_maximum_ms": 0.316522
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.39125750000000004,
+            0.3919135,
+            0.391718
+          ],
+          "selected_round_medians_ms": [
+            0.308688,
+            0.30959899999999996,
+            0.311112
+          ],
+          "baseline_median_ms": 0.391718,
+          "selected_median_ms": 0.30959899999999996,
+          "reduction_percent": 20.9638055948412,
+          "baseline_p95_ms": [
+            0.3946185,
+            0.3958295,
+            0.395836
+          ],
+          "selected_p95_ms": [
+            0.31077385,
+            0.31110285000000004,
+            0.31457585
+          ],
+          "baseline_maximum_ms": 0.398356,
+          "selected_maximum_ms": 0.316823
+        }
+      ],
+      "maximum_output_relative_l2": 6.678480734755506e-08,
+      "baseline_median_ms": 0.39159275,
+      "selected_median_ms": 0.309782,
+      "reduction_percent": 20.89179383428319
+    },
+    {
+      "name": "wide",
+      "strategy": "shifted",
+      "fft_side": 528,
+      "points": 64,
+      "baseline_batch": 32,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 71368704,
+      "selected_stack_bytes": 4460544,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            1.315908,
+            1.316049,
+            1.3177215
+          ],
+          "selected_round_medians_ms": [
+            1.1807249999999998,
+            1.1804000000000001,
+            1.1874875
+          ],
+          "baseline_median_ms": 1.316049,
+          "selected_median_ms": 1.1807249999999998,
+          "reduction_percent": 10.282595860792432,
+          "baseline_p95_ms": [
+            1.3219588500000001,
+            1.3312216000000001,
+            1.33181185
+          ],
+          "selected_p95_ms": [
+            1.1865374999999998,
+            1.18940505,
+            1.19888825
+          ],
+          "baseline_maximum_ms": 1.341651,
+          "selected_maximum_ms": 1.205607
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            1.317491,
+            1.3158835,
+            1.3260075
+          ],
+          "selected_round_medians_ms": [
+            1.1816125,
+            1.17767,
+            1.2489534999999998
+          ],
+          "baseline_median_ms": 1.317491,
+          "selected_median_ms": 1.1816125,
+          "reduction_percent": 10.31342908604309,
+          "baseline_p95_ms": [
+            1.3299753500000002,
+            1.3227438500000002,
+            1.33357685
+          ],
+          "selected_p95_ms": [
+            1.190875,
+            1.1898378500000002,
+            1.2561394999999997
+          ],
+          "baseline_maximum_ms": 1.360266,
+          "selected_maximum_ms": 1.264637
+        }
+      ],
+      "maximum_output_relative_l2": 7.461839021969737e-08,
+      "baseline_median_ms": 1.31677,
+      "selected_median_ms": 1.1811687499999999,
+      "reduction_percent": 10.298020914814288
+    },
+    {
+      "name": "wide",
+      "strategy": "pupil",
+      "fft_side": 528,
+      "points": 64,
+      "baseline_batch": 32,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 71368704,
+      "selected_stack_bytes": 4460544,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            2.721464,
+            2.719651,
+            2.7190545000000004
+          ],
+          "selected_round_medians_ms": [
+            2.202312,
+            2.2033690000000004,
+            2.208865
+          ],
+          "baseline_median_ms": 2.719651,
+          "selected_median_ms": 2.2033690000000004,
+          "reduction_percent": 18.98339161899816,
+          "baseline_p95_ms": [
+            2.7340213500000003,
+            2.73925645,
+            2.7285335
+          ],
+          "selected_p95_ms": [
+            2.22118785,
+            2.22187015,
+            2.2334846
+          ],
+          "baseline_maximum_ms": 2.757211,
+          "selected_maximum_ms": 2.261113
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            2.720022,
+            2.7212395000000003,
+            2.7195910000000003
+          ],
+          "selected_round_medians_ms": [
+            2.190471,
+            2.1859279999999996,
+            2.1975439999999997
+          ],
+          "baseline_median_ms": 2.720022,
+          "selected_median_ms": 2.190471,
+          "reduction_percent": 19.46862929785127,
+          "baseline_p95_ms": [
+            2.7375418999999996,
+            2.73737955,
+            2.73943195
+          ],
+          "selected_p95_ms": [
+            2.1993270000000003,
+            2.20671105,
+            2.2120354
+          ],
+          "baseline_maximum_ms": 2.762071,
+          "selected_maximum_ms": 2.221249
+        }
+      ],
+      "maximum_output_relative_l2": 7.508293280977818e-08,
+      "baseline_median_ms": 2.7198365,
+      "selected_median_ms": 2.1969200000000004,
+      "reduction_percent": 19.226027005667422
+    },
+    {
+      "name": "gpi",
+      "strategy": "shifted",
+      "fft_side": 960,
+      "points": 24,
+      "baseline_batch": 24,
+      "selected_batch": 24,
+      "baseline_stack_bytes": 176947200,
+      "selected_stack_bytes": 176947200,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            1.746614,
+            1.7446609999999998,
+            1.7503615
+          ],
+          "selected_round_medians_ms": [
+            1.748207,
+            1.749705,
+            1.7473554999999998
+          ],
+          "baseline_median_ms": 1.746614,
+          "selected_median_ms": 1.748207,
+          "reduction_percent": -0.09120504015196484,
+          "baseline_p95_ms": [
+            1.7624639,
+            1.7652618500000001,
+            1.7723792
+          ],
+          "selected_p95_ms": [
+            1.76300985,
+            1.76576535,
+            1.7706054
+          ],
+          "baseline_maximum_ms": 1.777877,
+          "selected_maximum_ms": 1.7845
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            1.7430785,
+            1.7445309999999998,
+            1.7424775000000001
+          ],
+          "selected_round_medians_ms": [
+            1.742823,
+            1.744892,
+            1.7452480000000001
+          ],
+          "baseline_median_ms": 1.7430785,
+          "selected_median_ms": 1.744892,
+          "reduction_percent": -0.1040400647475126,
+          "baseline_p95_ms": [
+            1.76082155,
+            1.7560194999999998,
+            1.7596145499999998
+          ],
+          "selected_p95_ms": [
+            1.7614369,
+            1.7554512,
+            1.762314
+          ],
+          "baseline_maximum_ms": 1.771817,
+          "selected_maximum_ms": 1.773641
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 1.7448462500000002,
+      "selected_median_ms": 1.7465495,
+      "reduction_percent": -0.0976160506978685
+    },
+    {
+      "name": "gpi",
+      "strategy": "pupil",
+      "fft_side": 960,
+      "points": 24,
+      "baseline_batch": 24,
+      "selected_batch": 24,
+      "baseline_stack_bytes": 176947200,
+      "selected_stack_bytes": 176947200,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            3.4390225,
+            3.440335,
+            3.4442825
+          ],
+          "selected_round_medians_ms": [
+            3.436918,
+            3.440761,
+            3.4409915
+          ],
+          "baseline_median_ms": 3.440335,
+          "selected_median_ms": 3.440761,
+          "reduction_percent": -0.01238251507484911,
+          "baseline_p95_ms": [
+            3.4561962,
+            3.4612557,
+            3.47024475
+          ],
+          "selected_p95_ms": [
+            3.4586857,
+            3.4725823,
+            3.46618555
+          ],
+          "baseline_maximum_ms": 3.475595,
+          "selected_maximum_ms": 3.532794
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            3.4337435000000003,
+            3.4382275,
+            3.4276075
+          ],
+          "selected_round_medians_ms": [
+            3.4321859999999997,
+            3.4280685,
+            3.429957
+          ],
+          "baseline_median_ms": 3.4337435000000003,
+          "selected_median_ms": 3.429957,
+          "reduction_percent": 0.11027323386270105,
+          "baseline_p95_ms": [
+            3.45397495,
+            3.4631026,
+            3.45322085
+          ],
+          "selected_p95_ms": [
+            3.4515625,
+            3.4494556500000004,
+            3.4515057000000002
+          ],
+          "baseline_maximum_ms": 3.478562,
+          "selected_maximum_ms": 3.467521
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 3.43703925,
+      "selected_median_ms": 3.435359,
+      "reduction_percent": 0.04888655257574426
+    },
+    {
+      "name": "copper",
+      "strategy": "shifted",
+      "fft_side": 1024,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 268435456,
+      "selected_stack_bytes": 268435456,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            2.5389575,
+            2.5369235000000003,
+            2.5371795
+          ],
+          "selected_round_medians_ms": [
+            2.5365085,
+            2.537815,
+            2.5387325
+          ],
+          "baseline_median_ms": 2.5371795,
+          "selected_median_ms": 2.537815,
+          "reduction_percent": -0.02504749861016453,
+          "baseline_p95_ms": [
+            2.5557209499999995,
+            2.5514353499999998,
+            2.559196
+          ],
+          "selected_p95_ms": [
+            2.5474031999999998,
+            2.55432885,
+            2.5528492000000003
+          ],
+          "baseline_maximum_ms": 2.594927,
+          "selected_maximum_ms": 2.567306
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            2.5400405,
+            2.5393540000000003,
+            2.5356975
+          ],
+          "selected_round_medians_ms": [
+            2.537726,
+            2.5360430000000003,
+            2.5397600000000002
+          ],
+          "baseline_median_ms": 2.5393540000000003,
+          "selected_median_ms": 2.537726,
+          "reduction_percent": 0.06411079353253468,
+          "baseline_p95_ms": [
+            2.55140265,
+            2.55176025,
+            2.56011785
+          ],
+          "selected_p95_ms": [
+            2.55352515,
+            2.5601744,
+            2.5493031000000004
+          ],
+          "baseline_maximum_ms": 2.587815,
+          "selected_maximum_ms": 2.571855
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 2.53826675,
+      "selected_median_ms": 2.5377705,
+      "reduction_percent": 0.019550742647511665
+    },
+    {
+      "name": "copper",
+      "strategy": "pupil",
+      "fft_side": 1024,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 268435456,
+      "selected_stack_bytes": 268435456,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            5.103953499999999,
+            5.105707499999999,
+            5.1079765
+          ],
+          "selected_round_medians_ms": [
+            5.107680500000001,
+            5.104018999999999,
+            5.1080665
+          ],
+          "baseline_median_ms": 5.105707499999999,
+          "selected_median_ms": 5.107680500000001,
+          "reduction_percent": -0.03864302841478651,
+          "baseline_p95_ms": [
+            5.1194764,
+            5.1249203,
+            5.12220985
+          ],
+          "selected_p95_ms": [
+            5.12488185,
+            5.123274,
+            5.127028
+          ],
+          "baseline_maximum_ms": 5.149088,
+          "selected_maximum_ms": 5.145762
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            5.107131000000001,
+            5.106745500000001,
+            5.1049825
+          ],
+          "selected_round_medians_ms": [
+            5.105493,
+            5.1061345,
+            5.105248
+          ],
+          "baseline_median_ms": 5.106745500000001,
+          "selected_median_ms": 5.105493,
+          "reduction_percent": 0.024526383780054672,
+          "baseline_p95_ms": [
+            5.1289458,
+            5.1303402,
+            5.12179975
+          ],
+          "selected_p95_ms": [
+            5.1197607000000005,
+            5.12815335,
+            5.13300805
+          ],
+          "baseline_maximum_ms": 5.16472,
+          "selected_maximum_ms": 5.14372
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 5.1062265,
+      "selected_median_ms": 5.10658675,
+      "reduction_percent": -0.007055112028431232
+    },
+    {
+      "name": "many",
+      "strategy": "shifted",
+      "fft_side": 512,
+      "points": 96,
+      "baseline_batch": 32,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 67108864,
+      "selected_stack_bytes": 4194304,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            1.835822,
+            1.835596,
+            1.8358665
+          ],
+          "selected_round_medians_ms": [
+            1.5378635,
+            1.5353439999999998,
+            1.520486
+          ],
+          "baseline_median_ms": 1.835822,
+          "selected_median_ms": 1.5353439999999998,
+          "reduction_percent": 16.367490965899755,
+          "baseline_p95_ms": [
+            1.85634545,
+            1.8459014,
+            1.8505192
+          ],
+          "selected_p95_ms": [
+            1.55322095,
+            1.5474492,
+            1.5321805000000002
+          ],
+          "baseline_maximum_ms": 1.889637,
+          "selected_maximum_ms": 1.565641
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            1.835426,
+            1.8378255000000001,
+            1.835156
+          ],
+          "selected_round_medians_ms": [
+            1.5324140000000002,
+            1.5345985,
+            1.516775
+          ],
+          "baseline_median_ms": 1.835426,
+          "selected_median_ms": 1.5324140000000002,
+          "reduction_percent": 16.509082905004057,
+          "baseline_p95_ms": [
+            1.8410549999999999,
+            1.8532374999999999,
+            1.8449477
+          ],
+          "selected_p95_ms": [
+            1.55055605,
+            1.5490017,
+            1.53350155
+          ],
+          "baseline_maximum_ms": 1.917149,
+          "selected_maximum_ms": 1.596689
+        }
+      ],
+      "maximum_output_relative_l2": 7.569477127810712e-08,
+      "baseline_median_ms": 1.8356240000000001,
+      "selected_median_ms": 1.533879,
+      "reduction_percent": 16.43827929902857
+    },
+    {
+      "name": "many",
+      "strategy": "pupil",
+      "fft_side": 512,
+      "points": 96,
+      "baseline_batch": 32,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 67108864,
+      "selected_stack_bytes": 4194304,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            3.8274545,
+            3.8372580000000003,
+            3.8213625
+          ],
+          "selected_round_medians_ms": [
+            2.8023860000000003,
+            2.8039430000000003,
+            2.8083415
+          ],
+          "baseline_median_ms": 3.8274545,
+          "selected_median_ms": 2.8039430000000003,
+          "reduction_percent": 26.741310706632827,
+          "baseline_p95_ms": [
+            3.8572856499999997,
+            3.8604184,
+            3.84359835
+          ],
+          "selected_p95_ms": [
+            2.8301822,
+            2.8215296999999997,
+            2.8256236
+          ],
+          "baseline_maximum_ms": 3.872839,
+          "selected_maximum_ms": 2.860995
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            3.8202125000000002,
+            3.8110749999999998,
+            3.8200225000000003
+          ],
+          "selected_round_medians_ms": [
+            2.779719,
+            2.791922,
+            2.7991960000000002
+          ],
+          "baseline_median_ms": 3.8200225000000003,
+          "selected_median_ms": 2.791922,
+          "reduction_percent": 26.91346713271977,
+          "baseline_p95_ms": [
+            3.8353335,
+            3.8281020000000003,
+            3.8361546
+          ],
+          "selected_p95_ms": [
+            2.80882265,
+            2.82320385,
+            2.82196415
+          ],
+          "baseline_maximum_ms": 3.850438,
+          "selected_maximum_ms": 2.851018
+        }
+      ],
+      "maximum_output_relative_l2": 7.490496042117477e-08,
+      "baseline_median_ms": 3.8237385,
+      "selected_median_ms": 2.7979325,
+      "reduction_percent": 26.827305266821988
+    },
+    {
+      "name": "large",
+      "strategy": "shifted",
+      "fft_side": 800,
+      "points": 128,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 163840000,
+      "selected_stack_bytes": 163840000,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            6.641928,
+            6.6452585,
+            6.645084000000001
+          ],
+          "selected_round_medians_ms": [
+            6.645976,
+            6.6442625,
+            6.6432205
+          ],
+          "baseline_median_ms": 6.645084000000001,
+          "selected_median_ms": 6.6442625,
+          "reduction_percent": 0.012362522430120482,
+          "baseline_p95_ms": [
+            6.66474735,
+            6.66067435,
+            6.65505425
+          ],
+          "selected_p95_ms": [
+            6.66460895,
+            6.6622747,
+            6.67072005
+          ],
+          "baseline_maximum_ms": 6.67254,
+          "selected_maximum_ms": 6.69876
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            6.6314455,
+            6.635743,
+            6.638477999999999
+          ],
+          "selected_round_medians_ms": [
+            6.63392,
+            6.6386135,
+            6.6308495
+          ],
+          "baseline_median_ms": 6.635743,
+          "selected_median_ms": 6.63392,
+          "reduction_percent": 0.02747243225061924,
+          "baseline_p95_ms": [
+            6.6490025500000005,
+            6.64984735,
+            6.6613011
+          ],
+          "selected_p95_ms": [
+            6.6480236999999995,
+            6.65204735,
+            6.643061100000001
+          ],
+          "baseline_maximum_ms": 6.668194,
+          "selected_maximum_ms": 6.658517
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 6.6404135,
+      "selected_median_ms": 6.63909125,
+      "reduction_percent": 0.019912163602464616
+    },
+    {
+      "name": "large",
+      "strategy": "pupil",
+      "fft_side": 800,
+      "points": 128,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 163840000,
+      "selected_stack_bytes": 163840000,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            13.810292,
+            13.815832499999999,
+            13.7979585
+          ],
+          "selected_round_medians_ms": [
+            13.803945,
+            13.799557499999999,
+            13.8089245
+          ],
+          "baseline_median_ms": 13.810292,
+          "selected_median_ms": 13.803945,
+          "reduction_percent": 0.045958477923568886,
+          "baseline_p95_ms": [
+            14.00421725,
+            14.0718615,
+            14.039047499999999
+          ],
+          "selected_p95_ms": [
+            14.0113966,
+            14.0502991,
+            14.055326950000001
+          ],
+          "baseline_maximum_ms": 14.145529,
+          "selected_maximum_ms": 14.197497
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            13.8071605,
+            13.800197,
+            13.8076605
+          ],
+          "selected_round_medians_ms": [
+            13.800382500000001,
+            13.811157999999999,
+            13.8081375
+          ],
+          "baseline_median_ms": 13.8071605,
+          "selected_median_ms": 13.8081375,
+          "reduction_percent": -0.007076038552611408,
+          "baseline_p95_ms": [
+            13.933153749999999,
+            14.012583300000001,
+            14.054079250000001
+          ],
+          "selected_p95_ms": [
+            13.97988155,
+            14.02007675,
+            13.997701750000001
+          ],
+          "baseline_maximum_ms": 14.106631,
+          "selected_maximum_ms": 14.123953
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 13.80872625,
+      "selected_median_ms": 13.80604125,
+      "reduction_percent": 0.019444226436160506
+    },
+    {
+      "name": "pow256",
+      "strategy": "shifted",
+      "fft_side": 256,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 8,
+      "baseline_stack_bytes": 16777216,
+      "selected_stack_bytes": 4194304,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.17903,
+            0.17973699999999998,
+            0.1793105
+          ],
+          "selected_round_medians_ms": [
+            0.121974,
+            0.122499,
+            0.11649799999999999
+          ],
+          "baseline_median_ms": 0.1793105,
+          "selected_median_ms": 0.121974,
+          "reduction_percent": 31.976097328377318,
+          "baseline_p95_ms": [
+            0.1810985,
+            0.18235885000000002,
+            0.181857
+          ],
+          "selected_p95_ms": [
+            0.1250834,
+            0.1242025,
+            0.1182495
+          ],
+          "baseline_maximum_ms": 0.186319,
+          "selected_maximum_ms": 0.132879
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.17868450000000002,
+            0.17912050000000002,
+            0.181725
+          ],
+          "selected_round_medians_ms": [
+            0.121858,
+            0.1227645,
+            0.1172195
+          ],
+          "baseline_median_ms": 0.17912050000000002,
+          "selected_median_ms": 0.121858,
+          "reduction_percent": 31.96870263314362,
+          "baseline_p95_ms": [
+            0.18055585000000002,
+            0.1810715,
+            0.18331850000000002
+          ],
+          "selected_p95_ms": [
+            0.123158,
+            0.12982924999999998,
+            0.12229874999999998
+          ],
+          "baseline_maximum_ms": 0.184626,
+          "selected_maximum_ms": 0.145192
+        }
+      ],
+      "maximum_output_relative_l2": 6.20409286045983e-08,
+      "baseline_median_ms": 0.17921550000000003,
+      "selected_median_ms": 0.121916,
+      "reduction_percent": 31.972401940680363
+    },
+    {
+      "name": "pow256",
+      "strategy": "pupil",
+      "fft_side": 256,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 8,
+      "baseline_stack_bytes": 16777216,
+      "selected_stack_bytes": 4194304,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.3436585,
+            0.34470049999999997,
+            0.34282650000000003
+          ],
+          "selected_round_medians_ms": [
+            0.2400045,
+            0.2395235,
+            0.24775350000000002
+          ],
+          "baseline_median_ms": 0.3436585,
+          "selected_median_ms": 0.2400045,
+          "reduction_percent": 30.161919463653586,
+          "baseline_p95_ms": [
+            0.346748,
+            0.34896299999999997,
+            0.34579635
+          ],
+          "selected_p95_ms": [
+            0.24192149999999998,
+            0.24216669999999998,
+            0.25200485
+          ],
+          "baseline_maximum_ms": 0.357649,
+          "selected_maximum_ms": 0.254016
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.344174,
+            0.34453999999999996,
+            0.343022
+          ],
+          "selected_round_medians_ms": [
+            0.239794,
+            0.238887,
+            0.24803
+          ],
+          "baseline_median_ms": 0.344174,
+          "selected_median_ms": 0.239794,
+          "reduction_percent": 30.32768309052979,
+          "baseline_p95_ms": [
+            0.3496385,
+            0.34733035,
+            0.34710399999999997
+          ],
+          "selected_p95_ms": [
+            0.2426255,
+            0.2415385,
+            0.25212285
+          ],
+          "baseline_maximum_ms": 0.355676,
+          "selected_maximum_ms": 0.254115
+        }
+      ],
+      "maximum_output_relative_l2": 6.243351829358998e-08,
+      "baseline_median_ms": 0.34391625,
+      "selected_median_ms": 0.23989925,
+      "reduction_percent": 30.244863393340673
+    },
+    {
+      "name": "pow512",
+      "strategy": "shifted",
+      "fft_side": 512,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 67108864,
+      "selected_stack_bytes": 4194304,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.63826,
+            0.6397470000000001,
+            0.638911
+          ],
+          "selected_round_medians_ms": [
+            0.563194,
+            0.5625834999999999,
+            0.556712
+          ],
+          "baseline_median_ms": 0.638911,
+          "selected_median_ms": 0.5625834999999999,
+          "reduction_percent": 11.946499590709836,
+          "baseline_p95_ms": [
+            0.64174,
+            0.6434685,
+            0.641201
+          ],
+          "selected_p95_ms": [
+            0.5664865,
+            0.56609585,
+            0.5605515
+          ],
+          "baseline_maximum_ms": 0.645048,
+          "selected_maximum_ms": 0.572983
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.635956,
+            0.636101,
+            0.639608
+          ],
+          "selected_round_medians_ms": [
+            0.5383530000000001,
+            0.5376115,
+            0.5323070000000001
+          ],
+          "baseline_median_ms": 0.636101,
+          "selected_median_ms": 0.5376115,
+          "reduction_percent": 15.483311612464057,
+          "baseline_p95_ms": [
+            0.63896585,
+            0.63973435,
+            0.6427955000000001
+          ],
+          "selected_p95_ms": [
+            0.5438125500000001,
+            0.54068835,
+            0.53643435
+          ],
+          "baseline_maximum_ms": 0.648394,
+          "selected_maximum_ms": 0.558746
+        }
+      ],
+      "maximum_output_relative_l2": 6.668976519607741e-08,
+      "baseline_median_ms": 0.637506,
+      "selected_median_ms": 0.5500974999999999,
+      "reduction_percent": 13.711008210118825
+    },
+    {
+      "name": "pow512",
+      "strategy": "pupil",
+      "fft_side": 512,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 67108864,
+      "selected_stack_bytes": 4194304,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            1.284134,
+            1.283939,
+            1.2819495
+          ],
+          "selected_round_medians_ms": [
+            0.962647,
+            0.959376,
+            0.9687035
+          ],
+          "baseline_median_ms": 1.283939,
+          "selected_median_ms": 0.962647,
+          "reduction_percent": 25.02393026459979,
+          "baseline_p95_ms": [
+            1.2907912,
+            1.2902244999999999,
+            1.28907685
+          ],
+          "selected_p95_ms": [
+            0.96995985,
+            0.9665785,
+            0.97951135
+          ],
+          "baseline_maximum_ms": 1.297298,
+          "selected_maximum_ms": 0.994933
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            1.2837684999999999,
+            1.2844395,
+            1.2838984999999998
+          ],
+          "selected_round_medians_ms": [
+            0.9588300000000001,
+            0.9586445,
+            0.968438
+          ],
+          "baseline_median_ms": 1.2838984999999998,
+          "selected_median_ms": 0.9588300000000001,
+          "reduction_percent": 25.318862822878895,
+          "baseline_p95_ms": [
+            1.29989885,
+            1.2958017,
+            1.2903015
+          ],
+          "selected_p95_ms": [
+            0.9667420499999999,
+            0.9679710499999999,
+            0.97574335
+          ],
+          "baseline_maximum_ms": 1.313559,
+          "selected_maximum_ms": 1.012215
+        }
+      ],
+      "maximum_output_relative_l2": 6.651487559569943e-08,
+      "baseline_median_ms": 1.2839187499999998,
+      "selected_median_ms": 0.9607385,
+      "reduction_percent": 25.171394217897337
+    },
+    {
+      "name": "pow512short",
+      "strategy": "shifted",
+      "fft_side": 512,
+      "points": 12,
+      "baseline_batch": 12,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 25165824,
+      "selected_stack_bytes": 4194304,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.26739599999999997,
+            0.268317,
+            0.2717135
+          ],
+          "selected_round_medians_ms": [
+            0.2159545,
+            0.2167705,
+            0.215343
+          ],
+          "baseline_median_ms": 0.268317,
+          "selected_median_ms": 0.2159545,
+          "reduction_percent": 19.51516303476859,
+          "baseline_p95_ms": [
+            0.26952015,
+            0.2710955,
+            0.2731735
+          ],
+          "selected_p95_ms": [
+            0.2181905,
+            0.2200385,
+            0.2187775
+          ],
+          "baseline_maximum_ms": 0.277539,
+          "selected_maximum_ms": 0.245629
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.26868800000000004,
+            0.267085,
+            0.27113200000000004
+          ],
+          "selected_round_medians_ms": [
+            0.21666049999999998,
+            0.216711,
+            0.215343
+          ],
+          "baseline_median_ms": 0.26868800000000004,
+          "selected_median_ms": 0.21666049999999998,
+          "reduction_percent": 19.363536890371,
+          "baseline_p95_ms": [
+            0.2717035,
+            0.26998135,
+            0.27614110000000003
+          ],
+          "selected_p95_ms": [
+            0.22518984999999997,
+            0.22067799999999999,
+            0.217073
+          ],
+          "baseline_maximum_ms": 0.290454,
+          "selected_maximum_ms": 0.236794
+        }
+      ],
+      "maximum_output_relative_l2": 5.9168313645233444e-08,
+      "baseline_median_ms": 0.26850250000000003,
+      "selected_median_ms": 0.21630749999999999,
+      "reduction_percent": 19.43929758568358
+    },
+    {
+      "name": "pow512short",
+      "strategy": "pupil",
+      "fft_side": 512,
+      "points": 12,
+      "baseline_batch": 12,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 25165824,
+      "selected_stack_bytes": 4194304,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.5143075,
+            0.5147935,
+            0.5132055
+          ],
+          "selected_round_medians_ms": [
+            0.39733850000000004,
+            0.39759900000000004,
+            0.39750450000000004
+          ],
+          "baseline_median_ms": 0.5143075,
+          "selected_median_ms": 0.39750450000000004,
+          "reduction_percent": 22.71073239258614,
+          "baseline_p95_ms": [
+            0.519204,
+            0.5191805,
+            0.5186115499999999
+          ],
+          "selected_p95_ms": [
+            0.39980915,
+            0.40146735,
+            0.4012815
+          ],
+          "baseline_maximum_ms": 0.523891,
+          "selected_maximum_ms": 0.404938
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.513972,
+            0.51535,
+            0.5131355
+          ],
+          "selected_round_medians_ms": [
+            0.3971635,
+            0.3967275,
+            0.39783999999999997
+          ],
+          "baseline_median_ms": 0.513972,
+          "selected_median_ms": 0.3971635,
+          "reduction_percent": 22.72662713143906,
+          "baseline_p95_ms": [
+            0.51782865,
+            0.52110005,
+            0.5165465
+          ],
+          "selected_p95_ms": [
+            0.40002034999999997,
+            0.40032685,
+            0.40047699999999997
+          ],
+          "baseline_maximum_ms": 0.536926,
+          "selected_maximum_ms": 0.407934
+        }
+      ],
+      "maximum_output_relative_l2": 5.731583561439467e-08,
+      "baseline_median_ms": 0.51413975,
+      "selected_median_ms": 0.397334,
+      "reduction_percent": 22.718677168999278
+    },
+    {
+      "name": "pow768",
+      "strategy": "shifted",
+      "fft_side": 768,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 150994944,
+      "selected_stack_bytes": 150994944,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            1.441624,
+            1.4406715,
+            1.4399555
+          ],
+          "selected_round_medians_ms": [
+            1.440862,
+            1.439054,
+            1.4405614999999998
+          ],
+          "baseline_median_ms": 1.4406715,
+          "selected_median_ms": 1.4405614999999998,
+          "reduction_percent": 0.007635328386812468,
+          "baseline_p95_ms": [
+            1.45837305,
+            1.45168945,
+            1.45318905
+          ],
+          "selected_p95_ms": [
+            1.4491143499999999,
+            1.452691,
+            1.4532665999999999
+          ],
+          "baseline_maximum_ms": 1.481373,
+          "selected_maximum_ms": 1.470253
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            1.440452,
+            1.4417745,
+            1.44203
+          ],
+          "selected_round_medians_ms": [
+            1.443883,
+            1.441113,
+            1.440572
+          ],
+          "baseline_median_ms": 1.4417745,
+          "selected_median_ms": 1.441113,
+          "reduction_percent": 0.045880961273758736,
+          "baseline_p95_ms": [
+            1.45346005,
+            1.4606310999999998,
+            1.4521983500000002
+          ],
+          "selected_p95_ms": [
+            1.4583934,
+            1.4551202,
+            1.4509748500000001
+          ],
+          "baseline_maximum_ms": 1.473569,
+          "selected_maximum_ms": 1.463951
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 1.441223,
+      "selected_median_ms": 1.44083725,
+      "reduction_percent": 0.026765462388533834
+    },
+    {
+      "name": "pow768",
+      "strategy": "pupil",
+      "fft_side": 768,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 150994944,
+      "selected_stack_bytes": 150994944,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            2.9120359999999996,
+            2.909301,
+            2.9160935
+          ],
+          "selected_round_medians_ms": [
+            2.911631,
+            2.9099975000000002,
+            2.9123425
+          ],
+          "baseline_median_ms": 2.9120359999999996,
+          "selected_median_ms": 2.911631,
+          "reduction_percent": 0.013907795095935427,
+          "baseline_p95_ms": [
+            2.9236045,
+            2.93076015,
+            2.9434036000000003
+          ],
+          "selected_p95_ms": [
+            2.9291036,
+            2.9309432,
+            2.9339854
+          ],
+          "baseline_maximum_ms": 2.952107,
+          "selected_maximum_ms": 2.94303
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            2.9145925,
+            2.9121275,
+            2.91101
+          ],
+          "selected_round_medians_ms": [
+            2.917257,
+            2.9118715,
+            2.9108445
+          ],
+          "baseline_median_ms": 2.9121275,
+          "selected_median_ms": 2.9118715,
+          "reduction_percent": 0.008790823890769683,
+          "baseline_p95_ms": [
+            2.9327375,
+            2.93126575,
+            2.9364086
+          ],
+          "selected_p95_ms": [
+            2.9366780500000003,
+            2.9312784,
+            2.93263425
+          ],
+          "baseline_maximum_ms": 2.940786,
+          "selected_maximum_ms": 2.973918
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 2.9120817499999996,
+      "selected_median_ms": 2.91175125,
+      "reduction_percent": 0.011349269298488451
+    },
+    {
+      "name": "nonpow",
+      "strategy": "shifted",
+      "fft_side": 408,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 42614784,
+      "selected_stack_bytes": 2663424,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.466313,
+            0.4664885,
+            0.4819775
+          ],
+          "selected_round_medians_ms": [
+            0.406501,
+            0.40662600000000004,
+            0.4084795
+          ],
+          "baseline_median_ms": 0.4664885,
+          "selected_median_ms": 0.40662600000000004,
+          "reduction_percent": 12.832577866335381,
+          "baseline_p95_ms": [
+            0.469488,
+            0.47191534999999996,
+            0.48562985000000003
+          ],
+          "selected_p95_ms": [
+            0.4088742,
+            0.409506,
+            0.41111800000000004
+          ],
+          "baseline_maximum_ms": 0.486931,
+          "selected_maximum_ms": 0.431699
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.4666985,
+            0.467205,
+            0.48276399999999997
+          ],
+          "selected_round_medians_ms": [
+            0.406646,
+            0.4074025,
+            0.40837
+          ],
+          "baseline_median_ms": 0.467205,
+          "selected_median_ms": 0.4074025,
+          "reduction_percent": 12.800055650089359,
+          "baseline_p95_ms": [
+            0.46993949999999995,
+            0.47206035,
+            0.48680550000000006
+          ],
+          "selected_p95_ms": [
+            0.40981035,
+            0.41104835,
+            0.40988935000000004
+          ],
+          "baseline_maximum_ms": 0.497171,
+          "selected_maximum_ms": 0.413064
+        }
+      ],
+      "maximum_output_relative_l2": 7.412777773865644e-08,
+      "baseline_median_ms": 0.46684675,
+      "selected_median_ms": 0.40701425,
+      "reduction_percent": 12.816304279723479
+    },
+    {
+      "name": "nonpow",
+      "strategy": "pupil",
+      "fft_side": 408,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 2,
+      "baseline_stack_bytes": 42614784,
+      "selected_stack_bytes": 2663424,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.9285885,
+            0.9298405000000001,
+            0.9691045
+          ],
+          "selected_round_medians_ms": [
+            0.771319,
+            0.772867,
+            0.875178
+          ],
+          "baseline_median_ms": 0.9298405000000001,
+          "selected_median_ms": 0.772867,
+          "reduction_percent": 16.881766281421395,
+          "baseline_p95_ms": [
+            0.93812195,
+            0.9365266999999999,
+            0.9822137
+          ],
+          "selected_p95_ms": [
+            0.775101,
+            0.778719,
+            0.880274
+          ],
+          "baseline_maximum_ms": 0.987288,
+          "selected_maximum_ms": 0.883103
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.930473,
+            0.927702,
+            0.96646
+          ],
+          "selected_round_medians_ms": [
+            0.773899,
+            0.7708435,
+            0.8763655
+          ],
+          "baseline_median_ms": 0.930473,
+          "selected_median_ms": 0.773899,
+          "reduction_percent": 16.827355549274404,
+          "baseline_p95_ms": [
+            0.937655,
+            0.93529635,
+            0.9743697
+          ],
+          "selected_p95_ms": [
+            0.7797763499999999,
+            0.7770172,
+            0.8852814999999999
+          ],
+          "baseline_maximum_ms": 0.979344,
+          "selected_maximum_ms": 0.895596
+        }
+      ],
+      "maximum_output_relative_l2": 7.530917628435247e-08,
+      "baseline_median_ms": 0.9301567500000001,
+      "selected_median_ms": 0.7733829999999999,
+      "reduction_percent": 16.85455166561981
+    },
+    {
+      "name": "odd24",
+      "strategy": "shifted",
+      "fft_side": 272,
+      "points": 24,
+      "baseline_batch": 24,
+      "selected_batch": 8,
+      "baseline_stack_bytes": 14204928,
+      "selected_stack_bytes": 4734976,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.1624795,
+            0.1647435,
+            0.166581
+          ],
+          "selected_round_medians_ms": [
+            0.1262815,
+            0.1271175,
+            0.1262765
+          ],
+          "baseline_median_ms": 0.1647435,
+          "selected_median_ms": 0.1262815,
+          "reduction_percent": 23.34659637557779,
+          "baseline_p95_ms": [
+            0.16404449999999998,
+            0.16702,
+            0.16963235000000002
+          ],
+          "selected_p95_ms": [
+            0.1282935,
+            0.13121239999999998,
+            0.127505
+          ],
+          "baseline_maximum_ms": 0.173054,
+          "selected_maximum_ms": 0.151815
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.1615425,
+            0.1611515,
+            0.161632
+          ],
+          "selected_round_medians_ms": [
+            0.124729,
+            0.124979,
+            0.124293
+          ],
+          "baseline_median_ms": 0.1615425,
+          "selected_median_ms": 0.124729,
+          "reduction_percent": 22.788739805314385,
+          "baseline_p95_ms": [
+            0.1632125,
+            0.163426,
+            0.16729704999999997
+          ],
+          "selected_p95_ms": [
+            0.126781,
+            0.126381,
+            0.12554349999999997
+          ],
+          "baseline_maximum_ms": 0.207408,
+          "selected_maximum_ms": 0.134331
+        }
+      ],
+      "maximum_output_relative_l2": 6.175734909325127e-08,
+      "baseline_median_ms": 0.16314299999999998,
+      "selected_median_ms": 0.12550525,
+      "reduction_percent": 23.070404491764872
+    },
+    {
+      "name": "odd24",
+      "strategy": "pupil",
+      "fft_side": 272,
+      "points": 24,
+      "baseline_batch": 24,
+      "selected_batch": 8,
+      "baseline_stack_bytes": 14204928,
+      "selected_stack_bytes": 4734976,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.30439499999999997,
+            0.30277699999999996,
+            0.301935
+          ],
+          "selected_round_medians_ms": [
+            0.237645,
+            0.23768450000000002,
+            0.23877199999999998
+          ],
+          "baseline_median_ms": 0.30277699999999996,
+          "selected_median_ms": 0.23768450000000002,
+          "reduction_percent": 21.498495592465726,
+          "baseline_p95_ms": [
+            0.307903,
+            0.306468,
+            0.307115
+          ],
+          "selected_p95_ms": [
+            0.23997385,
+            0.2399185,
+            0.24138484999999998
+          ],
+          "baseline_maximum_ms": 0.311743,
+          "selected_maximum_ms": 0.247483
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.3032825,
+            0.303659,
+            0.3027515
+          ],
+          "selected_round_medians_ms": [
+            0.23784,
+            0.23776,
+            0.238592
+          ],
+          "baseline_median_ms": 0.3032825,
+          "selected_median_ms": 0.23784,
+          "reduction_percent": 21.578066654027197,
+          "baseline_p95_ms": [
+            0.308069,
+            0.3075795,
+            0.30612955
+          ],
+          "selected_p95_ms": [
+            0.23927935,
+            0.23973435,
+            0.24111984999999997
+          ],
+          "baseline_maximum_ms": 0.313557,
+          "selected_maximum_ms": 0.243946
+        }
+      ],
+      "maximum_output_relative_l2": 6.11895602359194e-08,
+      "baseline_median_ms": 0.30302975,
+      "selected_median_ms": 0.23776225,
+      "reduction_percent": 21.5383143074236
+    },
+    {
+      "name": "odd30",
+      "strategy": "shifted",
+      "fft_side": 272,
+      "points": 30,
+      "baseline_batch": 30,
+      "selected_batch": 6,
+      "baseline_stack_bytes": 17756160,
+      "selected_stack_bytes": 3551232,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.1974345,
+            0.196899,
+            0.19612200000000002
+          ],
+          "selected_round_medians_ms": [
+            0.155215,
+            0.155501,
+            0.15057700000000002
+          ],
+          "baseline_median_ms": 0.196899,
+          "selected_median_ms": 0.155215,
+          "reduction_percent": 21.170244643192703,
+          "baseline_p95_ms": [
+            0.19914099999999998,
+            0.2000475,
+            0.19861584999999998
+          ],
+          "selected_p95_ms": [
+            0.156182,
+            0.15669485,
+            0.15157249999999997
+          ],
+          "baseline_maximum_ms": 0.210204,
+          "selected_maximum_ms": 0.157294
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.196768,
+            0.197014,
+            0.19584649999999998
+          ],
+          "selected_round_medians_ms": [
+            0.155215,
+            0.155977,
+            0.1521095
+          ],
+          "baseline_median_ms": 0.196768,
+          "selected_median_ms": 0.155215,
+          "reduction_percent": 21.117763050902592,
+          "baseline_p95_ms": [
+            0.19966784999999998,
+            0.1986645,
+            0.19787685
+          ],
+          "selected_p95_ms": [
+            0.15633249999999999,
+            0.158151,
+            0.15299185
+          ],
+          "baseline_maximum_ms": 0.204433,
+          "selected_maximum_ms": 0.159799
+        }
+      ],
+      "maximum_output_relative_l2": 6.488992628845488e-08,
+      "baseline_median_ms": 0.1968335,
+      "selected_median_ms": 0.155215,
+      "reduction_percent": 21.144012579159543
+    },
+    {
+      "name": "odd30",
+      "strategy": "pupil",
+      "fft_side": 272,
+      "points": 30,
+      "baseline_batch": 30,
+      "selected_batch": 6,
+      "baseline_stack_bytes": 17756160,
+      "selected_stack_bytes": 3551232,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.3697275,
+            0.3698475,
+            0.37144049999999995
+          ],
+          "selected_round_medians_ms": [
+            0.305562,
+            0.306183,
+            0.306008
+          ],
+          "baseline_median_ms": 0.3698475,
+          "selected_median_ms": 0.306008,
+          "reduction_percent": 17.261033263710047,
+          "baseline_p95_ms": [
+            0.3759205,
+            0.374387,
+            0.37584085
+          ],
+          "selected_p95_ms": [
+            0.31079085,
+            0.307636,
+            0.30919185
+          ],
+          "baseline_maximum_ms": 0.380583,
+          "selected_maximum_ms": 0.323997
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.36890049999999996,
+            0.373158,
+            0.37203200000000003
+          ],
+          "selected_round_medians_ms": [
+            0.3055525,
+            0.306785,
+            0.3067495
+          ],
+          "baseline_median_ms": 0.37203200000000003,
+          "selected_median_ms": 0.3067495,
+          "reduction_percent": 17.5475496731464,
+          "baseline_p95_ms": [
+            0.373681,
+            0.37756035000000004,
+            0.37665150000000003
+          ],
+          "selected_p95_ms": [
+            0.30815434999999997,
+            0.30888085,
+            0.31294920000000004
+          ],
+          "baseline_maximum_ms": 0.380653,
+          "selected_maximum_ms": 0.335168
+        }
+      ],
+      "maximum_output_relative_l2": 6.784149316329388e-08,
+      "baseline_median_ms": 0.37093975,
+      "selected_median_ms": 0.30637875000000003,
+      "reduction_percent": 17.404713299127415
+    },
+    {
+      "name": "prime31",
+      "strategy": "shifted",
+      "fft_side": 272,
+      "points": 31,
+      "baseline_batch": 31,
+      "selected_batch": 31,
+      "baseline_stack_bytes": 18348032,
+      "selected_stack_bytes": 18348032,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.202344,
+            0.202103,
+            0.20232899999999998
+          ],
+          "selected_round_medians_ms": [
+            0.201487,
+            0.201632,
+            0.201637
+          ],
+          "baseline_median_ms": 0.20232899999999998,
+          "selected_median_ms": 0.201632,
+          "reduction_percent": 0.34448843220693526,
+          "baseline_p95_ms": [
+            0.20508685,
+            0.2056415,
+            0.20627635
+          ],
+          "selected_p95_ms": [
+            0.20309485,
+            0.20493885,
+            0.203552
+          ],
+          "baseline_maximum_ms": 0.208731,
+          "selected_maximum_ms": 0.207188
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.201537,
+            0.202529,
+            0.20115650000000002
+          ],
+          "selected_round_medians_ms": [
+            0.202213,
+            0.201938,
+            0.2017275
+          ],
+          "baseline_median_ms": 0.201537,
+          "selected_median_ms": 0.201938,
+          "reduction_percent": -0.19897090856766386,
+          "baseline_p95_ms": [
+            0.20404750000000002,
+            0.20581549999999998,
+            0.20470085
+          ],
+          "selected_p95_ms": [
+            0.20754789999999998,
+            0.20559635,
+            0.204866
+          ],
+          "baseline_maximum_ms": 0.236092,
+          "selected_maximum_ms": 0.210895
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 0.20193299999999997,
+      "selected_median_ms": 0.201785,
+      "reduction_percent": 0.07329163633481572
+    },
+    {
+      "name": "prime31",
+      "strategy": "pupil",
+      "fft_side": 272,
+      "points": 31,
+      "baseline_batch": 31,
+      "selected_batch": 31,
+      "baseline_stack_bytes": 18348032,
+      "selected_stack_bytes": 18348032,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.3814945,
+            0.381274,
+            0.381344
+          ],
+          "selected_round_medians_ms": [
+            0.381244,
+            0.3836935,
+            0.380828
+          ],
+          "baseline_median_ms": 0.381344,
+          "selected_median_ms": 0.381244,
+          "reduction_percent": 0.026223042712092415,
+          "baseline_p95_ms": [
+            0.38492585,
+            0.38640019999999997,
+            0.38611585000000004
+          ],
+          "selected_p95_ms": [
+            0.385092,
+            0.38886434999999997,
+            0.38449035000000004
+          ],
+          "baseline_maximum_ms": 0.394088,
+          "selected_maximum_ms": 0.396673
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.37933,
+            0.379816,
+            0.3821205
+          ],
+          "selected_round_medians_ms": [
+            0.38061750000000005,
+            0.3808785,
+            0.380668
+          ],
+          "baseline_median_ms": 0.379816,
+          "selected_median_ms": 0.380668,
+          "reduction_percent": -0.22431914400657949,
+          "baseline_p95_ms": [
+            0.3853932,
+            0.3837065,
+            0.38493235
+          ],
+          "selected_p95_ms": [
+            0.38586685,
+            0.3853772,
+            0.38712119999999994
+          ],
+          "baseline_maximum_ms": 0.387245,
+          "selected_maximum_ms": 0.394398
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 0.38058000000000003,
+      "selected_median_ms": 0.380956,
+      "reduction_percent": -0.09879657365075012
+    },
+    {
+      "name": "edge560",
+      "strategy": "shifted",
+      "fft_side": 560,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 80281600,
+      "selected_stack_bytes": 80281600,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.7676425,
+            0.7675069999999999,
+            0.77449
+          ],
+          "selected_round_medians_ms": [
+            0.7673460000000001,
+            0.7672415,
+            0.774425
+          ],
+          "baseline_median_ms": 0.7676425,
+          "selected_median_ms": 0.7673460000000001,
+          "reduction_percent": 0.038624750453486456,
+          "baseline_p95_ms": [
+            0.7718815,
+            0.7730674,
+            0.77865035
+          ],
+          "selected_p95_ms": [
+            0.77363505,
+            0.7703727,
+            0.77845835
+          ],
+          "baseline_maximum_ms": 0.784639,
+          "selected_maximum_ms": 0.782986
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.7680180000000001,
+            0.7675725,
+            0.7740644999999999
+          ],
+          "selected_round_medians_ms": [
+            0.768494,
+            0.7678075,
+            0.7752665000000001
+          ],
+          "baseline_median_ms": 0.7680180000000001,
+          "selected_median_ms": 0.768494,
+          "reduction_percent": -0.06197771406397656,
+          "baseline_p95_ms": [
+            0.7714435,
+            0.7713698499999999,
+            0.7775763499999999
+          ],
+          "selected_p95_ms": [
+            0.7748557500000001,
+            0.7760658500000001,
+            0.78210335
+          ],
+          "baseline_maximum_ms": 0.784139,
+          "selected_maximum_ms": 0.799347
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 0.76783025,
+      "selected_median_ms": 0.76792,
+      "reduction_percent": -0.011688781472196652
+    },
+    {
+      "name": "edge560",
+      "strategy": "pupil",
+      "fft_side": 560,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 80281600,
+      "selected_stack_bytes": 80281600,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            1.542312,
+            1.542919,
+            1.5441060000000002
+          ],
+          "selected_round_medians_ms": [
+            1.5431840000000001,
+            1.5447315,
+            1.5433945
+          ],
+          "baseline_median_ms": 1.542919,
+          "selected_median_ms": 1.5433945,
+          "reduction_percent": -0.0308182088625486,
+          "baseline_p95_ms": [
+            1.55690975,
+            1.55903445,
+            1.5560765
+          ],
+          "selected_p95_ms": [
+            1.55291235,
+            1.55512305,
+            1.55638935
+          ],
+          "baseline_maximum_ms": 1.594715,
+          "selected_maximum_ms": 1.565671
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            1.5425275,
+            1.543079,
+            1.5464055
+          ],
+          "selected_round_medians_ms": [
+            1.5434245,
+            1.5440909999999999,
+            1.544727
+          ],
+          "baseline_median_ms": 1.543079,
+          "selected_median_ms": 1.5440909999999999,
+          "reduction_percent": -0.06558316197677883,
+          "baseline_p95_ms": [
+            1.5577950499999997,
+            1.5565353499999999,
+            1.56332085
+          ],
+          "selected_p95_ms": [
+            1.5584316,
+            1.5633109500000002,
+            1.553643
+          ],
+          "baseline_maximum_ms": 1.573917,
+          "selected_maximum_ms": 1.599295
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 1.542999,
+      "selected_median_ms": 1.5437427499999998,
+      "reduction_percent": -0.0482015866503982
+    },
+    {
+      "name": "edge576",
+      "strategy": "shifted",
+      "fft_side": 576,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 84934656,
+      "selected_stack_bytes": 84934656,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            0.810272,
+            0.8101659999999999,
+            0.817571
+          ],
+          "selected_round_medians_ms": [
+            0.809465,
+            0.8101615,
+            0.8135429999999999
+          ],
+          "baseline_median_ms": 0.810272,
+          "selected_median_ms": 0.8101615,
+          "reduction_percent": 0.013637395837451383,
+          "baseline_p95_ms": [
+            0.8139888500000001,
+            0.8159392,
+            0.820955
+          ],
+          "selected_p95_ms": [
+            0.81442,
+            0.8155474,
+            0.82061585
+          ],
+          "baseline_maximum_ms": 0.825305,
+          "selected_maximum_ms": 0.824393
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            0.8114945,
+            0.8106424999999999,
+            0.818222
+          ],
+          "selected_round_medians_ms": [
+            0.8099719999999999,
+            0.810182,
+            0.8194045
+          ],
+          "baseline_median_ms": 0.8114945,
+          "selected_median_ms": 0.810182,
+          "reduction_percent": 0.16173861930056654,
+          "baseline_p95_ms": [
+            0.8170137,
+            0.81569055,
+            0.82728095
+          ],
+          "selected_p95_ms": [
+            0.81522435,
+            0.81373185,
+            0.82406385
+          ],
+          "baseline_maximum_ms": 0.831267,
+          "selected_maximum_ms": 0.828381
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 0.81088325,
+      "selected_median_ms": 0.81017175,
+      "reduction_percent": 0.0877438274868858
+    },
+    {
+      "name": "edge576",
+      "strategy": "pupil",
+      "fft_side": 576,
+      "points": 32,
+      "baseline_batch": 32,
+      "selected_batch": 32,
+      "baseline_stack_bytes": 84934656,
+      "selected_stack_bytes": 84934656,
+      "processes": [
+        {
+          "file": "policy-timing-1.toml",
+          "baseline_round_medians_ms": [
+            1.6403210000000001,
+            1.6427355000000001,
+            1.637836
+          ],
+          "selected_round_medians_ms": [
+            1.6381215,
+            1.636428,
+            1.6417380000000001
+          ],
+          "baseline_median_ms": 1.6403210000000001,
+          "selected_median_ms": 1.6381215,
+          "reduction_percent": 0.13408960807061998,
+          "baseline_p95_ms": [
+            1.6460458500000001,
+            1.6567906,
+            1.65016475
+          ],
+          "selected_p95_ms": [
+            1.6533714000000002,
+            1.6476245,
+            1.6571704999999999
+          ],
+          "baseline_maximum_ms": 1.674825,
+          "selected_maximum_ms": 1.671199
+        },
+        {
+          "file": "policy-timing-2.toml",
+          "baseline_round_medians_ms": [
+            1.6418435,
+            1.641153,
+            1.63984
+          ],
+          "selected_round_medians_ms": [
+            1.6398305,
+            1.639625,
+            1.6431369999999998
+          ],
+          "baseline_median_ms": 1.641153,
+          "selected_median_ms": 1.6398305,
+          "reduction_percent": 0.08058358970797208,
+          "baseline_p95_ms": [
+            1.6521188999999998,
+            1.65230605,
+            1.6489713000000001
+          ],
+          "selected_p95_ms": [
+            1.6505219999999998,
+            1.65362335,
+            1.6570269
+          ],
+          "baseline_maximum_ms": 1.667412,
+          "selected_maximum_ms": 1.710142
+        }
+      ],
+      "maximum_output_relative_l2": 0.0,
+      "baseline_median_ms": 1.6407370000000001,
+      "selected_median_ms": 1.638976,
+      "reduction_percent": 0.10732981580838796
+    }
+  ]
+}

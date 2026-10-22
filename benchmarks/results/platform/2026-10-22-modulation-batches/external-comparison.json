@@ -1,0 +1,253 @@
+{
+  "oopao_commit": "085d5e50ace0d20fe13cc2da20129d5400166973",
+  "cases": {
+    "n24_p4_m1": {
+      "aos_cuda_b0": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.8298361036410193e-08,
+          "ramp_frame": 1.8255916594322508e-08,
+          "tip_frame_derivative": 1.0225069792159345e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_cuda_b1": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.829836101706428e-08,
+          "ramp_frame": 1.825591660381229e-08,
+          "tip_frame_derivative": 1.0225067246960043e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_cuda_b2": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.8298361029073925e-08,
+          "ramp_frame": 1.825591659978509e-08,
+          "tip_frame_derivative": 1.0225064040510976e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_cuda_b4": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.829836102430929e-08,
+          "ramp_frame": 1.8255916598389606e-08,
+          "tip_frame_derivative": 1.0225056965595193e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_f32": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.7158633491014236e-06,
+          "ramp_frame": 1.7354285456036855e-06,
+          "tip_frame_derivative": 5.6108782477043824e-05
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.8298361306486943e-08,
+          "ramp_frame": 1.825591677359605e-08,
+          "tip_frame_derivative": 1.0225065597189874e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      }
+    },
+    "n32_p8_m3": {
+      "aos_cuda_b0": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.9968653966684547e-08,
+          "ramp_frame": 1.9997308914179098e-08,
+          "tip_frame_derivative": 4.479001075978332e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_cuda_b1": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.996865396313363e-08,
+          "ramp_frame": 1.9997308912330505e-08,
+          "tip_frame_derivative": 4.479001515504348e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_cuda_b2": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.9968653962203587e-08,
+          "ramp_frame": 1.9997308915258125e-08,
+          "tip_frame_derivative": 4.479000788564758e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_cuda_b4": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.996865396973581e-08,
+          "ramp_frame": 1.9997308913749523e-08,
+          "tip_frame_derivative": 4.4790015736546626e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_f32": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 3.3836692109596665e-06,
+          "ramp_frame": 3.376180566012436e-06,
+          "tip_frame_derivative": 8.544531245564064e-05
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 1.9968654270998845e-08,
+          "ramp_frame": 1.999730922557829e-08,
+          "tip_frame_derivative": 4.478998889666433e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      }
+    },
+    "n120_p30_m3": {
+      "aos_cuda_b0": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 8.96276729040779e-09,
+          "ramp_frame": 9.777823381303518e-09,
+          "tip_frame_derivative": 4.13128447942786e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_cuda_b1": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 8.96276729040779e-09,
+          "ramp_frame": 9.777823381303518e-09,
+          "tip_frame_derivative": 4.13128447942786e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_cuda_b2": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 8.962767292479253e-09,
+          "ramp_frame": 9.777823383620184e-09,
+          "tip_frame_derivative": 4.1312845157107136e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_cuda_b4": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 8.962767293108417e-09,
+          "ramp_frame": 9.777823385708268e-09,
+          "tip_frame_derivative": 4.1312844801333347e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos_f32": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 8.05288341085405e-06,
+          "ramp_frame": 7.943056010905332e-06,
+          "tip_frame_derivative": 7.685705349897862e-05
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "aos": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 8.96276729916958e-09,
+          "ramp_frame": 9.777823388276262e-09,
+          "tip_frame_derivative": 4.131284180274567e-08
+        },
+        "parameters": {},
+        "physical_equivalence_asserted": true
+      },
+      "cuda_f32_pupil_tilt_baseline": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 8.044166624526617e-06,
+          "ramp_frame": 7.932038823484266e-06,
+          "tip_frame_derivative": 7.765833378937523e-05
+        },
+        "parameters": {
+          "actual_batch": 32,
+          "backend": "cuda",
+          "padded_side": 256,
+          "points": 32,
+          "precision": "Float32",
+          "strategy": "pupil_tilt"
+        },
+        "physical_equivalence_asserted": true
+      },
+      "cuda_f32_pupil_tilt_selected": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 8.045706438837717e-06,
+          "ramp_frame": 7.932015806937871e-06,
+          "tip_frame_derivative": 7.561691381483739e-05
+        },
+        "parameters": {
+          "actual_batch": 8,
+          "backend": "cuda",
+          "padded_side": 256,
+          "points": 32,
+          "precision": "Float32",
+          "strategy": "pupil_tilt"
+        },
+        "physical_equivalence_asserted": true
+      },
+      "cuda_f32_shifted_mask_baseline": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 0.02301435302849389,
+          "ramp_frame": 0.042870130501238224,
+          "tip_frame_derivative": 0.27845716737390047
+        },
+        "parameters": {
+          "actual_batch": 32,
+          "backend": "cuda",
+          "padded_side": 256,
+          "points": 32,
+          "precision": "Float32",
+          "strategy": "shifted_mask"
+        },
+        "physical_equivalence_asserted": false
+      },
+      "cuda_f32_shifted_mask_selected": {
+        "relative_l2_vs_oopao": {
+          "flat_frame": 0.02301435329419803,
+          "ramp_frame": 0.04287012974162912,
+          "tip_frame_derivative": 0.2784579386903832
+        },
+        "parameters": {
+          "actual_batch": 8,
+          "backend": "cuda",
+          "padded_side": 256,
+          "points": 32,
+          "precision": "Float32",
+          "strategy": "shifted_mask"
+        },
+        "physical_equivalence_asserted": false
+      }
+    }
+  },
+  "tuned_float32_batching_relative_l2": {
+    "pupil_tilt": {
+      "flat_frame": 5.9007729946032806e-08,
+      "ramp_frame": 6.974585789956621e-08,
+      "tip_frame_derivative": 7.110806612148898e-05
+    },
+    "shifted_mask": {
+      "flat_frame": 6.22676308240627e-08,
+      "ramp_frame": 6.935186476780108e-08,
+      "tip_frame_derivative": 8.603348498277384e-05
+    }
+  },
+  "pupil_tilt_comparison_passed": true,
+  "batching_comparison_passed": true,
+  "shifted_mask_physical_equivalence_qualified": false,
+  "scope": "Noiseless photon images and central +/-1nm tip response; no external closed-loop or detector-statistics qualification"
+}

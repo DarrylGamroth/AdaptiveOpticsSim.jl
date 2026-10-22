@@ -1,0 +1,110 @@
+{
+  "validation": {
+    "saved_ramp_signal": {
+      "relative_l2": 0.0,
+      "gain": 1.0,
+      "cosine": 1.0000000000000002,
+      "orthogonal_relative_l2": 0.0
+    },
+    "analytic_tip_vs_saved_central_difference": {
+      "relative_l2": 9.961372822834164e-09,
+      "gain": 0.9999999900386274,
+      "cosine": 0.9999999999999988,
+      "orthogonal_relative_l2": 2.1279137669023893e-14
+    }
+  },
+  "cuda_f32_pupil_tilt_baseline": {
+    "ramp_slopes": {
+      "relative_l2": 1.8009035873064101e-06,
+      "gain": 0.9999999201962898,
+      "cosine": 0.999999999998382,
+      "orthogonal_relative_l2": 1.7991345415254365e-06
+    },
+    "tip_slopes": {
+      "relative_l2": 5.496186839470633e-05,
+      "gain": 0.9999945172206363,
+      "cosine": 0.99999999850461,
+      "orthogonal_relative_l2": 5.468771441457086e-05
+    },
+    "tip_image": {
+      "relative_l2": 7.765833378937523e-05,
+      "gain": 0.999994442842746,
+      "cosine": 0.9999999969999968,
+      "orthogonal_relative_l2": 7.745924612478241e-05
+    }
+  },
+  "cuda_f32_pupil_tilt_selected": {
+    "ramp_slopes": {
+      "relative_l2": 1.8115950904906497e-06,
+      "gain": 0.9999999051841038,
+      "cosine": 0.99999999999836,
+      "orthogonal_relative_l2": 1.8091121353344548e-06
+    },
+    "tip_slopes": {
+      "relative_l2": 5.262609495336363e-05,
+      "gain": 0.9999932294760954,
+      "cosine": 0.9999999986381506,
+      "orthogonal_relative_l2": 5.21887523904046e-05
+    },
+    "tip_image": {
+      "relative_l2": 7.561691381483739e-05,
+      "gain": 0.9999929890913197,
+      "cosine": 0.9999999971655755,
+      "orthogonal_relative_l2": 7.529120011261042e-05
+    }
+  },
+  "cuda_f32_shifted_mask_baseline": {
+    "ramp_slopes": {
+      "relative_l2": 0.18962322240367316,
+      "gain": 0.9153154740999325,
+      "cosine": 0.9832512120567897,
+      "orthogonal_relative_l2": 0.16966289384492303
+    },
+    "tip_slopes": {
+      "relative_l2": 0.1743507730034968,
+      "gain": 0.8462300764505785,
+      "cosine": 0.9953179979263712,
+      "orthogonal_relative_l2": 0.08217665519186133
+    },
+    "tip_image": {
+      "relative_l2": 0.27845716737390047,
+      "gain": 0.8425739106661387,
+      "cosine": 0.9647950331283262,
+      "orthogonal_relative_l2": 0.22968548160243857
+    }
+  },
+  "cuda_f32_shifted_mask_selected": {
+    "ramp_slopes": {
+      "relative_l2": 0.18962320926486848,
+      "gain": 0.9153154824160096,
+      "cosine": 0.9832512143813062,
+      "orthogonal_relative_l2": 0.16966288331121399
+    },
+    "tip_slopes": {
+      "relative_l2": 0.17434942125041675,
+      "gain": 0.8462306767041913,
+      "cosine": 0.9953182019410474,
+      "orthogonal_relative_l2": 0.08217491042589797
+    },
+    "tip_image": {
+      "relative_l2": 0.2784579386903832,
+      "gain": 0.8425742072160446,
+      "cosine": 0.9647947258663424,
+      "orthogonal_relative_l2": 0.22968661995432127
+    }
+  },
+  "oopao_provenance": {
+    "head": "085d5e50ace0d20fe13cc2da20129d5400166973",
+    "status": " M precision_oopao.npy\n?? AGENTS.md\n?? Containerfile\n?? docs/\n?? environment.yml\n",
+    "sha256": {
+      "precision_oopao.npy": "78fcc834fef1e3247fb5d84b4d1c77bd07d2c89579dc781845ab4d640a740841",
+      "OOPAO/__init__.py": "505cfb3cd12b7d491601dea0316721f4d72c2fba6682c94939adbec73d71e436",
+      "OOPAO/Pyramid.py": "d15169ac1bfb85fa027ed0fce383094a71b98c044067a66a7f40da80028c09fe",
+      "OOPAO/Telescope.py": "63bf621c3996b9f1547242e341909cf879d85ff8557af6dda54e45a0ce801ae8",
+      "OOPAO/Source.py": "dd56386290af7da5d276f77aefdb568fbf2c89002b92d18722de8a29e409370b",
+      "OOPAO/Detector.py": "fd31fe0cb5d2e946bfb0f4e750c18973d2e5b8ea69b494cdf69d972107e56b08"
+    },
+    "precision_value": 64,
+    "precision_write": "OOPAO/__init__.py unconditionally writes 64 on import; no restoration attempted"
+  }
+}

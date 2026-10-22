@@ -1,0 +1,82 @@
+{
+  "scope": "Independent CPU reconstruction of current FFT/tilt/analytic-mask equations; not full package detector sampling",
+  "fixture": {
+    "pupil_resolution": 120,
+    "pupil_samples": 30,
+    "separation": 2,
+    "padded_side": 256
+  },
+  "intensity": [
+    {
+      "delta_bins": 0,
+      "modulation_lambda_over_D": 0.0,
+      "analytic_shift_relative_l2": 0.0,
+      "periodic_shift_relative_l2": 0.0
+    },
+    {
+      "delta_bins": 0.25,
+      "modulation_lambda_over_D": 0.1162109375,
+      "analytic_shift_relative_l2": 0.19267368374278512
+    },
+    {
+      "delta_bins": 0.5,
+      "modulation_lambda_over_D": 0.232421875,
+      "analytic_shift_relative_l2": 0.40250430642145846
+    },
+    {
+      "delta_bins": 1,
+      "modulation_lambda_over_D": 0.46484375,
+      "analytic_shift_relative_l2": 0.004243221168616533,
+      "periodic_shift_relative_l2": 5.474890400857093e-16
+    },
+    {
+      "delta_bins": 1.5,
+      "modulation_lambda_over_D": 0.697265625,
+      "analytic_shift_relative_l2": 0.18981305979889657
+    },
+    {
+      "delta_bins": 2,
+      "modulation_lambda_over_D": 0.9296875,
+      "analytic_shift_relative_l2": 0.007171026747325287,
+      "periodic_shift_relative_l2": 5.380990477112839e-16
+    },
+    {
+      "delta_bins": 3,
+      "modulation_lambda_over_D": 1.39453125,
+      "analytic_shift_relative_l2": 0.008307311789136905,
+      "periodic_shift_relative_l2": 5.819876409523046e-16
+    },
+    {
+      "delta_bins": 6,
+      "modulation_lambda_over_D": 2.7890625,
+      "analytic_shift_relative_l2": 0.012058588560805416,
+      "periodic_shift_relative_l2": 7.262789253125789e-16
+    }
+  ],
+  "effective_operator": [
+    {
+      "delta_bins": 0,
+      "off_diagonal_relative_frobenius": 1.497303785545019e-16
+    },
+    {
+      "delta_bins": 0.25,
+      "off_diagonal_relative_frobenius": 0.39409343737818
+    },
+    {
+      "delta_bins": 0.5,
+      "off_diagonal_relative_frobenius": 0.5573322839824542
+    },
+    {
+      "delta_bins": 1,
+      "off_diagonal_relative_frobenius": 3.580371787265839e-16
+    },
+    {
+      "delta_bins": 1.5,
+      "off_diagonal_relative_frobenius": 0.5573322839824543
+    },
+    {
+      "delta_bins": 2,
+      "off_diagonal_relative_frobenius": 6.142839548966477e-16
+    }
+  ]
+}

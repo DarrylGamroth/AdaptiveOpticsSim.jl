@@ -73,6 +73,13 @@ targets require:
 - explicit synchronization at public completion boundaries
 - numerical or statistical parity against the declared CPU reference
 
+Pyramid modulation FFT batches are fixed during preparation. CUDA uses measured
+choices for qualified FFT-size/point-count pairs with `ComplexF32` fields on
+sm86 devices with 5 MiB L2; other cases retain the existing divisor selection
+with a 32-point limit and 256 MiB field-stack budget. Physical sampling and
+modulation weights are unchanged. The [batch sweep and validation](../benchmarks/results/platform/2026-10-22-modulation-batches/README.md)
+record the qualified combinations, numerical differences and external reference.
+
 The accelerator graph surface includes opt-in CUDA Graph and HIP Graph replay
 of a complete graph step when every node is qualified. The maintained captured
 fixtures cover finite multilayer atmosphere replay, the regular-grid separable

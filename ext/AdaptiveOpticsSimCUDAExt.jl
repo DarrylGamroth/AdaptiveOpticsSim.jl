@@ -18,6 +18,38 @@ Backends.backend_fill(::Type{Backends.CUDABackendTag}, value, dims::Vararg{Int})
 Backends.compute_device_identifier(array::CUDA.CuArray) =
     CUDA.deviceid(CUDA.device(array))
 
+# Fixed-sampling sweeps qualify these FFT sizes on the sm86 / 5 MiB device
+# class. A broader cache-size rule regressed at side 560: do not interpolate
+# this table to other FFT sizes or point counts. Other devices and precisions
+# keep the existing limit. See the modulation-batches benchmark results.
+function WavefrontSensors._pyramid_modulation_batch_limit(
+    ::Backends.AcceleratorStyle{CUDA.CUDABackend},
+    field::AbstractMatrix{ComplexF32}, point_count::Int, plane_bytes::Int,
+)
+    default_limit = WavefrontSensors._PYRAMID_ACCELERATOR_MODULATION_BATCH_LIMIT
+    device = CUDA.device(field)
+    CUDA.capability(device) == v"8.6" || return default_limit
+    cache_bytes = CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_L2_CACHE_SIZE)
+    cache_bytes == 5 * 1024 * 1024 || return default_limit
+    size(field, 1) == size(field, 2) || return default_limit
+    side = size(field, 1)
+    limit = if (side == 256 && point_count == 32) ||
+            (side == 272 && point_count in (24, 30, 32))
+        8
+    elseif (side == 408 && point_count == 32) ||
+            (side == 512 && point_count in (12, 32, 96)) ||
+            (side == 528 && point_count == 64)
+        2
+    else
+        return default_limit
+    end
+    candidate = WavefrontSensors._pyramid_modulation_batch_size(
+        point_count, plane_bytes, limit)
+    # A prime point count must not collapse to one FFT per launch merely to
+    # satisfy the smaller limit.
+    return candidate >= 2 ? candidate : default_limit
+end
+
 # Synchronous kernel phases retain their current-stream completion boundary.
 # CUDA's cooperative wait can enter worker/task bookkeeping for longer kernels;
 # the blocking wait avoids that latency and still checks device exceptions.

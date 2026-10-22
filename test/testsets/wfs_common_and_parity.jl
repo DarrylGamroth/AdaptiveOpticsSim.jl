@@ -171,6 +171,14 @@ end
         32, 64 * 1024 * 1024) == 4
     @test WavefrontSensors._pyramid_modulation_batch_size(
         12, 40 * 1024 * 1024) == 6
+    @test WavefrontSensors._pyramid_modulation_batch_size(30, 1024, 8) == 6
+    @test WavefrontSensors._pyramid_modulation_batch_size(31, 1024, 8) == 1
+    @test WavefrontSensors._pyramid_modulation_batch_size(64, 1024, 64) == 64
+    @test WavefrontSensors._pyramid_modulation_batch_size(
+        64, 64 * 1024 * 1024, 64) == 4
+    @test_throws InvalidConfiguration WavefrontSensors._pyramid_modulation_batch_size(0, 8)
+    @test_throws InvalidConfiguration WavefrontSensors._pyramid_modulation_batch_size(8, 0)
+    @test_throws InvalidConfiguration WavefrontSensors._pyramid_modulation_batch_size(8, 8, 0)
 
     shifted_path = ((1.3, 0.7),)
     shifted_common = (
