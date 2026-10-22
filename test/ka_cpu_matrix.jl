@@ -1138,6 +1138,19 @@ end
         build_pyramid_mask!(wfs, pupil)
         @test @allocated(build_pyramid_mask!(wfs, pupil)) == 0
 
+        for policy in (NoModulation(),
+                CircularModulation(0.7; samples=4, phase_offset_rad=0.31),
+                SampledModulation(((1.3, 0.7, 0), (-0.4, 1.1, 2),
+                    (-0.9, -0.5, 1))))
+            scalar = Optics.prepare_focal_plane_modulation(
+                policy, 8, zeros(8, 8), Float64)
+            generated = similar(scalar.phases)
+            Optics._prepare_modulation_phases!(KA_CPU_STYLE, generated,
+                policy, Float64)
+            @test ka_cpu_close(generated, scalar.phases)
+        end
+        mark_ka_cpu_kernel!(:sampled_modulation_phases_kernel!)
+
         modulation_policy = CircularModulation(2.0;
             samples=5, phase_offset_rad=0.3)
         scalar_modulation =
@@ -1282,12 +1295,6 @@ end
             :pyramid_modulation_batch_intensity_kernel!,
             :pyramid_modulation_batch_mask_kernel!,
             :pyramid_pupil_modulation_batch_kernel!,
-            :pyramid_separable_shifted_mask_batch_kernel!,
-            :pyramid_separable_shifted_mask_factors_kernel!,
-            :pyramid_shifted_mask_batch_kernel!,
-            :pyramid_shifted_mask_stack_kernel!,
-            :pyramid_unmodulated_electric_field_kernel!,
-            :pyramid_unmodulated_pupil_field_kernel!,
             :zernike_phasor_kernel!,
         ])
         all_kernels = source_kernel_names()

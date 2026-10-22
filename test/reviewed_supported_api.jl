@@ -244,7 +244,7 @@ const REVIEWED_SUPPORTED_API = (
             :PreparedWFSCountingAcquisition, :PreparedWFSDetectorAcquisition,
             :PreparedWFSMultipleDetectorAcquisition, :PreparedZernikeOptics,
             :PyramidOpticsBundlePlan, :PyramidOpticsPlan, :PyramidPupilTiltStrategy,
-            :PyramidShiftedMaskStrategy, :ShackHartmannOptics, :ShackHartmannOpticsBundlePlan,
+            :ShackHartmannOptics, :ShackHartmannOpticsBundlePlan,
             :ShackHartmannOpticsPlan, :WFSCountingAcquisitionPlan,
             :WFSDetectorAcquisitionPlan, :WFSMultipleDetectorAcquisitionPlan,
             :ZernikeOpticsPlan, :lift_forward_plan, :lift_forward_workspace,

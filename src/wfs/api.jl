@@ -94,7 +94,6 @@ public PreparedPyramidOptics
 public PreparedPyramidOpticsBundle
 public AbstractPyramidModulationPropagationStrategy
 public PyramidPupilTiltStrategy
-public PyramidShiftedMaskStrategy
 public BiOEdgeOpticsPlan
 public BiOEdgeOpticsBundlePlan
 public PreparedBiOEdgeOptics

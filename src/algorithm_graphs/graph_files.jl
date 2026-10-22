@@ -827,12 +827,10 @@ function _pyramid_rate_f32_node(
         )
         if strategy_name === :pupil_tilt
             PyramidPupilTiltStrategy()
-        elseif strategy_name === :shifted_mask
-            PyramidShiftedMaskStrategy()
         else
             throw(AlgorithmGraphError(
                 "$context.modulation_propagation_strategy must be " *
-                "'pupil_tilt' or 'shifted_mask'",
+                "'pupil_tilt'",
             ))
         end
     else

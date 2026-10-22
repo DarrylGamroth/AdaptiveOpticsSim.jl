@@ -1,0 +1,10 @@
+{
+  "moving_noiseless": {
+    "tail_residual_wavefront_difference_rms_nm": 0.5719153754146524,
+    "maximum_difference_nm": 0.6336344356039273
+  },
+  "moving_noisy": {
+    "tail_residual_wavefront_difference_rms_nm": 0.6702793468235674,
+    "maximum_difference_nm": 0.8712249854236906
+  }
+}

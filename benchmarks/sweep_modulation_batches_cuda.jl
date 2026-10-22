@@ -76,7 +76,8 @@ function sweep_main(args)
     length(args) in (1,2) || error("OUTPUT.toml [CASE,...]")
     CUDA.allowscalar(false);BLAS.set_num_threads(1);Backends.set_fft_provider_threads!(1)
     selected=length(args)==2 ? split(args[2],',') : [c.name for c in BATCH_CASES]
-    strategies=get(ENV,"AOS_BATCH_STRATEGIES","shifted,pupil")
+    strategies=get(ENV,"AOS_BATCH_STRATEGIES","pupil")
+    strategies == "pupil" || error("only physical pupil-tilt propagation is supported")
     rounds=parse(Int,get(ENV,"AOS_BATCH_ROUNDS","1"))
     samples=parse(Int,get(ENV,"AOS_BATCH_SAMPLES","48"))
     output=abspath(args[1]);mkpath(dirname(output))
@@ -95,7 +96,7 @@ function sweep_main(args)
     persist()
     for c in BATCH_CASES
         c.name in selected || continue
-        for (name,strategy) in (("shifted",WavefrontSensors.PyramidShiftedMaskStrategy()),("pupil",WavefrontSensors.PyramidPupilTiltStrategy()))
+        for (name,strategy) in (("pupil",WavefrontSensors.PyramidPupilTiltStrategy()),)
             name in split(strategies,',') || continue
             base,reference=measure_batch(c,strategy,0,nothing;samples)
             pad=base["padded_side"]

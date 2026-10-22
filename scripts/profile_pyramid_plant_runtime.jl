@@ -135,6 +135,4 @@ if abspath(PROGRAM_FILE) == @__FILE__
     backend = profile_backend(PROFILE_BACKEND)
     run_pyramid_profile("pupil_tilt", backend,
         WavefrontSensors.PyramidPupilTiltStrategy())
-    run_pyramid_profile("shifted_mask", backend,
-        WavefrontSensors.PyramidShiftedMaskStrategy())
 end

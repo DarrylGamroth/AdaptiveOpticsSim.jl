@@ -84,122 +84,6 @@ end
     end
 end
 
-@kernel function pyramid_shifted_mask_stack_kernel!(masks,
-    axis_1_shifts_rad, axis_2_shifts_rad, r, norma, rooftop_pixels,
-    coordinate_start, coordinate_step, rotation_cos, rotation_sin,
-    shift_x_1, shift_y_1, shift_x_2, shift_y_2,
-    shift_x_3, shift_y_3, shift_x_4, shift_y_4,
-    pad::Int, point_count::Int)
-    axis_1, axis_2, point = @index(Global, NTuple)
-    if axis_1 <= pad && axis_2 <= pad && point <= point_count
-        unrotated_x = coordinate_start + (axis_1 - 1) * coordinate_step +
-            @inbounds(axis_1_shifts_rad[point])
-        unrotated_y = coordinate_start + (axis_2 - 1) * coordinate_step +
-            @inbounds(axis_2_shifts_rad[point])
-        x = unrotated_x * rotation_cos - unrotated_y * rotation_sin
-        y = unrotated_y * rotation_cos + unrotated_x * rotation_sin
-        phase_1 = x * r + unrotated_x * shift_x_1 + y * r -
-            unrotated_y * shift_y_1 + rooftop_pixels
-        phase_2 = -x * r + unrotated_x * shift_x_2 + y * r -
-            unrotated_y * shift_y_2
-        phase_3 = -x * r + unrotated_x * shift_x_3 - y * r -
-            unrotated_y * shift_y_3 + rooftop_pixels
-        phase_4 = x * r + unrotated_x * shift_x_4 - y * r -
-            unrotated_y * shift_y_4
-        phase = -max(max(phase_1, phase_2), max(phase_3, phase_4)) * norma
-        @inbounds masks[axis_1, axis_2, point] = cis(phase)
-    end
-end
-
-@kernel function pyramid_unmodulated_pupil_field_kernel!(focal_field,
-    amplitude, opd, phasor, amplitude_scale, opd_to_cycles,
-    offset::Int, resolution::Int, pad::Int)
-    i, j = @index(Global, NTuple)
-    if i <= pad && j <= pad
-        pupil_i = i - offset
-        pupil_j = j - offset
-        if 1 <= pupil_i <= resolution && 1 <= pupil_j <= resolution
-            @inbounds focal_field[i, j] = amplitude_scale *
-                amplitude[pupil_i, pupil_j] *
-                cispi(opd_to_cycles * opd[pupil_i, pupil_j]) * phasor[i, j]
-        else
-            @inbounds focal_field[i, j] = zero(eltype(focal_field))
-        end
-    end
-end
-
-@kernel function pyramid_unmodulated_electric_field_kernel!(focal_field,
-    field, phasor, offset::Int, resolution::Int, pad::Int)
-    i, j = @index(Global, NTuple)
-    if i <= pad && j <= pad
-        pupil_i = i - offset
-        pupil_j = j - offset
-        if 1 <= pupil_i <= resolution && 1 <= pupil_j <= resolution
-            @inbounds focal_field[i, j] =
-                field[pupil_i, pupil_j] * phasor[i, j]
-        else
-            @inbounds focal_field[i, j] = zero(eltype(focal_field))
-        end
-    end
-end
-
-# One work item owns every prepared modulation plane at a focal coordinate.
-# The 2-D launch therefore loads the shared focal field once per coordinate;
-# writes remain coalesced because all work items advance through the same plane.
-@kernel function pyramid_shifted_mask_batch_kernel!(stack, focal_field,
-    shifted_masks, weights, first_point::Int, pad::Int, batch_size::Int)
-    i, j = @index(Global, NTuple)
-    if i <= pad && j <= pad
-        focal_value = @inbounds focal_field[i, j]
-        @inbounds for batch_index in 1:batch_size
-            point = first_point + batch_index - 1
-            stack[i, j, batch_index] = weights[point] *
-                focal_value * shifted_masks[i, j, point]
-        end
-    end
-end
-
-@kernel function pyramid_separable_shifted_mask_factors_kernel!(
-    axis_1_factors, axis_2_factors, axis_1_shifts_rad, axis_2_shifts_rad,
-    r, norma, coordinate_start, coordinate_step,
-    shift_x_positive, shift_x_negative,
-    shift_y_positive, shift_y_negative,
-    pad::Int, point_count::Int)
-    axis, point = @index(Global, NTuple)
-    if axis <= pad && point <= point_count
-        coordinate = coordinate_start + (axis - 1) * coordinate_step
-        axis_1_coordinate = coordinate + @inbounds(axis_1_shifts_rad[point])
-        axis_2_coordinate = coordinate + @inbounds(axis_2_shifts_rad[point])
-        axis_1_phase = -max(
-            axis_1_coordinate * (r + shift_x_positive),
-            axis_1_coordinate * (-r + shift_x_negative),
-        ) * norma
-        axis_2_phase = -max(
-            axis_2_coordinate * (r - shift_y_positive),
-            axis_2_coordinate * (-r - shift_y_negative),
-        ) * norma
-        @inbounds begin
-            axis_1_factors[axis, point] = cis(axis_1_phase)
-            axis_2_factors[axis, point] = cis(axis_2_phase)
-        end
-    end
-end
-
-@kernel function pyramid_separable_shifted_mask_batch_kernel!(stack,
-    focal_field, axis_1_factors, axis_2_factors, weights,
-    first_point::Int, pad::Int, batch_size::Int)
-    i, j = @index(Global, NTuple)
-    if i <= pad && j <= pad
-        focal_value = @inbounds focal_field[i, j]
-        @inbounds for batch_index in 1:batch_size
-            point = first_point + batch_index - 1
-            stack[i, j, batch_index] = weights[point] *
-                focal_value * axis_1_factors[i, point] *
-                axis_2_factors[j, point]
-        end
-    end
-end
-
 """Dispatch family for prepared Pyramid modulation propagation."""
 abstract type AbstractPyramidModulationPropagationStrategy end
 
@@ -207,53 +91,11 @@ abstract type AbstractPyramidModulationPropagationStrategy end
 struct PyramidPupilTiltStrategy <:
        AbstractPyramidModulationPropagationStrategy end
 
-"""Approximate fixed-modulation propagation using shifted focal masks."""
-struct PyramidShiftedMaskStrategy <:
-       AbstractPyramidModulationPropagationStrategy end
-
-"""Compact pupil coordinates and quadrature offsets for shifted-mask propagation.
-
-No pupil phase cube is retained. Diagnostic pupil tilts are evaluated into the
-existing propagation field from these backend-resident arrays.
-"""
-struct PreparedPyramidShiftedModulation{P,C,O,V}
-    policy::P
-    coordinates::C
-    offsets::O
-    amplitude_weights::V
-end
-
-@inline Optics.modulation_point_count(modulation::PreparedPyramidShiftedModulation) =
-    length(modulation.amplitude_weights)
 @inline _pyramid_modulation_resolution(modulation::PreparedFocalPlaneModulation) =
     size(modulation.phases, 1)
-@inline _pyramid_modulation_resolution(modulation::PreparedPyramidShiftedModulation) =
-    length(modulation.coordinates)
-
 @inline function _prepare_pyramid_modulation(::PyramidPupilTiltStrategy,
     policy, resolution, field, ::Type{T}) where {T}
     return prepare_focal_plane_modulation(policy, resolution, field, T)
-end
-
-function _prepare_pyramid_modulation(::PyramidShiftedMaskStrategy,
-    policy, resolution, field, ::Type{T}) where {T}
-    resolution > 1 || throw(InvalidConfiguration(
-        "Pyramid shifted-mask modulation requires a pupil resolution greater than one"))
-    count = modulation_point_count(policy)
-    coordinates = similar(field, T, resolution)
-    offsets = similar(field, T, 2, count)
-    weights = Vector{T}(undef, count)
-    host_offsets = Matrix{T}(undef, 2, count)
-    for point in 1:count
-        x, y = modulation_offset(policy, point, T)
-        host_offsets[1, point] = x
-        host_offsets[2, point] = y
-        weights[point] = sqrt(Optics.modulation_weight(policy, point, T))
-    end
-    copyto!(coordinates, collect(range(-T(pi), T(pi); length=resolution)))
-    copyto!(offsets, host_offsets)
-    return PreparedPyramidShiftedModulation(policy, coordinates, offsets,
-        FixedSizeVectorDefault{T}(weights))
 end
 
 """Run-immutable numerical contract for pyramid-mask propagation."""
@@ -274,47 +116,6 @@ struct PyramidModulationBatchWorkspace{C,V,Pf,Pb}
     field_stack::C
     operating_weights::V
     fft_plan::Pf
-    bfft_plan::Pb
-    batch_size::Int
-end
-
-"""Dispatch family for prepared shifted-mask modulation storage."""
-abstract type AbstractPyramidShiftedMaskModulationWorkspace end
-
-"""
-Prepared full shifted focal-plane masks and one bounded inverse-propagation tile.
-
-The masks are derived cache, not persistent scientific state. They are valid
-only for the fixed operating modulation used during preparation.
-"""
-struct PyramidShiftedMaskModulationWorkspace{C,M,V,Pb} <:
-       AbstractPyramidShiftedMaskModulationWorkspace
-    field_stack::C
-    shifted_masks::M
-    operating_weights::V
-    axis_1_shifts_rad::V
-    axis_2_shifts_rad::V
-    bfft_plan::Pb
-    batch_size::Int
-end
-
-"""
-Prepared separable factors for an ideal shifted focal-plane Pyramid mask.
-
-This representation is exact for the shifted-mask formulation when physical
-mask rotation and rooftop terms are both zero and face shifts are paired
-across each coordinate axis. It replaces each `pad × pad`
-mask with two `pad`-element factors while retaining the same bounded inverse
-propagation tile.
-"""
-struct PyramidSeparableShiftedMaskModulationWorkspace{C,M,V,Pb} <:
-       AbstractPyramidShiftedMaskModulationWorkspace
-    field_stack::C
-    axis_1_factors::M
-    axis_2_factors::M
-    operating_weights::V
-    axis_1_shifts_rad::V
-    axis_2_shifts_rad::V
     bfft_plan::Pb
     batch_size::Int
 end
@@ -406,17 +207,6 @@ end
     return _pyramid_modulation_batch_size(point_count, plane_bytes, limit)
 end
 
-@inline _pyramid_shifted_mask_batch_size(
-    ::ScalarCPUStyle, field, ::Int) = 1
-@inline _pyramid_shifted_mask_batch_size(
-    ::AcceleratorStyle, field, point_count::Int) =
-    _pyramid_modulation_batch_size(field, point_count)
-
-@inline _pyramid_shifted_mask_is_separable(phase_mask) =
-    iszero(phase_mask.rotation_rad) && iszero(phase_mask.rooftop) &&
-    _pyramid_face_shifts_are_paired(phase_mask.pupil_shift_x_pixels,
-        phase_mask.pupil_shift_y_pixels)
-
 @inline function _prepare_pyramid_modulation_batch(
     ::ScalarCPUStyle, field, phase_mask, modulation,
     ::PyramidPupilTiltStrategy)
@@ -446,94 +236,6 @@ function _prepare_pyramid_modulation_batch(
 end
 
 
-function _prepare_pyramid_modulation_batch(
-    style::ExecutionStyle, field, phase_mask, modulation,
-    ::PyramidShiftedMaskStrategy)
-    phase_mask.psf_centering || throw(InvalidConfiguration(
-        "Pyramid shifted-mask modulation requires psf_centering=true",
-    ))
-    resolution = _pyramid_modulation_resolution(modulation)
-    resolution > 1 || throw(InvalidConfiguration(
-        "Pyramid shifted-mask modulation requires a pupil resolution greater than one",
-    ))
-    point_count = modulation_point_count(modulation)
-    batch_size = _pyramid_shifted_mask_batch_size(style, field, point_count)
-    pad = size(field, 1)
-    field_stack = similar(field, eltype(field), pad, pad, batch_size)
-    T = real(eltype(field))
-    operating_weights = similar(field, T, point_count)
-    axis_1_shifts_rad = similar(operating_weights)
-    axis_2_shifts_rad = similar(operating_weights)
-    host_axis_1_shifts_rad = Vector{T}(undef, point_count)
-    host_axis_2_shifts_rad = Vector{T}(undef, point_count)
-    coordinate_scale = T(2pi) / T(resolution - 1)
-    @inbounds for point in 1:point_count
-        offset_x, offset_y = modulation_offset(modulation.policy, point, T)
-        host_axis_1_shifts_rad[point] = coordinate_scale * offset_y
-        host_axis_2_shifts_rad[point] = coordinate_scale * offset_x
-    end
-    copyto!(operating_weights, collect(modulation.amplitude_weights))
-    copyto!(axis_1_shifts_rad, host_axis_1_shifts_rad)
-    copyto!(axis_2_shifts_rad, host_axis_2_shifts_rad)
-    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
-    if _pyramid_shifted_mask_is_separable(phase_mask)
-        axis_1_factors = similar(
-            field, eltype(field), pad, point_count)
-        axis_2_factors = similar(axis_1_factors)
-        return PyramidSeparableShiftedMaskModulationWorkspace(
-            field_stack,
-            axis_1_factors,
-            axis_2_factors,
-            operating_weights,
-            axis_1_shifts_rad,
-            axis_2_shifts_rad,
-            bfft_plan,
-            batch_size,
-        )
-    end
-    shifted_masks = similar(field, eltype(field), pad, pad, point_count)
-    return PyramidShiftedMaskModulationWorkspace(
-        field_stack,
-        shifted_masks,
-        operating_weights,
-        axis_1_shifts_rad,
-        axis_2_shifts_rad,
-        bfft_plan,
-        batch_size,
-    )
-end
-
-function _resize_pyramid_modulation_batch(
-    batch::PyramidSeparableShiftedMaskModulationWorkspace, field)
-    pad = size(field, 1)
-    point_count = size(batch.axis_1_factors, 2)
-    field_stack = similar(
-        batch.field_stack,
-        eltype(batch.field_stack),
-        pad,
-        pad,
-        batch.batch_size,
-    )
-    axis_1_factors = similar(
-        batch.axis_1_factors,
-        eltype(batch.axis_1_factors),
-        pad,
-        point_count,
-    )
-    axis_2_factors = similar(axis_1_factors)
-    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
-    return PyramidSeparableShiftedMaskModulationWorkspace(
-        field_stack,
-        axis_1_factors,
-        axis_2_factors,
-        batch.operating_weights,
-        batch.axis_1_shifts_rad,
-        batch.axis_2_shifts_rad,
-        bfft_plan,
-        batch.batch_size,
-    )
-end
-
 @inline function _resize_pyramid_modulation_batch(
     batch::NoPyramidModulationBatchWorkspace, field)
     return batch
@@ -560,36 +262,6 @@ function _resize_pyramid_modulation_batch(
     )
 end
 
-
-function _resize_pyramid_modulation_batch(
-    batch::PyramidShiftedMaskModulationWorkspace, field)
-    pad = size(field, 1)
-    point_count = size(batch.shifted_masks, 3)
-    field_stack = similar(
-        batch.field_stack,
-        eltype(batch.field_stack),
-        pad,
-        pad,
-        batch.batch_size,
-    )
-    shifted_masks = similar(
-        batch.shifted_masks,
-        eltype(batch.shifted_masks),
-        pad,
-        pad,
-        point_count,
-    )
-    bfft_plan = plan_repeated_bfft_backend!(field_stack, (1, 2))
-    return PyramidShiftedMaskModulationWorkspace(
-        field_stack,
-        shifted_masks,
-        batch.operating_weights,
-        batch.axis_1_shifts_rad,
-        batch.axis_2_shifts_rad,
-        bfft_plan,
-        batch.batch_size,
-    )
-end
 
 @inline pyramid_propagation_plan(
     propagation::PreparedPyramidPropagation) = propagation.plan
@@ -737,9 +409,8 @@ map; detector acquisition and RTC signal estimation are separate owners.
 `phase_mask_rotation_rad` sets the rotation angle applied to the physical
 mask-coordinate transform, while
 `modulation_phase_offset_rad` selects the circular modulation quadrature
-origin. Both values are in radians. `modulation_propagation_strategy` selects
-the exact pupil-tilt reference formulation or the approximate shifted-mask
-formulation for fixed prepared modulation. `pupil_shift_x_pixels` and
+origin. Both values are in radians. `modulation_propagation_strategy` uses
+the physical pupil-tilt formulation for prepared modulation. `pupil_shift_x_pixels` and
 `pupil_shift_y_pixels` specify immutable real-valued per-face q1–q4 shifts; a
 scalar value applies to all four faces. Shifts use native, unbinned detector
 pixels (the `pupil_samples` scale), and final binning divides the displacement
@@ -861,7 +532,6 @@ function prepare_pyramid_front_end!(wfs::PyramidWFS, tel::Telescope)
     build_pyramid_phasor!(pyramid_propagation_workspace(wfs).phasor)
     pupil = PupilFunction(tel)
     build_pyramid_mask!(wfs, pupil)
-    build_pyramid_shifted_masks!(wfs, pupil)
     return nothing
 end
 
@@ -908,7 +578,6 @@ function ensure_pyramid_buffers!(wfs::PyramidWFS, pad::Int, pupil::PupilFunction
         propagation.effective_resolution = pad
         build_pyramid_phasor!(propagation.phasor)
         build_pyramid_mask!(wfs, pupil)
-        build_pyramid_shifted_masks!(wfs, pupil)
     end
     return wfs
 end

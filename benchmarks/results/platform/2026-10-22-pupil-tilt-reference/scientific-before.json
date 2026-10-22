@@ -1,0 +1,123 @@
+{
+  "complete": true,
+  "source_checks": {
+    "gpi_closed_loop_cuda.jl": true,
+    "gpi_closed_loop_inputs.jl": true
+  },
+  "cases": {
+    "default": {
+      "retained_rank": 35,
+      "condition_number": 6.547772341127303,
+      "RD_error": 5.945956775430283e-15,
+      "spectral_radius": 0.6500000059604687,
+      "half_amplitude_relative_l2": 0.007169304393299448,
+      "runs": {
+        "moving_noiseless": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 1.224227306578481e-19,
+            "controlled_error_rms_m": 7.063460686712814e-20,
+            "all_mode_fitting_floor_rms_m": 1.461661229605702e-19,
+            "common_fine_open_rms_m": 1.8899422635611576e-20
+          },
+          "tail_residual_nm": 139.83656421478278,
+          "tail_floor_nm": 123.33445430220812,
+          "tail_open_nm": 405.0497082446397,
+          "last_camera_error": 0.007043529222488443,
+          "last_update_parity_m": 2.4725369774572634e-15,
+          "reported_all_frame_update_max_m": 1.4404451348016585e-14,
+          "saturation_samples": 0,
+          "physical_command_max_m": 5.757487997470889e-07,
+          "own_vs_common_max_nm": 0.03475133959608552,
+          "host_allocations": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "uninterrupted_medians_ms": [
+            3.4824735,
+            3.4874475,
+            3.484688
+          ]
+        },
+        "moving_noisy": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 1.207286647633395e-19,
+            "controlled_error_rms_m": 7.152134448378498e-20,
+            "all_mode_fitting_floor_rms_m": 1.461661229605702e-19,
+            "common_fine_open_rms_m": 1.8899422635611576e-20
+          },
+          "tail_residual_nm": 139.920311785198,
+          "tail_floor_nm": 123.33445430220812,
+          "tail_open_nm": 405.0497082446397,
+          "last_camera_error": 0.009548756074769326,
+          "last_update_parity_m": 4.8978848229807036e-15,
+          "reported_all_frame_update_max_m": 1.4130518987050413e-14,
+          "saturation_samples": 0,
+          "physical_command_max_m": 5.756215273322596e-07,
+          "own_vs_common_max_nm": 0.036068280829270126,
+          "host_allocations": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          "uninterrupted_medians_ms": [
+            3.5351475,
+            3.5374115,
+            3.533819
+          ]
+        },
+        "static": {
+          "metric_max_abs_errors_m": {
+            "common_fine_residual_rms_m": 2.8612494259550564e-14,
+            "controlled_error_rms_m": 1.751527898618318e-20,
+            "all_mode_fitting_floor_rms_m": 3.043369039450191e-14,
+            "common_fine_open_rms_m": 2.117582368135751e-22
+          },
+          "tail_residual_nm": 5.169778280437941e-05,
+          "tail_floor_nm": 1.96205025865255e-05,
+          "tail_open_nm": 120.00000000232512,
+          "last_camera_error": 2.759324191629671e-09,
+          "last_update_parity_m": 1.1247389194098291e-15,
+          "reported_all_frame_update_max_m": 1.7536256183822727e-15,
+          "saturation_samples": 0,
+          "physical_command_max_m": 1.9635947978713375e-07,
+          "own_vs_common_max_nm": 0.00025047477256174883,
+          "host_allocations": null,
+          "uninterrupted_medians_ms": []
+        }
+      }
+    }
+  },
+  "raw_digest_count": 17,
+  "basis_reconstruction_sha_exact": false,
+  "julia_oracle_basis_sha_exact": true,
+  "independent_python_basis_max_abs_difference": 7.566178711375181e-17,
+  "gram_max_abs_error": 5.186961971048731e-13,
+  "basis_rms_max_deviation": 1.7794168805096433e-08
+}

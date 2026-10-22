@@ -32,7 +32,6 @@ struct CommonContractWFS <: WavefrontSensors.AbstractWFS end
     for name in (
         :AbstractPyramidModulationPropagationStrategy,
         :PyramidPupilTiltStrategy,
-        :PyramidShiftedMaskStrategy,
     )
         @test parentmodule(getfield(WavefrontSensors, name)) ===
             WavefrontSensors
@@ -180,142 +179,10 @@ end
     @test_throws InvalidConfiguration WavefrontSensors._pyramid_modulation_batch_size(8, 0)
     @test_throws InvalidConfiguration WavefrontSensors._pyramid_modulation_batch_size(8, 8, 0)
 
-    shifted_path = ((1.3, 0.7),)
-    shifted_common = (
-        pupil_samples=4,
-        modulation=0.0,
-        user_modulation_path=shifted_path,
-        diffraction_padding=4,
-    )
-    pupil_tilt = PyramidWFS(
-        tel;
-        shifted_common...,
-        modulation_propagation_strategy=
-            WavefrontSensors.PyramidPupilTiltStrategy(),
-    )
-    shifted_mask = PyramidWFS(
-        tel;
-        shifted_common...,
-        modulation_propagation_strategy=
-            WavefrontSensors.PyramidShiftedMaskStrategy(),
-    )
-    separable_batch = pyramid_propagation_workspace(
-        shifted_mask).modulation_batch
-    @test separable_batch isa
-        WavefrontSensors.PyramidSeparableShiftedMaskModulationWorkspace
-    point_count = size(separable_batch.axis_1_factors, 2)
-    pad = size(separable_batch.axis_1_factors, 1)
-    full_masks = similar(
-        pyramid_propagation_workspace(shifted_mask).pyramid_mask,
-        pad,
-        pad,
-        point_count,
-    )
-    full_batch = WavefrontSensors.PyramidShiftedMaskModulationWorkspace(
-        similar(separable_batch.field_stack),
-        full_masks,
-        separable_batch.operating_weights,
-        separable_batch.axis_1_shifts_rad,
-        separable_batch.axis_2_shifts_rad,
-        separable_batch.bfft_plan,
-        separable_batch.batch_size,
-    )
-    WavefrontSensors._build_pyramid_shifted_masks!(
-        AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
-        full_batch,
-        shifted_mask,
-        tel.params.resolution,
-    )
-    for point in 1:point_count
-        separable_mask = separable_batch.axis_1_factors[:, point] *
-            transpose(separable_batch.axis_2_factors[:, point])
-        @test separable_mask ≈ full_masks[:, :, point] rtol = 2e-14
-    end
-    shifted_general_mask = PyramidWFS(
-        tel;
-        shifted_common...,
-        rooftop=0.25,
-        phase_mask_rotation_rad=0.1,
-        modulation_propagation_strategy=
-            WavefrontSensors.PyramidShiftedMaskStrategy(),
-    )
-    @test pyramid_propagation_workspace(
-        shifted_general_mask).modulation_batch isa
-        WavefrontSensors.PyramidShiftedMaskModulationWorkspace
-    strategy_pupil = PupilFunction(tel)
-    strategy_resolution = tel.params.resolution
-    @inbounds for i in 1:strategy_resolution, j in 1:strategy_resolution
-        x = 2 * (i - 1) / (strategy_resolution - 1) - 1
-        y = 2 * (j - 1) / (strategy_resolution - 1) - 1
-        strategy_pupil.opd[i, j] = 40e-9 *
-            (sinpi(x) + 0.4 * cospi(y) + 0.2 * x * y)
-    end
-    shifted_general_front_end = PyramidOpticalFrontEnd(
-        shifted_general_mask, src)
-    shifted_general_rate = pyramid_rate_map(
-        shifted_general_front_end, strategy_pupil)
-    shifted_general_prepared = prepare_wfs_optics(
-        shifted_general_front_end,
-        strategy_pupil,
-        shifted_general_rate,
-    )
-    form_wfs_optical_products!(
-        shifted_general_rate,
-        strategy_pupil,
-        shifted_general_prepared,
-    )
-    @test all(isfinite, shifted_general_rate.values)
-    pupil_tilt_front_end = PyramidOpticalFrontEnd(pupil_tilt, src)
-    shifted_mask_front_end = PyramidOpticalFrontEnd(shifted_mask, src)
-    pupil_tilt_rate = pyramid_rate_map(pupil_tilt_front_end, strategy_pupil)
-    shifted_mask_rate = pyramid_rate_map(shifted_mask_front_end, strategy_pupil)
-    pupil_tilt_prepared = prepare_wfs_optics(
-        pupil_tilt_front_end,
-        strategy_pupil,
-        pupil_tilt_rate,
-    )
-    shifted_mask_prepared = prepare_wfs_optics(
-        shifted_mask_front_end,
-        strategy_pupil,
-        shifted_mask_rate,
-    )
-    form_wfs_optical_products!(
-        pupil_tilt_rate,
-        strategy_pupil,
-        pupil_tilt_prepared,
-    )
-    form_wfs_optical_products!(
-        shifted_mask_rate,
-        strategy_pupil,
-        shifted_mask_prepared,
-    )
-    relative_shifted_mask_error = norm(
-        shifted_mask_rate.values .- pupil_tilt_rate.values,
-    ) / norm(pupil_tilt_rate.values)
-    @test sum(shifted_mask_rate.values) ≈ sum(pupil_tilt_rate.values) rtol = 1e-12
-    @test 0 < relative_shifted_mask_error < 0.02
-    form_wfs_optical_products!(
-        shifted_mask_rate,
-        strategy_pupil,
-        shifted_mask_prepared,
-    )
-    @test @allocated(form_wfs_optical_products!(
-        shifted_mask_rate,
-        strategy_pupil,
-        shifted_mask_prepared,
-    )) == 0
-
     @test_throws InvalidConfiguration PyramidWFS(tel;
         pupil_samples=4, phase_mask_rotation_rad=NaN)
     @test_throws InvalidConfiguration PyramidWFS(tel;
         pupil_samples=4, modulation_phase_offset_rad=NaN)
-    @test_throws InvalidConfiguration PyramidWFS(
-        tel;
-        pupil_samples=4,
-        psf_centering=false,
-        modulation_propagation_strategy=
-            WavefrontSensors.PyramidShiftedMaskStrategy(),
-    )
     @test_throws InvalidConfiguration BiOEdgeWFS(tel;
         pupil_samples=4, modulation_phase_offset_rad=NaN)
 

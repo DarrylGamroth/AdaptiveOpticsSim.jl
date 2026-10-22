@@ -1,0 +1,8 @@
+{
+  "matrix_relative_l2": 0.009935859681780491,
+  "maximum_column_relative_error": {
+    "tiptilt": 0.00828231704331136,
+    "woofer": 0.010301884851111314,
+    "tweeter": 0.020170766670616205
+  }
+}

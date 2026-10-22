@@ -63,7 +63,6 @@ end
         (WavefrontSensors, :GroupedStackReduceStrategy),
         (WavefrontSensors, :GroupedStaged2DStrategy),
         (WavefrontSensors, :PyramidPupilTiltStrategy),
-        (WavefrontSensors, :PyramidShiftedMaskStrategy),
     )
     selection_functions = (
         :atmospheric_field_execution_strategy,
@@ -73,7 +72,7 @@ end
         :grouped_accumulation_strategy,
     )
     @test length(family_types) == 5
-    @test length(selector_types) == 13
+    @test length(selector_types) == 12
     @test length(selection_functions) == 5
     @test all(endswith("Strategy"), String(name) for (_, name) in family_types)
     @test all(endswith("Strategy"), String(name) for (_, name) in selector_types)

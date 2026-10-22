@@ -1375,7 +1375,7 @@ end
     opd = zeros(Float32, 8, 8)
     options = (resolution=8, telescope_diameter_m=1.22, pupil_samples=4,
         modulation=0, modulation_points=4,
-        modulation_propagation_strategy=PyramidShiftedMaskStrategy(),
+        modulation_propagation_strategy=PyramidPupilTiltStrategy(),
         source_wavelength_m=0.55e-6, source_photon_irradiance_m2_s=1.0,
         opd_schema="test.opd/1", photon_rate_schema="test.rate/1")
     prepare_node(node) = prepare_algorithm_graph(algorithm_graph((node,);
@@ -1404,7 +1404,7 @@ end
     pupil_samples = 4
     modulation = 0.0
     modulation_points = 4
-    modulation_propagation_strategy = "shifted_mask"
+    modulation_propagation_strategy = "pupil_tilt"
     source_wavelength_m = 5.5e-7
     source_photon_irradiance_m2_s = 1.0
     opd_schema = "test.opd/1"
@@ -1425,6 +1425,10 @@ end
         loaded = prepare_algorithm_graph(load_algorithm_graph(path; bindings=(; opd)))
         step_graph!(loaded)
         @test graph_output(loaded, Val(:rate)) == graph_output(shifted, Val(:rate))
+        write(path, replace(text,
+            "modulation_propagation_strategy = \"pupil_tilt\"" =>
+                "modulation_propagation_strategy = \"shifted_mask\""))
+        @test_throws AlgorithmGraphError load_algorithm_graph(path; bindings=(; opd))
         for invalid in ("[0.1, 0.2]", "[0.1, 0.2, inf, 0.4]", "true", "1e40")
             write(path, replace(text,
                 "pupil_shift_x_pixels = 0.25" => "pupil_shift_x_pixels = $invalid"))

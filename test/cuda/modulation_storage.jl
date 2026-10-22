@@ -28,10 +28,10 @@ function modulation_storage_fixture(::Type{T}, selector) where {T}
     return telescope, pupil, source
 end
 
-function modulation_storage_sensor(telescope, ::Type{T}, strategy;
+function modulation_storage_sensor(telescope, ::Type{T};
     geometry=(;), policy=(;)) where {T}
     return PyramidWFS(telescope; pupil_samples=4, diffraction_padding=4,
-        modulation_propagation_strategy=strategy, T=T, geometry..., policy...)
+        T=T, geometry..., policy...)
 end
 
 function modulation_storage_diagnostic(sensor, pupil, source)
@@ -48,20 +48,17 @@ function modulation_storage_rate(sensor, pupil, source)
     return Array(rate.values)
 end
 
+modulation_storage_batch_arrays(::WavefrontSensors.NoPyramidModulationBatchWorkspace) = ()
+modulation_storage_batch_arrays(batch::WavefrontSensors.PyramidModulationBatchWorkspace) =
+    (batch.field_stack, batch.operating_weights)
+
 function modulation_storage_arrays(sensor)
     owner = WavefrontSensors.pyramid_operating_modulation(sensor)
     batch = WavefrontSensors.pyramid_propagation_workspace(sensor).modulation_batch
-    masks = if hasproperty(batch, :shifted_masks)
-        (batch.shifted_masks,)
-    else
-        (batch.axis_1_factors, batch.axis_2_factors)
-    end
-    return (owner.coordinates, owner.offsets, owner.amplitude_weights,
-        batch.field_stack, batch.operating_weights, batch.axis_1_shifts_rad,
-        batch.axis_2_shifts_rad, masks...)
+    return (owner.phases, owner.amplitude_weights, modulation_storage_batch_arrays(batch)...)
 end
 
-@testset "Compact Pyramid modulation storage" begin
+@testset "Physical Pyramid modulation phase storage" begin
     @test CUDA.functional()
     for T in (Float32, Float64)
         cpu_tel, cpu_pupil, source = modulation_storage_fixture(T, CPUBackend())
@@ -79,45 +76,39 @@ end
         geometries = ((;), (rooftop=T(0.25), phase_mask_rotation_rad=T(0.1)))
         for geometry in geometries, policy in policies
             @testset "$T geometry=$geometry policy=$policy" begin
-                cpu = modulation_storage_sensor(cpu_tel, T, WavefrontSensors.PyramidShiftedMaskStrategy();
-                    geometry, policy)
-                gpu = modulation_storage_sensor(gpu_tel, T, WavefrontSensors.PyramidShiftedMaskStrategy();
-                    geometry, policy)
-                dense_cpu = modulation_storage_sensor(cpu_tel, T, WavefrontSensors.PyramidPupilTiltStrategy();
-                    geometry, policy)
-                dense_gpu = modulation_storage_sensor(gpu_tel, T, WavefrontSensors.PyramidPupilTiltStrategy();
-                    geometry, policy)
+                cpu = modulation_storage_sensor(cpu_tel, T; geometry, policy)
+                gpu = modulation_storage_sensor(gpu_tel, T; geometry, policy)
                 for (sensor, on_gpu) in ((cpu, false), (gpu, true))
                     owner = WavefrontSensors.pyramid_operating_modulation(sensor)
-                    @test !hasproperty(owner, :phases)
-                    @test size(owner.offsets) == (2, length(owner.amplitude_weights))
-                    @test length(owner.coordinates) == 16
-                    @test (owner.coordinates isa CUDA.CuArray) == on_gpu
-                    @test (owner.offsets isa CUDA.CuArray) == on_gpu
+                    points = length(owner.amplitude_weights)
+                    @test size(owner.phases) == (16, 16, points)
+                    @test (owner.phases isa CUDA.CuArray) == on_gpu
                     @test owner.amplitude_weights isa FixedSizeVector{T}
-                    @test Array(owner.coordinates) == collect(range(-T(pi), T(pi); length=16))
-                    expected_offsets = hcat((collect(ModulationOptics.modulation_offset(
-                        owner.policy, point, T)) for point in eachindex(owner.amplitude_weights))...)
-                    @test Array(owner.offsets) == expected_offsets
+                    coordinates = collect(range(-T(pi), T(pi); length=16))
+                    expected = Array{Complex{T}}(undef, 16, 16, points)
+                    for point in 1:points
+                        x, y = ModulationOptics.modulation_offset(owner.policy, point, T)
+                        for j in 1:16, i in 1:16
+                            expected[i, j, point] = cis(x * coordinates[j] + y * coordinates[i])
+                        end
+                    end
+                    @test Array(owner.phases) ≈ expected rtol=rtol atol=atol
                     @test sum(abs2, owner.amplitude_weights) ≈ one(T)
                     if haskey(policy, :user_modulation_path)
                         @test owner.amplitude_weights[1] == zero(T)
                         @test owner.amplitude_weights ≈ sqrt.(T[0, 2 / 3, 1 / 3])
                     end
-                    batch = WavefrontSensors.pyramid_propagation_workspace(sensor).modulation_batch
-                    @test (batch isa WavefrontSensors.PyramidSeparableShiftedMaskModulationWorkspace) == isempty(geometry)
                 end
-                cpu_batch = WavefrontSensors.pyramid_propagation_workspace(cpu).modulation_batch
+                gpu_owner = WavefrontSensors.pyramid_operating_modulation(gpu)
+                cpu_owner = WavefrontSensors.pyramid_operating_modulation(cpu)
+                @test Array(gpu_owner.phases) ≈ cpu_owner.phases rtol=rtol atol=atol
                 gpu_batch = WavefrontSensors.pyramid_propagation_workspace(gpu).modulation_batch
-                for name in (isempty(geometry) ? (:axis_1_factors, :axis_2_factors) : (:shifted_masks,))
-                    @test Array(getproperty(gpu_batch, name)) ≈
-                        Array(getproperty(cpu_batch, name)) rtol=rtol atol=atol
-                end
-                cpu_diag = modulation_storage_diagnostic(cpu, cpu_pupil, source)
-                gpu_diag = modulation_storage_diagnostic(gpu, gpu_pupil, source)
-                @test cpu_diag ≈ modulation_storage_diagnostic(dense_cpu, cpu_pupil, source) rtol=rtol atol=atol
-                @test gpu_diag ≈ modulation_storage_diagnostic(dense_gpu, gpu_pupil, source) rtol=rtol atol=atol
-                @test gpu_diag ≈ cpu_diag rtol=rtol atol=atol
+                @test gpu_batch isa WavefrontSensors.PyramidModulationBatchWorkspace
+                @test gpu_batch.field_stack isa CUDA.CuArray
+                @test gpu_batch.operating_weights isa CUDA.CuArray
+                @test Array(gpu_batch.operating_weights) == collect(cpu_owner.amplitude_weights)
+                @test modulation_storage_diagnostic(gpu, gpu_pupil, source) ≈
+                    modulation_storage_diagnostic(cpu, cpu_pupil, source) rtol=rtol atol=atol
                 @test modulation_storage_rate(gpu, gpu_pupil, source) ≈
                     modulation_storage_rate(cpu, cpu_pupil, source) rtol=rtol atol=atol
             end
@@ -127,7 +118,7 @@ end
             @testset "$T update $(backend(tel)) geometry=$geometry" begin
                 policy = (modulation=T(0.7), modulation_points=4,
                     modulation_phase_offset_rad=T(0.31))
-                sensor = modulation_storage_sensor(tel, T, WavefrontSensors.PyramidShiftedMaskStrategy(); geometry, policy)
+                sensor = modulation_storage_sensor(tel, T; geometry, policy)
                 arrays = modulation_storage_arrays(sensor)
                 addresses = map(pointer, arrays)
                 weights = copy(WavefrontSensors.pyramid_operating_modulation(sensor).amplitude_weights)
@@ -139,10 +130,9 @@ end
                     @test WavefrontSensors.pyramid_operating_modulation(sensor).amplitude_weights == weights
                     fresh_policy = (modulation=enabled ? radius : zero(T), modulation_points=4,
                         modulation_phase_offset_rad=T(0.31))
-                    # Zero-radius fresh construction selects NoModulation; the four
-                    # identical updated points have the same normalized optical sum.
-                    fresh = modulation_storage_sensor(tel, T, WavefrontSensors.PyramidShiftedMaskStrategy();
-                        geometry, policy=fresh_policy)
+                    # A centered cycle and a single unmodulated point have the
+                    # same normalized optical sum.
+                    fresh = modulation_storage_sensor(tel, T; geometry, policy=fresh_policy)
                     @test modulation_storage_diagnostic(sensor, pupil, source) ≈
                         modulation_storage_diagnostic(fresh, pupil, source) rtol=rtol atol=atol
                     @test modulation_storage_rate(sensor, pupil, source) ≈
@@ -153,15 +143,6 @@ end
                     @test_throws InvalidConfiguration ModulationOptics.update_cycle_averaged_circular_modulation!(sensor, invalid)
                     @test isequal(map(a -> Array(a), modulation_storage_arrays(sensor)), before)
                     @test map(pointer, modulation_storage_arrays(sensor)) == addresses
-                end
-                @test_throws InvalidConfiguration ModulationOptics.update_cycle_averaged_circular_modulation!(
-                    WavefrontSensors.pyramid_operating_modulation(sensor), T(0.4))
-                for rejected_policy in (policies[1], policies[3])
-                    rejected = modulation_storage_sensor(tel, T, WavefrontSensors.PyramidShiftedMaskStrategy();
-                        geometry, policy=rejected_policy)
-                    before = map(a -> copy(Array(a)), modulation_storage_arrays(rejected))
-                    @test_throws InvalidConfiguration ModulationOptics.update_cycle_averaged_circular_modulation!(rejected, T(0.4))
-                    @test isequal(map(a -> Array(a), modulation_storage_arrays(rejected)), before)
                 end
             end
         end
@@ -189,8 +170,7 @@ end
         @testset "geometry=$geometry" begin
             policy = (modulation=T(0.7), modulation_points=4,
                 modulation_phase_offset_rad=T(0.31))
-            sensor = modulation_storage_sensor(telescope, T,
-                WavefrontSensors.PyramidShiftedMaskStrategy(); geometry, policy)
+            sensor = modulation_storage_sensor(telescope, T; geometry, policy)
             front = PyramidOpticalFrontEnd(sensor, source)
             rate = pyramid_rate_map(front, pupil)
             prepared = prepare_wfs_optics(front, pupil, rate)
@@ -216,14 +196,12 @@ end
                 @test map(pointer, modulation_storage_arrays(sensor)) == addresses
                 @test pointer(rate.values) == output_address
                 # The graph was captured before the update; its buffer bindings
-                # must now see the rebuilt shifted masks without recapture.
+                # must now see the updated pupil phases without recapture.
                 modulation_storage_replay!(captured, context)
                 actual = Array(rate.values)
                 fresh_policy = (modulation=enabled ? radius : zero(T),
                     modulation_points=4, modulation_phase_offset_rad=T(0.31))
-                fresh = modulation_storage_sensor(telescope, T,
-                    WavefrontSensors.PyramidShiftedMaskStrategy();
-                    geometry, policy=fresh_policy)
+                fresh = modulation_storage_sensor(telescope, T; geometry, policy=fresh_policy)
                 expected = modulation_storage_rate(fresh, pupil, source)
                 @test actual ≈ expected rtol=3f-5 atol=1f-6
                 @test !isapprox(actual, initial_rate; rtol=1f-4, atol=1f-6)

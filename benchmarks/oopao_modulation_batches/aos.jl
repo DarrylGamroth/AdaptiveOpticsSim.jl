@@ -23,8 +23,8 @@ const oracle_selector = oracle_backend == "cuda" ? CUDABackend() : CPUBackend()
 const oracle_precision = get(ENV, "AOS_ORACLE_PRECISION", "Float64")
 oracle_precision in ("Float32", "Float64") || error("precision must be Float32 or Float64")
 const oracle_T = oracle_precision == "Float32" ? Float32 : Float64
-const oracle_strategy = get(ENV, "AOS_ORACLE_STRATEGY", "pupil_tilt")
-oracle_strategy in ("pupil_tilt", "shifted_mask") || error("invalid oracle strategy")
+get(ENV, "AOS_ORACLE_STRATEGY", "pupil_tilt") == "pupil_tilt" ||
+    error("shifted-mask propagation was removed; this oracle evaluates physical pupil tilts")
 const precision_suffix = oracle_T === Float32 ? "_f32" : ""
 const oracle_default_prefix = (oracle_backend == "cpu" && !haskey(ENV,"AOS_ORACLE_BATCH") ? "aos" : "aos_$(oracle_backend)_b$(oracle_requested_batch)") * precision_suffix
 const oracle_prefix = get(ENV, "AOS_ORACLE_PREFIX", oracle_default_prefix)
@@ -38,8 +38,7 @@ for (n,p,m,points,sep,edge,b) in ((24,4,1.,8,4,0,2),(32,8,3.,20,8,0,1),(120,30,3
     pupil = PupilFunction(tel; T=oracle_T, backend=oracle_selector)
     wfs = PyramidWFS(tel; pupil_samples=p, modulation=m, modulation_points=points,
         n_pix_separation=sep, n_pix_edge=edge, binning=b,
-        modulation_propagation_strategy=oracle_strategy == "pupil_tilt" ?
-            W.PyramidPupilTiltStrategy() : W.PyramidShiftedMaskStrategy(), T=oracle_T)
+        modulation_propagation_strategy=W.PyramidPupilTiltStrategy(), T=oracle_T)
     front = PyramidOpticalFrontEnd(wfs, src)
     rate = pyramid_rate_map(front, pupil)
     prepared = prepare_wfs_optics(front, pupil, rate)
@@ -47,7 +46,7 @@ for (n,p,m,points,sep,edge,b) in ((24,4,1.,8,4,0,2),(32,8,3.,20,8,0,1),(120,30,3
     metadata = Dict("precision"=>string(oracle_T),"backend"=>oracle_backend,
         "actual_batch"=>hasproperty(batch,:batch_size) ? batch.batch_size : 1,
         "padded_side"=>size(W.pyramid_propagation_workspace(wfs).field,1),
-        "points"=>points,"strategy"=>oracle_strategy)
+        "points"=>points,"strategy"=>"pupil_tilt")
     open(io->TOML.print(io,metadata;sorted=true),joinpath(path,oracle_prefix*"_parameters.toml"),"w")
     function frame(opd)
         copyto!(pupil.opd, oracle_T.(opd))

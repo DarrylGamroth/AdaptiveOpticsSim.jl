@@ -680,7 +680,6 @@ function run_captured_wfs_replay_smoke(
 
     for (strategy_name, strategy) in (
         (:pupil_tilt, PyramidPupilTiltStrategy()),
-        (:shifted_mask, PyramidShiftedMaskStrategy()),
     )
         @testset "captured Pyramid $(strategy_name) replay" begin
             pyramid_opd = BackendArray(zeros(Float32, 8, 8))

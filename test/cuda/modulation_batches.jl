@@ -119,9 +119,8 @@ end
                 (T(0.6), T(0.3), T(0)), (T(-0.8), T(0.2), T(4)))),
         )
         cases = (
-            (WavefrontSensors.PyramidShiftedMaskStrategy(), (;)),
-            (WavefrontSensors.PyramidShiftedMaskStrategy(), (rooftop=T(0.25), phase_mask_rotation_rad=T(0.1))),
             (WavefrontSensors.PyramidPupilTiltStrategy(), (;)),
+            (WavefrontSensors.PyramidPupilTiltStrategy(), (rooftop=T(0.25), phase_mask_rotation_rad=T(0.1))),
         )
         for (strategy, geometry) in cases, policy in policies
             @testset "$T strategy=$(typeof(strategy)) geometry=$geometry policy=$policy" begin

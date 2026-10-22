@@ -1,4 +1,4 @@
-# CPU parity and architecture timelines for two Pyramid propagation strategies.
+# CPU parity and architecture timelines for physical Pyramid propagation.
 # AOS_PYRAMID_PROFILE=1 enables one profiler range per warmed case.
 # AOS_PYRAMID_COMPLETION=cooperative|blocking overrides the default for diagnosis.
 import CUDA
@@ -74,8 +74,7 @@ function profile_pyramid_efficiency()
             "synchronization"=>_PYRAMID_COMPLETION,
             "boundary"=>"Host time_ns around complete synchronized stream optics+noiseless acquisition;128 samples,32 warmups; timings from profiler invocation are diagnostic only"))
         for n in (64, 256)
-            for (label, strategy) in (("pupil_tilt", WavefrontSensors.PyramidPupilTiltStrategy()),
-                ("shifted_mask", WavefrontSensors.PyramidShiftedMaskStrategy()))
+            for (label, strategy) in (("pupil_tilt", WavefrontSensors.PyramidPupilTiltStrategy()),)
                 result = pyramid_efficiency_case(n, label, strategy)
                 println(io, "\n[[case]]")
                 TOML.print(io, Dict(string(k)=>v for (k,v) in pairs(result)))

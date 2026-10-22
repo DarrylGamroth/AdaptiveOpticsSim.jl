@@ -1,51 +1,8 @@
-# Diagnostic pupil tilts use the same offsets and coordinates as dense
-# preparation, evaluated directly into the existing field on its backend.
-@kernel function pyramid_modulated_pupil_field_kernel!(out, amplitude, opd,
-    offsets, coordinates, point::Int, amplitude_scale, weight, opd_to_cycles,
-    resolution::Int)
-    i, j = @index(Global, NTuple)
-    if i <= resolution && j <= resolution
-        @inbounds begin
-            phase = offsets[1, point] * coordinates[j] +
-                offsets[2, point] * coordinates[i]
-            out[i, j] = amplitude_scale * weight * amplitude[i, j] *
-                cis(phase) * cispi(opd_to_cycles * opd[i, j])
-        end
-    end
-end
-
 @inline function _pyramid_modulated_pupil_field!(out, amplitude, opd,
     modulation::PreparedFocalPlaneModulation, point, amplitude_scale, opd_to_cycles)
     weight = modulation.amplitude_weights[point]
     @views @. out = amplitude_scale * weight * amplitude *
         modulation.phases[:, :, point] * cispi(opd_to_cycles * opd)
-    return out
-end
-
-@inline function _pyramid_modulated_pupil_field!(out, amplitude, opd,
-    modulation::PreparedPyramidShiftedModulation, point, amplitude_scale, opd_to_cycles)
-    return _pyramid_modulated_pupil_field!(execution_style(out), out, amplitude,
-        opd, modulation, point, amplitude_scale, opd_to_cycles)
-end
-
-function _pyramid_modulated_pupil_field!(::ScalarCPUStyle, out, amplitude, opd,
-    modulation::PreparedPyramidShiftedModulation, point, amplitude_scale, opd_to_cycles)
-    offsets, coordinates = modulation.offsets, modulation.coordinates
-    weight = modulation.amplitude_weights[point]
-    @inbounds for j in axes(out, 2), i in axes(out, 1)
-        phase = offsets[1, point] * coordinates[j] + offsets[2, point] * coordinates[i]
-        out[i, j] = amplitude_scale * weight * amplitude[i, j] *
-            cis(phase) * cispi(opd_to_cycles * opd[i, j])
-    end
-    return out
-end
-
-function _pyramid_modulated_pupil_field!(style::AcceleratorStyle, out, amplitude, opd,
-    modulation::PreparedPyramidShiftedModulation, point, amplitude_scale, opd_to_cycles)
-    launch_kernel!(style, pyramid_modulated_pupil_field_kernel!, out, amplitude,
-        opd, modulation.offsets, modulation.coordinates, point, amplitude_scale,
-        modulation.amplitude_weights[point], opd_to_cycles, size(out, 1);
-        ndrange=size(out))
     return out
 end
 
@@ -87,207 +44,6 @@ function _build_pyramid_mask!(::AcceleratorStyle, mask,
     wfs::PyramidWFS, pupil::PupilFunction)
     copyto!(mask, host_pyramid_mask(wfs, pupil))
     return mask
-end
-
-function build_pyramid_shifted_masks!(wfs::PyramidWFS,
-    pupil::PupilFunction)
-    batch = pyramid_propagation_workspace(wfs).modulation_batch
-    return _build_pyramid_shifted_masks!(
-        execution_style(pyramid_propagation_workspace(wfs).pyramid_mask),
-        batch,
-        wfs,
-        _pupil_resolution(pupil),
-    )
-end
-
-@inline _build_pyramid_shifted_masks!(::ExecutionStyle,
-    ::NoPyramidModulationBatchWorkspace, ::PyramidWFS,
-    ::Int) = nothing
-
-@inline _build_pyramid_shifted_masks!(::ExecutionStyle,
-    ::PyramidModulationBatchWorkspace, ::PyramidWFS,
-    ::Int) = nothing
-
-@inline _pyramid_face_shifts_are_paired(shift_x, shift_y) =
-    shift_x[1] == shift_x[4] && shift_x[2] == shift_x[3] &&
-    shift_y[1] == shift_y[2] && shift_y[3] == shift_y[4]
-
-@inline function _pyramid_separable_shift_components(shift_x, shift_y)
-    _pyramid_face_shifts_are_paired(shift_x, shift_y) || throw(
-        InvalidConfiguration(
-            "separable Pyramid shifted masks require paired face shifts",
-        ),
-    )
-    return shift_x[1], shift_x[2], shift_y[1], shift_y[3]
-end
-
-@inline function _pyramid_shifted_mask_parameters(
-    batch::PyramidShiftedMaskModulationWorkspace,
-    wfs::PyramidWFS,
-    resolution::Int,
-)
-    masks = batch.shifted_masks
-    T = real(eltype(masks))
-    pad = size(masks, 1)
-    n_sub = wfs.front_end.pupil_samples
-    phase_mask = wfs.front_end.phase_mask
-    separation = something(phase_mask.n_pix_separation, 0)
-    r = (T(n_sub) + T(separation)) * phase_mask.mask_scale / T(2)
-    norma = T(resolution) / T(n_sub)
-    rooftop_pixels = phase_mask.rooftop * phase_mask.diffraction_padding /
-        sqrt(T(2))
-    coordinate_start = -T(pi) * (one(T) - inv(T(pad)))
-    coordinate_step = T(2pi) / T(pad)
-    rotation_sin, rotation_cos = sincos(phase_mask.rotation_rad)
-    shift_x = phase_mask.pupil_shift_x_pixels
-    shift_y = phase_mask.pupil_shift_y_pixels
-    return (
-        masks,
-        batch.axis_1_shifts_rad,
-        batch.axis_2_shifts_rad,
-        r,
-        norma,
-        rooftop_pixels,
-        coordinate_start,
-        coordinate_step,
-        rotation_cos,
-        rotation_sin,
-        shift_x,
-        shift_y,
-        pad,
-        size(masks, 3),
-    )
-end
-
-function _build_pyramid_shifted_masks!(::ScalarCPUStyle,
-    batch::PyramidShiftedMaskModulationWorkspace,
-    wfs::PyramidWFS,
-    resolution::Int)
-    masks, axis_1_shifts_rad, axis_2_shifts_rad, r, norma,
-        rooftop_pixels, coordinate_start, coordinate_step, rotation_cos,
-        rotation_sin, shift_x, shift_y, pad, point_count =
-        _pyramid_shifted_mask_parameters(batch, wfs, resolution)
-    @inbounds for point in 1:point_count, axis_2 in 1:pad, axis_1 in 1:pad
-        unrotated_x = coordinate_start + (axis_1 - 1) * coordinate_step +
-            axis_1_shifts_rad[point]
-        unrotated_y = coordinate_start + (axis_2 - 1) * coordinate_step +
-            axis_2_shifts_rad[point]
-        x = unrotated_x * rotation_cos - unrotated_y * rotation_sin
-        y = unrotated_y * rotation_cos + unrotated_x * rotation_sin
-        phase_1 = x * r + unrotated_x * shift_x[1] + y * r -
-            unrotated_y * shift_y[1] + rooftop_pixels
-        phase_2 = -x * r + unrotated_x * shift_x[2] + y * r -
-            unrotated_y * shift_y[2]
-        phase_3 = -x * r + unrotated_x * shift_x[3] - y * r -
-            unrotated_y * shift_y[3] + rooftop_pixels
-        phase_4 = x * r + unrotated_x * shift_x[4] - y * r -
-            unrotated_y * shift_y[4]
-        phase = -max(max(phase_1, phase_2), max(phase_3, phase_4)) * norma
-        masks[axis_1, axis_2, point] = cis(phase)
-    end
-    return masks
-end
-
-function _build_pyramid_shifted_masks!(style::AcceleratorStyle,
-    batch::PyramidShiftedMaskModulationWorkspace,
-    wfs::PyramidWFS,
-    resolution::Int)
-    masks, axis_1_shifts_rad, axis_2_shifts_rad, r, norma,
-        rooftop_pixels, coordinate_start, coordinate_step, rotation_cos,
-        rotation_sin, shift_x, shift_y, pad, point_count =
-        _pyramid_shifted_mask_parameters(batch, wfs, resolution)
-    launch_kernel!(style, pyramid_shifted_mask_stack_kernel!, masks,
-        axis_1_shifts_rad, axis_2_shifts_rad, r, norma, rooftop_pixels,
-        coordinate_start, coordinate_step, rotation_cos, rotation_sin,
-        shift_x[1], shift_y[1], shift_x[2], shift_y[2],
-        shift_x[3], shift_y[3], shift_x[4], shift_y[4],
-        pad, point_count; ndrange=size(masks))
-    return masks
-end
-
-@inline function _pyramid_separable_shifted_mask_parameters(
-    batch::PyramidSeparableShiftedMaskModulationWorkspace,
-    wfs::PyramidWFS,
-    resolution::Int,
-)
-    axis_1_factors = batch.axis_1_factors
-    T = real(eltype(axis_1_factors))
-    pad = size(axis_1_factors, 1)
-    n_sub = wfs.front_end.pupil_samples
-    phase_mask = wfs.front_end.phase_mask
-    separation = something(phase_mask.n_pix_separation, 0)
-    r = (T(n_sub) + T(separation)) * phase_mask.mask_scale / T(2)
-    norma = T(resolution) / T(n_sub)
-    coordinate_start = -T(pi) * (one(T) - inv(T(pad)))
-    coordinate_step = T(2pi) / T(pad)
-    shift_x_positive, shift_x_negative, shift_y_positive, shift_y_negative =
-        _pyramid_separable_shift_components(
-            phase_mask.pupil_shift_x_pixels,
-            phase_mask.pupil_shift_y_pixels,
-        )
-    return (
-        axis_1_factors,
-        batch.axis_2_factors,
-        batch.axis_1_shifts_rad,
-        batch.axis_2_shifts_rad,
-        r,
-        norma,
-        coordinate_start,
-        coordinate_step,
-        T(shift_x_positive),
-        T(shift_x_negative),
-        T(shift_y_positive),
-        T(shift_y_negative),
-        pad,
-        size(axis_1_factors, 2),
-    )
-end
-
-function _build_pyramid_shifted_masks!(::ScalarCPUStyle,
-    batch::PyramidSeparableShiftedMaskModulationWorkspace,
-    wfs::PyramidWFS,
-    resolution::Int)
-    axis_1_factors, axis_2_factors, axis_1_shifts_rad, axis_2_shifts_rad,
-        r, norma, coordinate_start, coordinate_step,
-        shift_x_positive, shift_x_negative,
-        shift_y_positive, shift_y_negative, pad, point_count =
-        _pyramid_separable_shifted_mask_parameters(batch, wfs, resolution)
-    @inbounds for point in 1:point_count, axis in 1:pad
-        coordinate = coordinate_start + (axis - 1) * coordinate_step
-        axis_1_coordinate = coordinate + axis_1_shifts_rad[point]
-        axis_2_coordinate = coordinate + axis_2_shifts_rad[point]
-        axis_1_phase = -max(
-            axis_1_coordinate * (r + shift_x_positive),
-            axis_1_coordinate * (-r + shift_x_negative),
-        ) * norma
-        axis_2_phase = -max(
-            axis_2_coordinate * (r - shift_y_positive),
-            axis_2_coordinate * (-r - shift_y_negative),
-        ) * norma
-        axis_1_factors[axis, point] = cis(axis_1_phase)
-        axis_2_factors[axis, point] = cis(axis_2_phase)
-    end
-    return axis_1_factors, axis_2_factors
-end
-
-function _build_pyramid_shifted_masks!(style::AcceleratorStyle,
-    batch::PyramidSeparableShiftedMaskModulationWorkspace,
-    wfs::PyramidWFS,
-    resolution::Int)
-    axis_1_factors, axis_2_factors, axis_1_shifts_rad, axis_2_shifts_rad,
-        r, norma, coordinate_start, coordinate_step,
-        shift_x_positive, shift_x_negative,
-        shift_y_positive, shift_y_negative, pad, point_count =
-        _pyramid_separable_shifted_mask_parameters(batch, wfs, resolution)
-    launch_kernel!(style,
-        pyramid_separable_shifted_mask_factors_kernel!,
-        axis_1_factors, axis_2_factors,
-        axis_1_shifts_rad, axis_2_shifts_rad,
-        r, norma, coordinate_start, coordinate_step,
-        shift_x_positive, shift_x_negative,
-        shift_y_positive, shift_y_negative,
-        pad, point_count; ndrange=size(axis_1_factors))
-    return axis_1_factors, axis_2_factors
 end
 
 function host_pyramid_mask(wfs::PyramidWFS, pupil::PupilFunction)
@@ -360,183 +116,11 @@ end
     return modulation === front_end.modulation ? batch.operating_weights : nothing
 end
 
-function _prepare_pyramid_shifted_focal_field!(::ScalarCPUStyle,
-    front_end::PyramidOpticalFrontEnd, amplitude, opd, amplitude_scale,
-    opd_to_cycles, offset::Int, resolution::Int)
-    propagation = pyramid_propagation_workspace(front_end)
-    focal_field = propagation.focal_field
-    fill!(focal_field, zero(eltype(focal_field)))
-    @views @. focal_field[offset+1:offset+resolution,
-        offset+1:offset+resolution] = amplitude_scale * amplitude *
-        cispi(opd_to_cycles * opd) *
-        propagation.phasor[offset+1:offset+resolution,
-            offset+1:offset+resolution]
-    execute_fft_plan!(focal_field, propagation.fft_plan)
-    return focal_field
-end
-
-function _prepare_pyramid_shifted_focal_field!(style::AcceleratorStyle,
-    front_end::PyramidOpticalFrontEnd, amplitude, opd, amplitude_scale,
-    opd_to_cycles, offset::Int, resolution::Int)
-    propagation = pyramid_propagation_workspace(front_end)
-    focal_field = propagation.focal_field
-    pad = size(focal_field, 1)
-    launch_kernel!(style, pyramid_unmodulated_pupil_field_kernel!,
-        focal_field, amplitude, opd, propagation.phasor, amplitude_scale,
-        opd_to_cycles, offset, resolution, pad; ndrange=size(focal_field))
-    execute_fft_plan!(focal_field, propagation.fft_plan)
-    return focal_field
-end
-
-function _prepare_pyramid_shifted_focal_field!(::ScalarCPUStyle,
-    front_end::PyramidOpticalFrontEnd, field, offset::Int, resolution::Int)
-    propagation = pyramid_propagation_workspace(front_end)
-    focal_field = propagation.focal_field
-    fill!(focal_field, zero(eltype(focal_field)))
-    @views @. focal_field[offset+1:offset+resolution,
-        offset+1:offset+resolution] = field *
-        propagation.phasor[offset+1:offset+resolution,
-            offset+1:offset+resolution]
-    execute_fft_plan!(focal_field, propagation.fft_plan)
-    return focal_field
-end
-
-function _prepare_pyramid_shifted_focal_field!(style::AcceleratorStyle,
-    front_end::PyramidOpticalFrontEnd, field, offset::Int, resolution::Int)
-    propagation = pyramid_propagation_workspace(front_end)
-    focal_field = propagation.focal_field
-    pad = size(focal_field, 1)
-    launch_kernel!(style, pyramid_unmodulated_electric_field_kernel!,
-        focal_field, field, propagation.phasor, offset, resolution, pad;
-        ndrange=size(focal_field))
-    execute_fft_plan!(focal_field, propagation.fft_plan)
-    return focal_field
-end
-
 @inline function pyramid_bfft_intensity_scale(
     ::Type{T}, pad::Integer,
 ) where {T<:AbstractFloat}
     inverse_scale = inv(T(pad) * T(pad))
     return inverse_scale * inverse_scale
-end
-
-@inline _pyramid_shifted_mask_point_count(
-    batch::PyramidShiftedMaskModulationWorkspace) =
-    size(batch.shifted_masks, 3)
-
-@inline _pyramid_shifted_mask_point_count(
-    batch::PyramidSeparableShiftedMaskModulationWorkspace) =
-    size(batch.axis_1_factors, 2)
-
-function _fill_pyramid_shifted_mask_batch!(::ScalarCPUStyle, stack,
-    focal_field, batch::PyramidShiftedMaskModulationWorkspace,
-    first_point::Int, pad::Int)
-    @inbounds for batch_index in 1:batch.batch_size
-        point = first_point + batch_index - 1
-        for j in 1:pad, i in 1:pad
-            stack[i, j, batch_index] = batch.operating_weights[point] *
-                focal_field[i, j] * batch.shifted_masks[i, j, point]
-        end
-    end
-    return stack
-end
-
-function _fill_pyramid_shifted_mask_batch!(::ScalarCPUStyle, stack,
-    focal_field, batch::PyramidSeparableShiftedMaskModulationWorkspace,
-    first_point::Int, pad::Int)
-    @inbounds for batch_index in 1:batch.batch_size
-        point = first_point + batch_index - 1
-        for j in 1:pad, i in 1:pad
-            stack[i, j, batch_index] = batch.operating_weights[point] *
-                focal_field[i, j] * batch.axis_1_factors[i, point] *
-                batch.axis_2_factors[j, point]
-        end
-    end
-    return stack
-end
-
-function _fill_pyramid_shifted_mask_batch!(style::AcceleratorStyle, stack,
-    focal_field, batch::PyramidShiftedMaskModulationWorkspace,
-    first_point::Int, pad::Int)
-    launch_kernel!(style, pyramid_shifted_mask_batch_kernel!, stack,
-        focal_field, batch.shifted_masks, batch.operating_weights,
-        first_point, pad, batch.batch_size; ndrange=(pad, pad))
-    return stack
-end
-
-function _fill_pyramid_shifted_mask_batch!(style::AcceleratorStyle, stack,
-    focal_field, batch::PyramidSeparableShiftedMaskModulationWorkspace,
-    first_point::Int, pad::Int)
-    launch_kernel!(style, pyramid_separable_shifted_mask_batch_kernel!, stack,
-        focal_field, batch.axis_1_factors, batch.axis_2_factors,
-        batch.operating_weights, first_point, pad, batch.batch_size;
-        ndrange=(pad, pad))
-    return stack
-end
-
-@inline function _enqueue_pyramid_shifted_mask_batch!(
-    style::AcceleratorStyle, stack, focal_field,
-    batch::PyramidShiftedMaskModulationWorkspace,
-    first_point::Int, pad::Int)
-    launch_kernel_async!(style, pyramid_shifted_mask_batch_kernel!, stack,
-        focal_field, batch.shifted_masks, batch.operating_weights,
-        first_point, pad, batch.batch_size; ndrange=(pad, pad))
-    return stack
-end
-
-@inline function _enqueue_pyramid_shifted_mask_batch!(
-    style::AcceleratorStyle, stack, focal_field,
-    batch::PyramidSeparableShiftedMaskModulationWorkspace,
-    first_point::Int, pad::Int)
-    launch_kernel_async!(style,
-        pyramid_separable_shifted_mask_batch_kernel!, stack, focal_field,
-        batch.axis_1_factors, batch.axis_2_factors,
-        batch.operating_weights, first_point, pad, batch.batch_size;
-        ndrange=(pad, pad))
-    return stack
-end
-
-function _propagate_pyramid_shifted_masks!(::ScalarCPUStyle, out,
-    front_end::PyramidOpticalFrontEnd,
-    batch::AbstractPyramidShiftedMaskModulationWorkspace)
-    stack = batch.field_stack
-    focal_field = pyramid_propagation_workspace(front_end).focal_field
-    pad = size(out, 1)
-    intensity_scale = pyramid_bfft_intensity_scale(eltype(out), pad)
-    point_count = _pyramid_shifted_mask_point_count(batch)
-    @inbounds for first_point in 1:batch.batch_size:point_count
-        _fill_pyramid_shifted_mask_batch!(ScalarCPUStyle(), stack,
-            focal_field, batch, first_point, pad)
-        execute_fft_plan!(stack, batch.bfft_plan)
-        for j in 1:pad, i in 1:pad
-            value = out[i, j]
-            batch_intensity = zero(eltype(out))
-            for batch_index in 1:batch.batch_size
-                batch_intensity += abs2(stack[i, j, batch_index])
-            end
-            out[i, j] = value + intensity_scale * batch_intensity
-        end
-    end
-    return nothing
-end
-
-function _propagate_pyramid_shifted_masks!(style::AcceleratorStyle, out,
-    front_end::PyramidOpticalFrontEnd,
-    batch::AbstractPyramidShiftedMaskModulationWorkspace)
-    stack = batch.field_stack
-    focal_field = pyramid_propagation_workspace(front_end).focal_field
-    pad = size(out, 1)
-    intensity_scale = pyramid_bfft_intensity_scale(eltype(out), pad)
-    point_count = _pyramid_shifted_mask_point_count(batch)
-    @inbounds for first_point in 1:batch.batch_size:point_count
-        _fill_pyramid_shifted_mask_batch!(style, stack, focal_field, batch,
-            first_point, pad)
-        execute_fft_plan!(stack, batch.bfft_plan)
-        launch_kernel!(style, pyramid_modulation_batch_intensity_kernel!,
-            out, stack, intensity_scale, pad, batch.batch_size;
-            ndrange=size(out))
-    end
-    return nothing
 end
 
 @inline function _propagate_pyramid_modulation_batch!(out,
@@ -583,18 +167,6 @@ function _pyramid_pupil_modulation_batch!(
     return true
 end
 
-function _pyramid_pupil_modulation_batch!(
-    batch::AbstractPyramidShiftedMaskModulationWorkspace, out,
-    front_end::PyramidOpticalFrontEnd, amplitude, opd, modulation,
-    amplitude_scale, opd_to_cycles, offset::Int, resolution::Int)
-    modulation === front_end.modulation || return false
-    style = execution_style(out)
-    _prepare_pyramid_shifted_focal_field!(style, front_end, amplitude, opd,
-        amplitude_scale, opd_to_cycles, offset, resolution)
-    _propagate_pyramid_shifted_masks!(style, out, front_end, batch)
-    return true
-end
-
 @inline function _pyramid_electric_field_modulation_batch!(
     ::NoPyramidModulationBatchWorkspace, out,
     front_end::PyramidOpticalFrontEnd, field, modulation,
@@ -620,18 +192,6 @@ function _pyramid_electric_field_modulation_batch!(
             ndrange=size(batch.field_stack))
         _propagate_pyramid_modulation_batch!(out, front_end, batch, style)
     end
-    return true
-end
-
-function _pyramid_electric_field_modulation_batch!(
-    batch::AbstractPyramidShiftedMaskModulationWorkspace, out,
-    front_end::PyramidOpticalFrontEnd, field, modulation,
-    offset::Int, resolution::Int)
-    modulation === front_end.modulation || return false
-    style = execution_style(out)
-    _prepare_pyramid_shifted_focal_field!(style, front_end, field, offset,
-        resolution)
-    _propagate_pyramid_shifted_masks!(style, out, front_end, batch)
     return true
 end
 
@@ -675,44 +235,6 @@ end
     return out
 end
 
-@inline function _enqueue_pyramid_rate_batch!(
-    style::AcceleratorStyle,
-    out,
-    front_end::PyramidOpticalFrontEnd,
-    input::PupilFunction,
-    source::Source,
-    batch::AbstractPyramidShiftedMaskModulationWorkspace,
-)
-    propagation = pyramid_propagation_workspace(front_end)
-    resolution = input.metadata.dimensions[1]
-    pad = size(propagation.focal_field, 1)
-    offset = div(pad - resolution, 2)
-    T = eltype(propagation.intensity)
-    amplitude_scale = sqrt(T(photon_irradiance(source)) *
-        T(input.metadata.sampling[1] * input.metadata.sampling[2]))
-    opd_to_cycles = T(2) / T(wavelength(source))
-    intensity_scale = pyramid_bfft_intensity_scale(T, pad)
-
-    fill!(out, zero(T))
-    launch_kernel_async!(style, pyramid_unmodulated_pupil_field_kernel!,
-        propagation.focal_field, input.amplitude, input.opd,
-        propagation.phasor, amplitude_scale, opd_to_cycles, offset,
-        resolution, pad; ndrange=size(propagation.focal_field))
-    enqueue_fft_plan!(propagation.focal_field, propagation.fft_plan)
-
-    point_count = _pyramid_shifted_mask_point_count(batch)
-    @inbounds for first_point in 1:batch.batch_size:point_count
-        _enqueue_pyramid_shifted_mask_batch!(style, batch.field_stack,
-            propagation.focal_field, batch, first_point, pad)
-        enqueue_fft_plan!(batch.field_stack, batch.bfft_plan)
-        launch_kernel_async!(style,
-            pyramid_modulation_batch_intensity_kernel!, out,
-            batch.field_stack, intensity_scale, pad, batch.batch_size;
-            ndrange=size(out))
-    end
-    return out
-end
-
 function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS,
     pupil::PupilFunction, src::AbstractSource) where {T<:AbstractFloat}
     return pyramid_intensity_core!(out, wfs, pupil, src,
@@ -721,14 +243,14 @@ end
 
 function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS,
     pupil::PupilFunction, src::AbstractSource,
-    modulation::Union{PreparedFocalPlaneModulation,PreparedPyramidShiftedModulation}) where {T<:AbstractFloat}
+    modulation::PreparedFocalPlaneModulation) where {T<:AbstractFloat}
     return pyramid_intensity_core!(execution_style(out), out, wfs, pupil, src,
         modulation)
 end
 
 function pyramid_intensity_core!(::ScalarCPUStyle,
     out::AbstractMatrix{T}, wfs::PyramidWFS, pupil::PupilFunction,
-    src::AbstractSource, modulation::Union{PreparedFocalPlaneModulation,PreparedPyramidShiftedModulation}) where {
+    src::AbstractSource, modulation::PreparedFocalPlaneModulation) where {
     T<:AbstractFloat,
 }
     prepare_pyramid_sampling!(wfs, pupil)
@@ -768,7 +290,7 @@ end
 
 function pyramid_intensity_core!(::AcceleratorStyle,
     out::AbstractMatrix{T}, wfs::PyramidWFS, pupil::PupilFunction,
-    src::AbstractSource, modulation::Union{PreparedFocalPlaneModulation,PreparedPyramidShiftedModulation}) where {
+    src::AbstractSource, modulation::PreparedFocalPlaneModulation) where {
     T<:AbstractFloat,
 }
     prepare_pyramid_sampling!(wfs, pupil)
@@ -943,63 +465,14 @@ end
 """
     Optics.update_cycle_averaged_circular_modulation!(wfs::PyramidWFS, radius; enabled=true)
 
-Update a prepared circular quadrature between frames. Rebuild shifted masks
-in place along with diagnostic offsets, preserving captured buffer bindings.
+Update prepared circular pupil-tilt phases in place between frames, preserving
+captured buffer bindings.
 The sample count, weights, precision and phase origin remain fixed. This is a
 synchronous control operation, not a captured waveform node.
 """
 function Optics.update_cycle_averaged_circular_modulation!(
     wfs::PyramidWFS, radius::T; enabled::Bool=true) where {T<:AbstractFloat}
     modulation = pyramid_operating_modulation(wfs)
-    _update_pyramid_circular_modulation!(wfs, modulation, radius, enabled)
-    return wfs
-end
-
-function _update_pyramid_circular_modulation!(wfs, modulation::PreparedFocalPlaneModulation,
-    radius, enabled)
     Optics.update_cycle_averaged_circular_modulation!(modulation, radius; enabled)
-    return nothing
-end
-
-function _update_pyramid_circular_modulation!(wfs,
-    modulation::PreparedPyramidShiftedModulation{<:CircularModulation}, radius::T,
-    enabled) where {T<:AbstractFloat}
-    isfinite(radius) && radius >= zero(T) || throw(InvalidConfiguration(
-        "cycle-averaged circular modulation radius must be finite and nonnegative"))
-    eltype(modulation.amplitude_weights) === T || throw(InvalidConfiguration(
-        "cycle-averaged circular modulation radius precision must match its prepared weights"))
-    count = modulation_point_count(modulation)
-    count == modulation.policy.samples || throw(InvalidConfiguration(
-        "cycle-averaged circular modulation point count changed after preparation"))
-    effective_radius = enabled ? radius : zero(T)
-    policy = CircularModulation(effective_radius, count,
-        T(modulation.policy.phase_offset_rad))
-    offsets = Matrix{T}(undef, 2, count)
-    shifts_1, shifts_2 = Vector{T}(undef, count), Vector{T}(undef, count)
-    coordinate_scale = T(2pi) / T(_pyramid_modulation_resolution(modulation) - 1)
-    for point in 1:count
-        x, y = modulation_offset(policy, point, T)
-        offsets[1, point], offsets[2, point] = x, y
-        shifts_1[point], shifts_2[point] = coordinate_scale * y, coordinate_scale * x
-    end
-    batch = pyramid_propagation_workspace(wfs).modulation_batch
-    copyto!(modulation.offsets, offsets)
-    copyto!(batch.axis_1_shifts_rad, shifts_1)
-    copyto!(batch.axis_2_shifts_rad, shifts_2)
-    # Geometry is unchanged; rebuild from the existing phase-mask contract.
-    _build_pyramid_shifted_masks!(execution_style(batch.field_stack), batch,
-        wfs, _pyramid_modulation_resolution(modulation))
-    return nothing
-end
-
-function _update_pyramid_circular_modulation!(wfs,
-    modulation::PreparedPyramidShiftedModulation, radius, enabled)
-    throw(InvalidConfiguration(
-        "cycle-averaged circular updates require a circular modulation policy"))
-end
-
-function Optics.update_cycle_averaged_circular_modulation!(
-    modulation::PreparedPyramidShiftedModulation, radius; enabled::Bool=true)
-    throw(InvalidConfiguration(
-        "update the owning PyramidWFS to rebuild shifted masks and diagnostic offsets together"))
+    return wfs
 end

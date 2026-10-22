@@ -187,10 +187,9 @@ the same two parameters; TOML accepts scalars or four-element arrays. Zero is
 the default. These are fixed construction values: prepare a new sensor or graph
 when changing them, and acquire calibration responses with that optical model.
 
-For an arbitrary four-face error, the shifted-mask strategy uses its full mask
-stack; paired shifts can retain its separable storage optimization. AOC accepts
-the resulting complex mask, complete camera images and measured responses
-through its existing interfaces.
+Arbitrary four-face errors use the same physical pupil-tilt propagation as
+paired shifts. AOC accepts the resulting complex mask, complete camera images
+and measured responses through its existing interfaces.
 
 Lardière et al., *Specifications, Procurement and Testing of the TMT-NFIRAOS
 Double-Pyramid Prisms*, §§5.3–5.4, motivates subpixel pupil-placement tolerance

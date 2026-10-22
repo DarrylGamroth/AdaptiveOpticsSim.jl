@@ -41,7 +41,7 @@ real remaining qualification gap.
 ## Known Scope Limits
 
 - The 2026-10-22 [independent Pyramid comparison](../benchmarks/results/platform/2026-10-22-modulation-batches/README.md)
-  found a pre-existing shifted-mask discrepancy: approximately 17.4% tip-response
+  led to removal of the shifted-mask approximation: approximately 17.4% tip-response
   and 19.0% ramp-slope relative error in one matched OOPAO case. A single fitted
   gain leaves an 8.2% tip-response residual. Self-calibrated loop stability does
   not qualify this path for accuracy-focused RTC validation. The corresponding
