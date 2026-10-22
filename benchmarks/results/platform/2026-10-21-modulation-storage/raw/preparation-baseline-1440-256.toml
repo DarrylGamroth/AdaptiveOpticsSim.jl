@@ -1,0 +1,67 @@
+"Manifest.toml_sha256" = "f908400b4f03aab70d048f8b8ba4cf6bea4e949601ddd63336c36835f941f906"
+"Project.toml_sha256" = "50a3a57cca8b2b86eeb3da049c3b0519e3787757dc9d203c8cc8b447cb3cd584"
+active_project = "/home/dgamroth/workspaces/codex/modulation-storage-evidence/baseline-env/Project.toml"
+arguments = ["/home/dgamroth/workspaces/codex/REVOLTCopperSim.jl", "/home/dgamroth/workspaces/codex/modulation-storage-evidence/preparation-baseline-1440-256.toml", "1440", "256"]
+command = "/home/dgamroth/.julia/juliaup/julia-1.13.2+0.x64.linux.gnu/bin/julia -C native -J/home/dgamroth/.julia/juliaup/julia-1.13.2+0.x64.linux.gnu/lib/julia/sys.so -g1 --startup-file=no --project=/home/dgamroth/workspaces/codex/modulation-storage-evidence/baseline-env/Project.toml --startup-file=no /home/dgamroth/workspaces/codex/AdaptiveOpticsSim-modulation-storage/benchmarks/measure_modulation_preparation_cuda.jl /home/dgamroth/workspaces/codex/REVOLTCopperSim.jl /home/dgamroth/workspaces/codex/modulation-storage-evidence/preparation-baseline-1440-256.toml 1440 256"
+complete = true
+copper_helper_sha256 = "7b08b1a1bb0f2081c2367396e509b9d59caaab32f6df61f223e59337de0b0bd8"
+cuda = "6.4.2"
+device = "NVIDIA GeForce RTX 3080"
+direct_modulation_device_bytes = 4246732800
+direct_modulation_host_bytes = 1024
+gc_seconds = 0.008258302
+harness = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim-modulation-storage/benchmarks/measure_modulation_preparation_cuda.jl"
+harness_sha256 = "380bbeff2a7928599ebedf0f6cf7c868498169f9c7f8df6459646ede4663a5ba"
+host_allocated_bytes = 4337509736
+julia = "1.13.2"
+julia_threads = 1
+maxrss_after_bytes = 0x016b348000
+maxrss_before_bytes = 0x69730000
+maxrss_highwater_increase_bytes = 0x0101c18000
+maxrss_scope = "process lifetime high-water resident bytes, including startup, compilation and warm graph; difference is not isolated target peak; compare fresh processes"
+measurement_boundary = "one CopperConvergence.prepare_case including captured graph and HIL boundary preparation plus final CUDA synchronization; target owner remains live through memory inspection"
+modulation_points = 256
+preparation_seconds = 8.464990304
+resolution = 1440
+validation_harness_sha256 = "8d0f4ae5f6a7da60b42196cad65f50357207cb552d5e0a428e81ebb932a946bd"
+warmup = "one disposable captured calibration graph n60/m4 and one completed graph frame, then GC/reclaim"
+
+[aos]
+diff_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+revision = "074f15ebeeb454a2e185aac58b2dc77a3a84894f"
+root = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl"
+status = ""
+version = "0.2.2"
+
+[copper]
+diff_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+revision = "a54ff97d41bfa921cc33deba28219b8f17fbbfa5"
+root = "/home/dgamroth/workspaces/codex/REVOLTCopperSim.jl"
+status = ""
+version = "0.2.0"
+
+[modulation]
+baseline_dense_phase_bytes = 4246732800
+owner_type = "AdaptiveOpticsSim.Optics.PreparedFocalPlaneModulation{AdaptiveOpticsSim.Optics.CircularModulation{Float32}, CUDACore.CuArray{ComplexF32, 3, CUDACore.DeviceMemory}, Vector{Float32}}"
+retained_array_bytes = 4246733824
+scope = "direct retained modulation arrays; excludes policy, shared propagation, masks, FFT plans, capture and allocator reserve"
+
+    [modulation.arrays.amplitude_weights]
+    backend = "host"
+    bytes = 1024
+    eltype = "Float32"
+    shape = [256]
+
+    [modulation.arrays.phases]
+    backend = "CUDA"
+    bytes = 4246732800
+    eltype = "ComplexF32"
+    shape = [1440, 1440, 256]
+
+[pool_after]
+reserved_bytes = 5033164800
+used_bytes = 5018157664
+
+[pool_before]
+reserved_bytes = 0
+used_bytes = 0

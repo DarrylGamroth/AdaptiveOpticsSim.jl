@@ -1,0 +1,17 @@
+ERROR: LoadError: dense modulation CPU/CUDA mismatch: Float32 n=8 policy=2 error=9.92019e-7
+Stacktrace:
+ [1] error(s::String)
+   @ Base ./error.jl:44
+ [2] dense_preparation!(directory::String)
+   @ Main ~/workspaces/codex/AdaptiveOpticsSim-modulation-storage/benchmarks/validate_modulation_storage_cuda.jl:137
+ [3] main(args::Vector{String})
+   @ Main ~/workspaces/codex/AdaptiveOpticsSim-modulation-storage/benchmarks/validate_modulation_storage_cuda.jl:220
+ [4] top-level scope
+   @ ~/workspaces/codex/AdaptiveOpticsSim-modulation-storage/benchmarks/validate_modulation_storage_cuda.jl:247
+ [5] include(mod::Module, _path::String)
+   @ Base ./Base.jl:309
+ [6] exec_options(opts::Base.JLOptions)
+   @ Base ./client.jl:344
+ [7] _start()
+   @ Base ./client.jl:577
+in expression starting at /home/dgamroth/workspaces/codex/AdaptiveOpticsSim-modulation-storage/benchmarks/validate_modulation_storage_cuda.jl:244

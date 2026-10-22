@@ -1,0 +1,4 @@
+Test Summary:                      | Pass  Total   Time
+Compact Pyramid modulation storage |  603    603  56.1s
+Test Summary:                                              | Pass  Total  Time
+Captured Pyramid rate observes in-place modulation updates |   26     26  0.4s

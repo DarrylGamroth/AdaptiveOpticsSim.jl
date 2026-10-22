@@ -1,0 +1,319 @@
+{
+  "harness_sha256": "8d0f4ae5f6a7da60b42196cad65f50357207cb552d5e0a428e81ebb932a946bd",
+  "cases": {
+    "n240-m96": {
+      "arrays": {
+        "rates": {
+          "shape": [
+            64,
+            64,
+            13
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "slopes": {
+          "shape": [
+            1432,
+            13
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "interaction": {
+          "shape": [
+            1432,
+            277
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "atmosphere_rates": {
+          "shape": [
+            64,
+            64,
+            32
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "atmosphere_frames": {
+          "shape": [
+            64,
+            64,
+            32
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "stream_rates": {
+          "shape": [
+            64,
+            64,
+            32
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "stream_frames": {
+          "shape": [
+            64,
+            64,
+            32
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        }
+      },
+      "timings": {
+        "calibration_captured": {
+          "baseline_median_ms": 1.8514875,
+          "changed_median_ms": 1.850596,
+          "baseline_p95_ms": 1.8556625,
+          "changed_p95_ms": 1.8533556500000001,
+          "baseline_maximum_ms": 1.86069,
+          "changed_maximum_ms": 1.855079
+        },
+        "atmosphere_captured": {
+          "baseline_median_ms": 1.8972635,
+          "changed_median_ms": 1.896713,
+          "baseline_p95_ms": 1.90049965,
+          "changed_p95_ms": 1.900596,
+          "baseline_maximum_ms": 1.902789,
+          "changed_maximum_ms": 1.902739
+        },
+        "atmosphere_stream": {
+          "baseline_median_ms": 1.9864215,
+          "changed_median_ms": 1.986802,
+          "baseline_p95_ms": 1.99513195,
+          "changed_p95_ms": 1.9977721499999999,
+          "baseline_maximum_ms": 2.017414,
+          "changed_maximum_ms": 2.015752
+        }
+      },
+      "baseline_modulation": {
+        "baseline_dense_phase_bytes": 44236800,
+        "owner_type": "AdaptiveOpticsSim.Optics.PreparedFocalPlaneModulation{AdaptiveOpticsSim.Optics.CircularModulation{Float32}, CUDACore.CuArray{ComplexF32, 3, CUDACore.DeviceMemory}, Vector{Float32}}",
+        "retained_array_bytes": 44237184,
+        "scope": "direct retained modulation arrays; excludes policy, shared propagation, masks, FFT plans, capture and allocator reserve",
+        "arrays": {
+          "amplitude_weights": {
+            "backend": "host",
+            "bytes": 384,
+            "eltype": "Float32",
+            "shape": [
+              96
+            ]
+          },
+          "phases": {
+            "backend": "CUDA",
+            "bytes": 44236800,
+            "eltype": "ComplexF32",
+            "shape": [
+              240,
+              240,
+              96
+            ]
+          }
+        }
+      },
+      "changed_modulation": {
+        "baseline_dense_phase_bytes": 44236800,
+        "owner_type": "AdaptiveOpticsSim.WavefrontSensors.PreparedPyramidShiftedModulation{AdaptiveOpticsSim.Optics.CircularModulation{Float32}, CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, CUDACore.CuArray{Float32, 2, CUDACore.DeviceMemory}, FixedSizeArrays.FixedSizeArray{Float32, 1, Memory{Float32}}}",
+        "retained_array_bytes": 2112,
+        "scope": "direct retained modulation arrays; excludes policy, shared propagation, masks, FFT plans, capture and allocator reserve",
+        "arrays": {
+          "amplitude_weights": {
+            "backend": "host",
+            "bytes": 384,
+            "eltype": "Float32",
+            "shape": [
+              96
+            ]
+          },
+          "coordinates": {
+            "backend": "CUDA",
+            "bytes": 960,
+            "eltype": "Float32",
+            "shape": [
+              240
+            ]
+          },
+          "offsets": {
+            "backend": "CUDA",
+            "bytes": 768,
+            "eltype": "Float32",
+            "shape": [
+              2,
+              96
+            ]
+          }
+        }
+      }
+    },
+    "n480-m32": {
+      "arrays": {
+        "rates": {
+          "shape": [
+            64,
+            64,
+            13
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "slopes": {
+          "shape": [
+            1432,
+            13
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "interaction": {
+          "shape": [
+            1432,
+            277
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "atmosphere_rates": {
+          "shape": [
+            64,
+            64,
+            32
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "atmosphere_frames": {
+          "shape": [
+            64,
+            64,
+            32
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "stream_rates": {
+          "shape": [
+            64,
+            64,
+            32
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        },
+        "stream_frames": {
+          "shape": [
+            64,
+            64,
+            32
+          ],
+          "identical": true,
+          "max_abs": 0.0,
+          "relative_l2": 0.0
+        }
+      },
+      "timings": {
+        "calibration_captured": {
+          "baseline_median_ms": 2.557325,
+          "changed_median_ms": 2.5607509999999998,
+          "baseline_p95_ms": 2.5733673,
+          "changed_p95_ms": 2.56768265,
+          "baseline_maximum_ms": 2.587086,
+          "changed_maximum_ms": 2.576456
+        },
+        "atmosphere_captured": {
+          "baseline_median_ms": 2.6262195,
+          "changed_median_ms": 2.6264950000000002,
+          "baseline_p95_ms": 2.6333317999999997,
+          "changed_p95_ms": 2.6317909999999998,
+          "baseline_maximum_ms": 2.643783,
+          "changed_maximum_ms": 2.636449
+        },
+        "atmosphere_stream": {
+          "baseline_median_ms": 2.705203,
+          "changed_median_ms": 2.707713,
+          "baseline_p95_ms": 2.7158271,
+          "changed_p95_ms": 2.7353845,
+          "baseline_maximum_ms": 2.752777,
+          "changed_maximum_ms": 2.738791
+        }
+      },
+      "baseline_modulation": {
+        "baseline_dense_phase_bytes": 58982400,
+        "owner_type": "AdaptiveOpticsSim.Optics.PreparedFocalPlaneModulation{AdaptiveOpticsSim.Optics.CircularModulation{Float32}, CUDACore.CuArray{ComplexF32, 3, CUDACore.DeviceMemory}, Vector{Float32}}",
+        "retained_array_bytes": 58982528,
+        "scope": "direct retained modulation arrays; excludes policy, shared propagation, masks, FFT plans, capture and allocator reserve",
+        "arrays": {
+          "amplitude_weights": {
+            "backend": "host",
+            "bytes": 128,
+            "eltype": "Float32",
+            "shape": [
+              32
+            ]
+          },
+          "phases": {
+            "backend": "CUDA",
+            "bytes": 58982400,
+            "eltype": "ComplexF32",
+            "shape": [
+              480,
+              480,
+              32
+            ]
+          }
+        }
+      },
+      "changed_modulation": {
+        "baseline_dense_phase_bytes": 58982400,
+        "owner_type": "AdaptiveOpticsSim.WavefrontSensors.PreparedPyramidShiftedModulation{AdaptiveOpticsSim.Optics.CircularModulation{Float32}, CUDACore.CuArray{Float32, 1, CUDACore.DeviceMemory}, CUDACore.CuArray{Float32, 2, CUDACore.DeviceMemory}, FixedSizeArrays.FixedSizeArray{Float32, 1, Memory{Float32}}}",
+        "retained_array_bytes": 2304,
+        "scope": "direct retained modulation arrays; excludes policy, shared propagation, masks, FFT plans, capture and allocator reserve",
+        "arrays": {
+          "amplitude_weights": {
+            "backend": "host",
+            "bytes": 128,
+            "eltype": "Float32",
+            "shape": [
+              32
+            ]
+          },
+          "coordinates": {
+            "backend": "CUDA",
+            "bytes": 1920,
+            "eltype": "Float32",
+            "shape": [
+              480
+            ]
+          },
+          "offsets": {
+            "backend": "CUDA",
+            "bytes": 256,
+            "eltype": "Float32",
+            "shape": [
+              2,
+              32
+            ]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,578 @@
+"Manifest.toml_sha256" = "f908400b4f03aab70d048f8b8ba4cf6bea4e949601ddd63336c36835f941f906"
+"Project.toml_sha256" = "50a3a57cca8b2b86eeb3da049c3b0519e3787757dc9d203c8cc8b447cb3cd584"
+active_project = "/home/dgamroth/workspaces/codex/modulation-storage-evidence/baseline-env/Project.toml"
+arguments = ["/home/dgamroth/workspaces/codex/REVOLTCopperSim.jl", "/home/dgamroth/workspaces/codex/modulation-storage-evidence/baseline-final"]
+command = "/home/dgamroth/.julia/juliaup/julia-1.13.2+0.x64.linux.gnu/bin/julia -C native -J/home/dgamroth/.julia/juliaup/julia-1.13.2+0.x64.linux.gnu/lib/julia/sys.so -g1 --startup-file=no --project=/home/dgamroth/workspaces/codex/modulation-storage-evidence/baseline-env/Project.toml --startup-file=no /home/dgamroth/workspaces/codex/AdaptiveOpticsSim-modulation-storage/benchmarks/validate_modulation_storage_cuda.jl /home/dgamroth/workspaces/codex/REVOLTCopperSim.jl /home/dgamroth/workspaces/codex/modulation-storage-evidence/baseline-final"
+complete = true
+cuda = "6.4.2"
+device = "NVIDIA GeForce RTX 3080"
+harness = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim-modulation-storage/benchmarks/validate_modulation_storage_cuda.jl"
+harness_sha256 = "8d0f4ae5f6a7da60b42196cad65f50357207cb552d5e0a428e81ebb932a946bd"
+helper_sha256 = "7b08b1a1bb0f2081c2367396e509b9d59caaab32f6df61f223e59337de0b0bd8"
+julia = "1.13.2"
+julia_threads = 1
+timing_boundary = "host wall elapsed around step_graph!, includes prepared graph completion; warmups32 samples128; evolving noisy atmosphere"
+
+[aos]
+diff_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+revision = "074f15ebeeb454a2e185aac58b2dc77a3a84894f"
+root = "/home/dgamroth/workspaces/codex/AdaptiveOpticsSim.jl"
+status = ""
+version = "0.2.2"
+
+[cases.n240-m96]
+complete = true
+divisor = 69423.26401626332
+interaction_poke_m = 2.0e-8
+points = 96
+probes = ["flat", "piston", "tilt_x_20nm", "tilt_y_20nm", "focus_20nm", "astigmatism_20nm", "coma_20nm", "tilt_x_100nm", "focus_100nm", "fourier_4_20nm", "fourier_8_20nm", "fourier_12_20nm", "mixed_100nm"]
+resolution = 240
+
+    [cases.n240-m96.atmosphere_captured]
+    host_bytes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    maximum_ms = 1.902789
+    median_ms = 1.8972635
+    minimum_ms = 1.891287
+    p95_ms = 1.90049965
+    samples = 128
+    samples_ms = [1.895715, 1.89799, 1.896617, 1.898902, 1.89794, 1.898731, 1.89806, 1.898441, 1.896327, 1.898, 1.893432, 1.897859, 1.899963, 1.895386, 1.891307, 1.896848, 1.895806, 1.893341, 1.895014, 1.89817, 1.897368, 1.899022, 1.89824, 1.895736, 1.899273, 1.896898, 1.900434, 1.895586, 1.895234, 1.897158, 1.896737, 1.897248, 1.897338, 1.895916, 1.902789, 1.898752, 1.899493, 1.891788, 1.895936, 1.900715, 1.900294, 1.895545, 1.894774, 1.897139, 1.900535, 1.897819, 1.89782, 1.898511, 1.89821, 1.89818, 1.891287, 1.897159, 1.897629, 1.895055, 1.895435, 1.896016, 1.897579, 1.897529, 1.898811, 1.896637, 1.896497, 1.899333, 1.899573, 1.895956, 1.898912, 1.895795, 1.897389, 1.89776, 1.899262, 1.895174, 1.897529, 1.899012, 1.89766, 1.895806, 1.893772, 1.895996, 1.89799, 1.896607, 1.89272, 1.8979, 1.894002, 1.895135, 1.895104, 1.896237, 1.891338, 1.901256, 1.896497, 1.895575, 1.891487, 1.898551, 1.899613, 1.895936, 1.89809, 1.897549, 1.897539, 1.895165, 1.899883, 1.895034, 1.896267, 1.898922, 1.898551, 1.89831, 1.894905, 1.897619, 1.901026, 1.894042, 1.895475, 1.894002, 1.897279, 1.900966, 1.897409, 1.892098, 1.895074, 1.896718, 1.896256, 1.894724, 1.900755, 1.897469, 1.896126, 1.897299, 1.900024, 1.898511, 1.897609, 1.895025, 1.895785, 1.897239, 1.898661, 1.89294]
+    warmups = 32
+    zero_host_allocation_required = true
+
+    [cases.n240-m96.atmosphere_frames]
+    bytes = 524288
+    eltype = "Float32"
+    file = "n240-m96-atmosphere-frames.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "dec9b492b592315d9999e9f9ac4f7ac00de40952941e6a77d4adb8d52b842b89"
+    shape = [64, 64, 32]
+
+    [cases.n240-m96.atmosphere_rates]
+    bytes = 524288
+    eltype = "Float32"
+    file = "n240-m96-atmosphere-rates.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "56b9d5986c94e2a6e7acaabcf5271d30d8a2a06008bf53f9369cff9987d1128c"
+    shape = [64, 64, 32]
+
+    [cases.n240-m96.atmosphere_stream]
+    host_bytes = [14880, 14880, 14880, 14880, 14880, 14880, 14880, 14880, 14880, 14880, 14880, 14880, 14880, 14880, 14880, 14880]
+    maximum_ms = 2.017414
+    median_ms = 1.9864215
+    minimum_ms = 1.978421
+    p95_ms = 1.99513195
+    samples = 128
+    samples_ms = [1.986536, 1.990444, 1.986717, 1.997106, 1.98817, 1.984763, 1.986256, 1.985154, 1.989703, 1.984703, 1.989221, 1.98833, 1.98805, 1.986716, 1.986136, 1.990985, 1.990033, 1.983952, 1.987869, 1.989181, 1.994, 1.987769, 1.986456, 1.983571, 2.017414, 1.994241, 1.997717, 1.981788, 1.992327, 1.986737, 1.981748, 1.994311, 1.978421, 1.996225, 1.986666, 1.986666, 1.985755, 1.985835, 1.984903, 1.983711, 1.988119, 1.985504, 1.984152, 1.986336, 1.988991, 1.986947, 1.980686, 1.988069, 1.987609, 1.987818, 1.984322, 1.985274, 1.986647, 1.985504, 1.984373, 2.002166, 2.008267, 1.989182, 1.984853, 1.984653, 1.987238, 1.986406, 1.98852, 1.986216, 1.995574, 1.985234, 1.987228, 1.989362, 1.985434, 1.98877, 1.981888, 1.985856, 1.985514, 1.986437, 1.985054, 1.991996, 1.985444, 1.984022, 1.986226, 1.986106, 1.985404, 1.986527, 1.986476, 1.986777, 1.983551, 1.988409, 1.98825, 1.985715, 1.981858, 1.992948, 1.983772, 1.987047, 1.987679, 1.988991, 1.986596, 1.983361, 1.98299, 1.984663, 1.985124, 1.985585, 1.984733, 1.989602, 1.985555, 1.984933, 1.985935, 1.984382, 1.984042, 1.989522, 1.985976, 1.992327, 1.984012, 1.982479, 1.981807, 1.986196, 1.98319, 1.984102, 1.986767, 1.983832, 1.986917, 1.98851, 1.987969, 1.985354, 1.987718, 1.984162, 1.986717, 1.988911, 1.983681, 1.982739]
+    warmups = 32
+    zero_host_allocation_required = false
+
+    [cases.n240-m96.calibration_captured]
+    host_bytes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    maximum_ms = 1.86069
+    median_ms = 1.8514875
+    minimum_ms = 1.843457
+    p95_ms = 1.8556625
+    samples = 128
+    samples_ms = [1.850411, 1.852213, 1.852434, 1.851964, 1.853666, 1.850971, 1.851262, 1.852244, 1.851944, 1.852454, 1.853335, 1.850531, 1.851883, 1.84999, 1.851252, 1.849128, 1.853967, 1.854729, 1.850601, 1.853406, 1.849258, 1.854508, 1.849268, 1.854268, 1.851683, 1.852434, 1.852665, 1.854558, 1.852355, 1.851341, 1.853936, 1.852905, 1.852815, 1.852203, 1.85015, 1.853136, 1.852665, 1.853166, 1.85058, 1.851894, 1.85599, 1.850621, 1.851983, 1.852725, 1.850361, 1.853105, 1.85516, 1.85584, 1.851211, 1.86069, 1.85582, 1.851473, 1.855069, 1.855881, 1.847946, 1.852995, 1.85537, 1.858606, 1.852995, 1.848737, 1.848847, 1.853616, 1.852024, 1.848928, 1.852063, 1.846664, 1.856211, 1.848697, 1.854869, 1.853195, 1.851753, 1.854088, 1.849739, 1.852494, 1.85046, 1.849278, 1.84504, 1.849338, 1.845541, 1.847725, 1.843457, 1.850671, 1.851442, 1.851683, 1.851333, 1.846964, 1.85055, 1.846894, 1.85048, 1.852074, 1.852384, 1.849499, 1.85011, 1.846543, 1.8501, 1.848988, 1.854227, 1.850651, 1.849288, 1.852895, 1.846724, 1.851893, 1.852334, 1.851824, 1.851081, 1.84484, 1.854238, 1.849348, 1.85025, 1.850912, 1.85043, 1.846854, 1.852334, 1.851032, 1.846152, 1.849489, 1.851502, 1.850711, 1.849559, 1.852665, 1.847495, 1.854097, 1.850551, 1.850951, 1.849108, 1.849919, 1.85005, 1.853335]
+    warmups = 32
+    zero_host_allocation_required = true
+
+    [cases.n240-m96.captured_reset_frames]
+    identical = true
+    max_abs = 0.0
+    relative_l2 = 0.0
+
+    [cases.n240-m96.captured_reset_rates]
+    identical = true
+    max_abs = 0.0
+    relative_l2 = 0.0
+
+    [cases.n240-m96.interaction]
+    bytes = 3173312
+    eltype = "Float64"
+    file = "n240-m96-interaction.f64"
+    order = "Julia column-major little-endian"
+    sha256 = "535be6167660496d57f00c8c30436cffc6d8a8e59990fe019ea264d9344b71a7"
+    shape = [1432, 277]
+
+    [cases.n240-m96.modulation]
+    baseline_dense_phase_bytes = 44236800
+    owner_type = "AdaptiveOpticsSim.Optics.PreparedFocalPlaneModulation{AdaptiveOpticsSim.Optics.CircularModulation{Float32}, CUDACore.CuArray{ComplexF32, 3, CUDACore.DeviceMemory}, Vector{Float32}}"
+    retained_array_bytes = 44237184
+    scope = "direct retained modulation arrays; excludes policy, shared propagation, masks, FFT plans, capture and allocator reserve"
+
+        [cases.n240-m96.modulation.arrays.amplitude_weights]
+        backend = "host"
+        bytes = 384
+        eltype = "Float32"
+        shape = [96]
+
+        [cases.n240-m96.modulation.arrays.phases]
+        backend = "CUDA"
+        bytes = 44236800
+        eltype = "ComplexF32"
+        shape = [240, 240, 96]
+
+    [cases.n240-m96.pool_after]
+    reserved_bytes = 134217728
+    used_bytes = 133613344
+
+    [cases.n240-m96.pool_before]
+    reserved_bytes = 0
+    used_bytes = 0
+
+    [cases.n240-m96.rates]
+    bytes = 212992
+    eltype = "Float32"
+    file = "n240-m96-rates.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "89114e55c948d3a52c1ea6b0dbb778441b90cacbb7616bec6740b010e2201f74"
+    shape = [64, 64, 13]
+
+    [cases.n240-m96.slopes]
+    bytes = 148928
+    eltype = "Float64"
+    file = "n240-m96-slopes.f64"
+    order = "Julia column-major little-endian"
+    sha256 = "e298cb16a13338cf03ce3ae788e58556280c86a9d352d74ea2c071febed02c08"
+    shape = [1432, 13]
+
+    [cases.n240-m96.stream_captured_frames]
+    identical = false
+    max_abs = 1.0239410400390625
+    relative_l2 = 8.381360687281672e-5
+
+    [cases.n240-m96.stream_captured_rates]
+    identical = false
+    max_abs = 0.0234375
+    relative_l2 = 1.0725710708292565e-7
+
+    [cases.n240-m96.stream_frames]
+    bytes = 524288
+    eltype = "Float32"
+    file = "n240-m96-stream-frames.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "42d55a35ad6a2b04a591f4d24839d40fac3038c98c95255c2434cffb74872c28"
+    shape = [64, 64, 32]
+
+    [cases.n240-m96.stream_rates]
+    bytes = 524288
+    eltype = "Float32"
+    file = "n240-m96-stream-rates.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "6721539d67244fb335c4f884dbd27611da0738f65e594e1f013ad3b8daad1d26"
+    shape = [64, 64, 32]
+
+[cases.n480-m32]
+complete = true
+divisor = 69375.10842912557
+interaction_poke_m = 2.0e-8
+points = 32
+probes = ["flat", "piston", "tilt_x_20nm", "tilt_y_20nm", "focus_20nm", "astigmatism_20nm", "coma_20nm", "tilt_x_100nm", "focus_100nm", "fourier_4_20nm", "fourier_8_20nm", "fourier_12_20nm", "mixed_100nm"]
+resolution = 480
+
+    [cases.n480-m32.atmosphere_captured]
+    host_bytes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    maximum_ms = 2.643783
+    median_ms = 2.6262195
+    minimum_ms = 2.618776
+    p95_ms = 2.6333317999999997
+    samples = 128
+    samples_ms = [2.632882, 2.634935, 2.624106, 2.620419, 2.629396, 2.624426, 2.625298, 2.627933, 2.627622, 2.626851, 2.625017, 2.628635, 2.626881, 2.63198, 2.627001, 2.6265, 2.627021, 2.622673, 2.621461, 2.628093, 2.626941, 2.626791, 2.626229, 2.622964, 2.622302, 2.629406, 2.624346, 2.62639, 2.624737, 2.629465, 2.628153, 2.622132, 2.628254, 2.624817, 2.626189, 2.623534, 2.624838, 2.620999, 2.62138, 2.636078, 2.626581, 2.624747, 2.629144, 2.626481, 2.624025, 2.627342, 2.626941, 2.628574, 2.628033, 2.627813, 2.629215, 2.627953, 2.624857, 2.620098, 2.623444, 2.624196, 2.627622, 2.627922, 2.622954, 2.624887, 2.630508, 2.625608, 2.6266, 2.624517, 2.627332, 2.62621, 2.621891, 2.625578, 2.629254, 2.621271, 2.625999, 2.620449, 2.628705, 2.62694, 2.625988, 2.627873, 2.627552, 2.627783, 2.624356, 2.633574, 2.624005, 2.62662, 2.624746, 2.627863, 2.628534, 2.625619, 2.625158, 2.621861, 2.622362, 2.625618, 2.627381, 2.624818, 2.628323, 2.62091, 2.628945, 2.624245, 2.624726, 2.628825, 2.631069, 2.624416, 2.627032, 2.631439, 2.625838, 2.622754, 2.624105, 2.62631, 2.62605, 2.623975, 2.636418, 2.619738, 2.625699, 2.624576, 2.628564, 2.627231, 2.625168, 2.627091, 2.623094, 2.626249, 2.621802, 2.626129, 2.618776, 2.629125, 2.623765, 2.622623, 2.643783, 2.638332, 2.624938, 2.639083]
+    warmups = 32
+    zero_host_allocation_required = true
+
+    [cases.n480-m32.atmosphere_frames]
+    bytes = 524288
+    eltype = "Float32"
+    file = "n480-m32-atmosphere-frames.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "2942f908ae2018b0c1dfa1d1db88f14f3fbe622f0783cc1dbcba9b3c09167f35"
+    shape = [64, 64, 32]
+
+    [cases.n480-m32.atmosphere_rates]
+    bytes = 524288
+    eltype = "Float32"
+    file = "n480-m32-atmosphere-rates.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "61f6a7ab791515567002952d8bd18afdb2807f8e1fb48aa971b51929aa84436d"
+    shape = [64, 64, 32]
+
+    [cases.n480-m32.atmosphere_stream]
+    host_bytes = [12320, 12320, 12320, 12320, 12320, 12320, 12320, 12320, 12320, 12320, 12320, 12320, 12320, 12320, 12320, 12320]
+    maximum_ms = 2.752777
+    median_ms = 2.705203
+    minimum_ms = 2.697974
+    p95_ms = 2.7158271
+    samples = 128
+    samples_ms = [2.720627, 2.721017, 2.71675, 2.704447, 2.713925, 2.703836, 2.707562, 2.706821, 2.708254, 2.71119, 2.707493, 2.705408, 2.716609, 2.709296, 2.712432, 2.707272, 2.709777, 2.705248, 2.708865, 2.703975, 2.70637, 2.709255, 2.702764, 2.703836, 2.706811, 2.71134, 2.705028, 2.705578, 2.708404, 2.7059, 2.706671, 2.752777, 2.74304, 2.705999, 2.71135, 2.703375, 2.71169, 2.703585, 2.710318, 2.704927, 2.704998, 2.713945, 2.704457, 2.703334, 2.709255, 2.702022, 2.704376, 2.704998, 2.704407, 2.709576, 2.708355, 2.704697, 2.70649, 2.704706, 2.70105, 2.704778, 2.718493, 2.710017, 2.709036, 2.70625, 2.702703, 2.702714, 2.704397, 2.70648, 2.703755, 2.702744, 2.705408, 2.698846, 2.707743, 2.702594, 2.703465, 2.707112, 2.707021, 2.705158, 2.702313, 2.704136, 2.70121, 2.703155, 2.705148, 2.707723, 2.706801, 2.700289, 2.703605, 2.70608, 2.707633, 2.706049, 2.706891, 2.700519, 2.70089, 2.698165, 2.705308, 2.70038, 2.698234, 2.697974, 2.704156, 2.713554, 2.705038, 2.708355, 2.70638, 2.702723, 2.708184, 2.704998, 2.709787, 2.703766, 2.706841, 2.702482, 2.701811, 2.700248, 2.709336, 2.704877, 2.708174, 2.704507, 2.714375, 2.699448, 2.703485, 2.70095, 2.703646, 2.705147, 2.708904, 2.70031, 2.705398, 2.708154, 2.699949, 2.704457, 2.70124, 2.698405, 2.704808, 2.702874]
+    warmups = 32
+    zero_host_allocation_required = false
+
+    [cases.n480-m32.calibration_captured]
+    host_bytes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+    maximum_ms = 2.587086
+    median_ms = 2.557325
+    minimum_ms = 2.549325
+    p95_ms = 2.5733673
+    samples = 128
+    samples_ms = [2.566377, 2.567028, 2.560786, 2.557611, 2.559374, 2.552311, 2.558321, 2.560496, 2.553904, 2.558212, 2.569904, 2.569953, 2.571737, 2.574352, 2.570193, 2.572388, 2.574443, 2.573851, 2.575123, 2.575685, 2.572469, 2.570996, 2.568561, 2.575885, 2.587086, 2.566517, 2.55751, 2.556778, 2.559976, 2.55742, 2.556499, 2.556859, 2.55223, 2.561238, 2.560726, 2.55166, 2.560406, 2.556498, 2.565235, 2.561798, 2.560155, 2.560045, 2.555867, 2.552431, 2.552912, 2.557811, 2.554785, 2.555577, 2.558492, 2.553884, 2.5575, 2.555216, 2.557912, 2.560816, 2.554505, 2.555757, 2.555677, 2.549575, 2.556549, 2.55723, 2.554765, 2.554635, 2.555957, 2.553302, 2.559785, 2.557009, 2.555417, 2.555887, 2.56284, 2.560296, 2.557631, 2.55189, 2.561227, 2.559995, 2.562259, 2.556779, 2.560597, 2.554104, 2.555436, 2.556749, 2.559083, 2.557871, 2.555036, 2.558793, 2.556368, 2.555045, 2.554896, 2.555366, 2.556699, 2.551619, 2.556789, 2.556839, 2.555897, 2.554655, 2.555727, 2.558702, 2.553864, 2.555667, 2.555026, 2.561397, 2.555246, 2.55709, 2.560245, 2.566478, 2.555797, 2.553413, 2.556027, 2.560165, 2.552421, 2.554475, 2.560296, 2.56284, 2.549325, 2.55721, 2.556468, 2.561638, 2.553853, 2.555206, 2.564213, 2.558172, 2.555026, 2.55229, 2.55742, 2.557741, 2.561538, 2.550798, 2.553954, 2.55743]
+    warmups = 32
+    zero_host_allocation_required = true
+
+    [cases.n480-m32.captured_reset_frames]
+    identical = true
+    max_abs = 0.0
+    relative_l2 = 0.0
+
+    [cases.n480-m32.captured_reset_rates]
+    identical = true
+    max_abs = 0.0
+    relative_l2 = 0.0
+
+    [cases.n480-m32.interaction]
+    bytes = 3173312
+    eltype = "Float64"
+    file = "n480-m32-interaction.f64"
+    order = "Julia column-major little-endian"
+    sha256 = "2ee2b1a8b1344923f647c846a536f8a3d5a2546e9d4274ca8581827072988a1b"
+    shape = [1432, 277]
+
+    [cases.n480-m32.modulation]
+    baseline_dense_phase_bytes = 58982400
+    owner_type = "AdaptiveOpticsSim.Optics.PreparedFocalPlaneModulation{AdaptiveOpticsSim.Optics.CircularModulation{Float32}, CUDACore.CuArray{ComplexF32, 3, CUDACore.DeviceMemory}, Vector{Float32}}"
+    retained_array_bytes = 58982528
+    scope = "direct retained modulation arrays; excludes policy, shared propagation, masks, FFT plans, capture and allocator reserve"
+
+        [cases.n480-m32.modulation.arrays.amplitude_weights]
+        backend = "host"
+        bytes = 128
+        eltype = "Float32"
+        shape = [32]
+
+        [cases.n480-m32.modulation.arrays.phases]
+        backend = "CUDA"
+        bytes = 58982400
+        eltype = "ComplexF32"
+        shape = [480, 480, 32]
+
+    [cases.n480-m32.pool_after]
+    reserved_bytes = 402653184
+    used_bytes = 396208284
+
+    [cases.n480-m32.pool_before]
+    reserved_bytes = 0
+    used_bytes = 0
+
+    [cases.n480-m32.rates]
+    bytes = 212992
+    eltype = "Float32"
+    file = "n480-m32-rates.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "b3508ea5ae8dd9f5d6dc57267b40178a074f31db22af369f823fc3248e34ebfc"
+    shape = [64, 64, 13]
+
+    [cases.n480-m32.slopes]
+    bytes = 148928
+    eltype = "Float64"
+    file = "n480-m32-slopes.f64"
+    order = "Julia column-major little-endian"
+    sha256 = "0dffd62403d8158c62ef949b5b1c5325c7fb6007af03df4f1603d32d030cc7a9"
+    shape = [1432, 13]
+
+    [cases.n480-m32.stream_captured_frames]
+    identical = true
+    max_abs = 0.0
+    relative_l2 = 0.0
+
+    [cases.n480-m32.stream_captured_rates]
+    identical = false
+    max_abs = 0.02734375
+    relative_l2 = 1.1018121351276028e-7
+
+    [cases.n480-m32.stream_frames]
+    bytes = 524288
+    eltype = "Float32"
+    file = "n480-m32-stream-frames.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "2942f908ae2018b0c1dfa1d1db88f14f3fbe622f0783cc1dbcba9b3c09167f35"
+    shape = [64, 64, 32]
+
+    [cases.n480-m32.stream_rates]
+    bytes = 524288
+    eltype = "Float32"
+    file = "n480-m32-stream-rates.f32"
+    order = "Julia column-major little-endian"
+    sha256 = "06dd64a24a3ca927c56606134503b7a6667968f93cf596839f0467cd4fca36c8"
+    shape = [64, 64, 32]
+
+[copper]
+diff_sha256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+revision = "a54ff97d41bfa921cc33deba28219b8f17fbbfa5"
+root = "/home/dgamroth/workspaces/codex/REVOLTCopperSim.jl"
+status = ""
+version = "0.2.0"
+
+[dense_preparation.dense-Float32-n7-policy1]
+amplitude_weights = [1.0]
+atol = 9.5367431640625e-7
+max_abs = 0.0
+rtol = 9.5367431640625e-7
+
+    [dense_preparation.dense-Float32-n7-policy1.cpu]
+    bytes = 392
+    eltype = "ComplexF32"
+    file = "dense-Float32-n7-policy1-cpu.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "4a7b32af71fbd1da04deef11a31c95744c9eb1451dc733fc8e581ee0b88d4f50"
+    shape = [7, 7, 1]
+
+    [dense_preparation.dense-Float32-n7-policy1.cuda]
+    bytes = 392
+    eltype = "ComplexF32"
+    file = "dense-Float32-n7-policy1-cuda.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "4a7b32af71fbd1da04deef11a31c95744c9eb1451dc733fc8e581ee0b88d4f50"
+    shape = [7, 7, 1]
+
+[dense_preparation.dense-Float32-n7-policy2]
+amplitude_weights = [0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408]
+atol = 9.5367431640625e-7
+max_abs = 0.0
+rtol = 9.5367431640625e-7
+
+    [dense_preparation.dense-Float32-n7-policy2.cpu]
+    bytes = 3528
+    eltype = "ComplexF32"
+    file = "dense-Float32-n7-policy2-cpu.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "cf9b05b2cb8bb1ef9b8341bd915f61867f446c1c8283a80fa80e6d71db6ed1b2"
+    shape = [7, 7, 9]
+
+    [dense_preparation.dense-Float32-n7-policy2.cuda]
+    bytes = 3528
+    eltype = "ComplexF32"
+    file = "dense-Float32-n7-policy2-cuda.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "cf9b05b2cb8bb1ef9b8341bd915f61867f446c1c8283a80fa80e6d71db6ed1b2"
+    shape = [7, 7, 9]
+
+[dense_preparation.dense-Float32-n7-policy3]
+amplitude_weights = [0.5, 0.8660253882408142, 0.0]
+atol = 9.5367431640625e-7
+max_abs = 0.0
+rtol = 9.5367431640625e-7
+
+    [dense_preparation.dense-Float32-n7-policy3.cpu]
+    bytes = 1176
+    eltype = "ComplexF32"
+    file = "dense-Float32-n7-policy3-cpu.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "3cc2d65a25d3b5611bb1f441599ec8005f36b640062d69d43f3f5caf5618a037"
+    shape = [7, 7, 3]
+
+    [dense_preparation.dense-Float32-n7-policy3.cuda]
+    bytes = 1176
+    eltype = "ComplexF32"
+    file = "dense-Float32-n7-policy3-cuda.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "3cc2d65a25d3b5611bb1f441599ec8005f36b640062d69d43f3f5caf5618a037"
+    shape = [7, 7, 3]
+
+[dense_preparation.dense-Float32-n8-policy1]
+amplitude_weights = [1.0]
+atol = 9.5367431640625e-7
+max_abs = 0.0
+rtol = 9.5367431640625e-7
+
+    [dense_preparation.dense-Float32-n8-policy1.cpu]
+    bytes = 512
+    eltype = "ComplexF32"
+    file = "dense-Float32-n8-policy1-cpu.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "de96d570f42cd28af4326245af08960a783d32179f7e59b7fb5f1d1c83c5aac7"
+    shape = [8, 8, 1]
+
+    [dense_preparation.dense-Float32-n8-policy1.cuda]
+    bytes = 512
+    eltype = "ComplexF32"
+    file = "dense-Float32-n8-policy1-cuda.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "de96d570f42cd28af4326245af08960a783d32179f7e59b7fb5f1d1c83c5aac7"
+    shape = [8, 8, 1]
+
+[dense_preparation.dense-Float32-n8-policy2]
+amplitude_weights = [0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408, 0.3333333432674408]
+atol = 9.5367431640625e-7
+max_abs = 0.0
+rtol = 9.5367431640625e-7
+
+    [dense_preparation.dense-Float32-n8-policy2.cpu]
+    bytes = 4608
+    eltype = "ComplexF32"
+    file = "dense-Float32-n8-policy2-cpu.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "328ac1e9dd3d0e8c8c8097575ababa03773ad971529d8d3119edb74c185917cf"
+    shape = [8, 8, 9]
+
+    [dense_preparation.dense-Float32-n8-policy2.cuda]
+    bytes = 4608
+    eltype = "ComplexF32"
+    file = "dense-Float32-n8-policy2-cuda.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "328ac1e9dd3d0e8c8c8097575ababa03773ad971529d8d3119edb74c185917cf"
+    shape = [8, 8, 9]
+
+[dense_preparation.dense-Float32-n8-policy3]
+amplitude_weights = [0.5, 0.8660253882408142, 0.0]
+atol = 9.5367431640625e-7
+max_abs = 0.0
+rtol = 9.5367431640625e-7
+
+    [dense_preparation.dense-Float32-n8-policy3.cpu]
+    bytes = 1536
+    eltype = "ComplexF32"
+    file = "dense-Float32-n8-policy3-cpu.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "128ecb6e19801fb99fa8d86cd986e7915216271eed3574812cfab4fc03b9888b"
+    shape = [8, 8, 3]
+
+    [dense_preparation.dense-Float32-n8-policy3.cuda]
+    bytes = 1536
+    eltype = "ComplexF32"
+    file = "dense-Float32-n8-policy3-cuda.c64"
+    order = "Julia column-major little-endian"
+    sha256 = "128ecb6e19801fb99fa8d86cd986e7915216271eed3574812cfab4fc03b9888b"
+    shape = [8, 8, 3]
+
+[dense_preparation.dense-Float64-n7-policy1]
+amplitude_weights = [1.0]
+atol = 1.7763568394002505e-15
+max_abs = 0.0
+rtol = 1.7763568394002505e-15
+
+    [dense_preparation.dense-Float64-n7-policy1.cpu]
+    bytes = 784
+    eltype = "ComplexF64"
+    file = "dense-Float64-n7-policy1-cpu.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "eddf51d6ff44b6832500f39ecf728af818ac3abc32bccb4e9b01b96393ec007b"
+    shape = [7, 7, 1]
+
+    [dense_preparation.dense-Float64-n7-policy1.cuda]
+    bytes = 784
+    eltype = "ComplexF64"
+    file = "dense-Float64-n7-policy1-cuda.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "eddf51d6ff44b6832500f39ecf728af818ac3abc32bccb4e9b01b96393ec007b"
+    shape = [7, 7, 1]
+
+[dense_preparation.dense-Float64-n7-policy2]
+amplitude_weights = [0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333]
+atol = 1.7763568394002505e-15
+max_abs = 0.0
+rtol = 1.7763568394002505e-15
+
+    [dense_preparation.dense-Float64-n7-policy2.cpu]
+    bytes = 7056
+    eltype = "ComplexF64"
+    file = "dense-Float64-n7-policy2-cpu.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "ea241e43a6a301b0daf948ed504b3a05f2f965d0b1335fa502be5854d0600a0a"
+    shape = [7, 7, 9]
+
+    [dense_preparation.dense-Float64-n7-policy2.cuda]
+    bytes = 7056
+    eltype = "ComplexF64"
+    file = "dense-Float64-n7-policy2-cuda.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "ea241e43a6a301b0daf948ed504b3a05f2f965d0b1335fa502be5854d0600a0a"
+    shape = [7, 7, 9]
+
+[dense_preparation.dense-Float64-n7-policy3]
+amplitude_weights = [0.5, 0.8660254037844386, 0.0]
+atol = 1.7763568394002505e-15
+max_abs = 0.0
+rtol = 1.7763568394002505e-15
+
+    [dense_preparation.dense-Float64-n7-policy3.cpu]
+    bytes = 2352
+    eltype = "ComplexF64"
+    file = "dense-Float64-n7-policy3-cpu.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "4341f64c538951e4420f92bf9d6b706a7245d4210fd4c950c563c87f39ecbade"
+    shape = [7, 7, 3]
+
+    [dense_preparation.dense-Float64-n7-policy3.cuda]
+    bytes = 2352
+    eltype = "ComplexF64"
+    file = "dense-Float64-n7-policy3-cuda.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "4341f64c538951e4420f92bf9d6b706a7245d4210fd4c950c563c87f39ecbade"
+    shape = [7, 7, 3]
+
+[dense_preparation.dense-Float64-n8-policy1]
+amplitude_weights = [1.0]
+atol = 1.7763568394002505e-15
+max_abs = 0.0
+rtol = 1.7763568394002505e-15
+
+    [dense_preparation.dense-Float64-n8-policy1.cpu]
+    bytes = 1024
+    eltype = "ComplexF64"
+    file = "dense-Float64-n8-policy1-cpu.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "ed0efaa48862313cb18c5c3ed787bae24d4ebb2f9d3248fc6bfa9f1f13881ea3"
+    shape = [8, 8, 1]
+
+    [dense_preparation.dense-Float64-n8-policy1.cuda]
+    bytes = 1024
+    eltype = "ComplexF64"
+    file = "dense-Float64-n8-policy1-cuda.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "ed0efaa48862313cb18c5c3ed787bae24d4ebb2f9d3248fc6bfa9f1f13881ea3"
+    shape = [8, 8, 1]
+
+[dense_preparation.dense-Float64-n8-policy2]
+amplitude_weights = [0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333, 0.3333333333333333]
+atol = 1.7763568394002505e-15
+max_abs = 0.0
+rtol = 1.7763568394002505e-15
+
+    [dense_preparation.dense-Float64-n8-policy2.cpu]
+    bytes = 9216
+    eltype = "ComplexF64"
+    file = "dense-Float64-n8-policy2-cpu.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "0a8dc24a65e2cf8261bc5421016daf76f4c5a6dd56df001a4a18c4e6a1dac0da"
+    shape = [8, 8, 9]
+
+    [dense_preparation.dense-Float64-n8-policy2.cuda]
+    bytes = 9216
+    eltype = "ComplexF64"
+    file = "dense-Float64-n8-policy2-cuda.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "0a8dc24a65e2cf8261bc5421016daf76f4c5a6dd56df001a4a18c4e6a1dac0da"
+    shape = [8, 8, 9]
+
+[dense_preparation.dense-Float64-n8-policy3]
+amplitude_weights = [0.5, 0.8660254037844386, 0.0]
+atol = 1.7763568394002505e-15
+max_abs = 0.0
+rtol = 1.7763568394002505e-15
+
+    [dense_preparation.dense-Float64-n8-policy3.cpu]
+    bytes = 3072
+    eltype = "ComplexF64"
+    file = "dense-Float64-n8-policy3-cpu.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "032236a8cced2c0c54a810aba773ed7e61d8d4e5cd51db8d54f3add8cc608f04"
+    shape = [8, 8, 3]
+
+    [dense_preparation.dense-Float64-n8-policy3.cuda]
+    bytes = 3072
+    eltype = "ComplexF64"
+    file = "dense-Float64-n8-policy3-cuda.c128"
+    order = "Julia column-major little-endian"
+    sha256 = "032236a8cced2c0c54a810aba773ed7e61d8d4e5cd51db8d54f3add8cc608f04"
+    shape = [8, 8, 3]
