@@ -1,0 +1,48 @@
+{
+  "gpi_fine": {
+    "1": {
+      "round_medians_ms": [
+        351.468811,
+        352.55386450000003
+      ],
+      "median_of_round_medians_ms": 352.01133775000005
+    },
+    "2": {
+      "round_medians_ms": [
+        329.98285150000004,
+        331.096904
+      ],
+      "median_of_round_medians_ms": 330.53987775
+    },
+    "3": {
+      "round_medians_ms": [
+        321.7656035,
+        323.04771949999997
+      ],
+      "median_of_round_medians_ms": 322.4066615
+    },
+    "4": {
+      "round_medians_ms": [
+        319.674703,
+        320.672105
+      ],
+      "median_of_round_medians_ms": 320.173404
+    }
+  },
+  "copper_fine": {
+    "1": {
+      "round_medians_ms": [
+        494.36015199999997,
+        494.26795
+      ],
+      "median_of_round_medians_ms": 494.31405099999995
+    },
+    "2": {
+      "round_medians_ms": [
+        456.212239,
+        456.269703
+      ],
+      "median_of_round_medians_ms": 456.240971
+    }
+  }
+}
