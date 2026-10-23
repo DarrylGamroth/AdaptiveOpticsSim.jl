@@ -1131,7 +1131,6 @@ end
         ka_phasor = similar(propagation.phasor)
         WavefrontSensors._build_pyramid_phasor!(SCALAR_CPU_STYLE, scalar_phasor)
         WavefrontSensors._build_pyramid_phasor!(KA_CPU_STYLE, ka_phasor)
-        mark_ka_cpu_kernel!(:pyramid_phasor_kernel!)
         @test ka_cpu_close(ka_phasor, scalar_phasor)
 
         pupil = PupilFunction(tel)

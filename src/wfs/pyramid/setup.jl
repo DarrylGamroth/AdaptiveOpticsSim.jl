@@ -12,14 +12,6 @@
 # focal-plane phase tilts. GPU/runtime optimizations keep the same optical model
 # but batch modulation points and compatible asterism sources where possible.
 #
-@kernel function pyramid_phasor_kernel!(phasor, scale, n::Int)
-    i, j = @index(Global, NTuple)
-    if i <= n && j <= n
-        phase = scale * (i + j - 2)
-        @inbounds phasor[i, j] = cis(phase)
-    end
-end
-
 @kernel function pyramid_pupil_phase_kernel!(phase, opd, opd_to_cycles,
     resolution::Int)
     i, j = @index(Global, NTuple)

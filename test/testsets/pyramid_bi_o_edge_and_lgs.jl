@@ -1,3 +1,20 @@
+@testset "Pyramid centering-factor precision" begin
+    for T in (Float32, Float64), n in (8, 31, 512, 1024)
+        phasor = Matrix{Complex{T}}(undef, n, n)
+        @test WavefrontSensors.build_pyramid_phasor!(phasor) === phasor
+        # Evaluate the rational phase independently before rounding to storage.
+        for i in (1, cld(n, 2), n), j in (1, cld(n, 2), n)
+            expected = Complex{T}(cispi(-BigFloat(n + 1) * (i + j - 2) / n))
+            tolerance = T === Float32 ? 2eps(T) : 8n * eps(T)
+            @test abs(phasor[i, j] - expected) <= tolerance
+            @test abs(abs(phasor[i, j]) - 1) <= 2eps(T)
+        end
+        accelerated = similar(phasor)
+        WavefrontSensors._build_pyramid_phasor!(KA_CPU_STYLE, accelerated)
+        @test accelerated == phasor
+    end
+end
+
 @testset "LGS convolution normalization" begin
     n = 8
     expected = reshape(collect(range(0.25, 2.0; length=n * n)), n, n)

@@ -40,18 +40,21 @@ end
 
 function _build_pyramid_phasor!(::ScalarCPUStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
     n = size(phasor, 1)
-    scale = -T(pi) * (n + 1) / n
+    # This is cold setup. Form the phase in at least Float64 before rounding
+    # to runtime storage: Float32 phase error grows with the padded FFT side.
+    W = promote_type(T, Float64)
+    scale = -W(n + 1) / W(n)
     @inbounds for i in 1:n, j in 1:n
         phase = scale * (i + j - 2)
-        phasor[i, j] = cis(phase)
+        phasor[i, j] = cispi(phase)
     end
     return phasor
 end
 
-function _build_pyramid_phasor!(style::AcceleratorStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
-    n = size(phasor, 1)
-    scale = -T(pi) * (n + 1) / n
-    launch_kernel!(style, pyramid_phasor_kernel!, phasor, scale, n; ndrange=size(phasor))
+function _build_pyramid_phasor!(::AcceleratorStyle, phasor::AbstractMatrix{Complex{T}}) where {T<:AbstractFloat}
+    host = Matrix{Complex{T}}(undef, size(phasor))
+    _build_pyramid_phasor!(ScalarCPUStyle(), host)
+    copyto!(phasor, host)
     return phasor
 end
 
