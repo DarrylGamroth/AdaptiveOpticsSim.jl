@@ -271,8 +271,8 @@ caller-owned uncompensated pupil OPD in metres, and publish a complete detector
 frame through `PreparedGraphHILBoundary`. Their parameters are AOS validation
 choices; neither system is an instrument profile.
 
-[`shack_hartmann_hil_reference.toml`](../examples/graphs/shack_hartmann_hil_reference.toml)
-publishes a noiseless 64-by-64 CCD frame. [`pyramid_hil_reference.toml`](../examples/graphs/pyramid_hil_reference.toml)
+[`shack_hartmann_hil_reference.yaml`](../examples/graphs/shack_hartmann_hil_reference.yaml)
+publishes a noiseless 64-by-64 CCD frame. [`pyramid_hil_reference.yaml`](../examples/graphs/pyramid_hil_reference.yaml)
 publishes a noiseless 36-by-36 four-pupil EMCCD frame. AOS built-in graph
 execution stops at these detector frames; use the maintained
 [`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/)
@@ -377,11 +377,12 @@ deadline, timeout, last-command hold, queue, or concurrent callback. A direct
 Julia script can perform the loop synchronously; an external adapter can map the
 same buffers and sequences to its transport lifecycle.
 
-## TOML Algorithm Graph Format
+## YAML Algorithm Graph Format
 
-TOML is the maintained human-authored format because it supports comments,
-keeps arrays of node and link tables readable, and is available as a Julia
-standard library. `load_algorithm_graph(root::AbstractDict; ...)` also accepts
+YAML is the maintained human-authored format because it supports comments and
+keeps sequences of node and link mappings readable. File loading is provided
+by the optional YAML.jl extension, activated with `using YAML`.
+`load_algorithm_graph(root::AbstractDict; ...)` also accepts
 an already-decoded dictionary, so an application may use its own interchange
 decoder and pass the resulting graph through the same schema validation and
 node factories. This entry point does not define or maintain another serialized
@@ -395,16 +396,17 @@ and **MAY** in the following requirements are to be interpreted as described by
 in all capitals.
 
 - **AOS-GRAPH-FILE-001:** A maintained graph file MUST set
-  `schema_version = 1`, MUST have a stable identifier-valued `name`, and MUST
-  contain at least one `[[nodes]]` table. A loader MUST reject unknown schema
-  versions and unknown fields.
+  `schema_version: 1`, MUST have a stable identifier-valued `name`, and MUST
+  contain a `nodes` sequence with at least one mapping. A loader MUST reject
+  unknown schema versions and unknown fields. A YAML file MUST contain exactly
+  one document, with unique keys in each mapping.
 - **AOS-GRAPH-FILE-002:** Node order MUST be execution order. Each node MUST
   identify an explicitly supplied `type`; the loader MUST NOT evaluate Julia
   source, resolve arbitrary module paths, or mutate a global type registry.
-- **AOS-GRAPH-FILE-003:** `[nodes.config]` MUST contain construction and
-  graph-rebuild values. `[nodes.props]` MAY contain scalar initial props but
-  MUST NOT change a node's admitted ports. Version 1 does not define live prop
-  transactions.
+- **AOS-GRAPH-FILE-003:** Each node's `config` mapping MUST contain construction
+  and graph-rebuild values. Each node's `props` mapping MAY contain scalar initial
+  props but MUST NOT change a node's admitted ports. Version 1 does not define
+  live prop transactions.
 - **AOS-GRAPH-FILE-004:** Frame inputs, delayed-link initial arrays, and sparse
   parameter arrays MUST be referenced by external binding name. The core
   loader MUST NOT infer FITS or another calibration file format and MUST NOT
@@ -413,7 +415,7 @@ in all capitals.
   delayed links, boundary inputs and outputs, and sparse parameters MUST pass
   the same type, shape, schema, layout, ownership, and connectivity admission
   checks as direct Julia construction.
-- **AOS-GRAPH-FILE-006:** `load_algorithm_graph` MUST compile a valid TOML file
+- **AOS-GRAPH-FILE-006:** `load_algorithm_graph` MUST compile a valid YAML file
   or validated parsed root dictionary into the same concrete
   `AlgorithmGraphDefinition` used by `algorithm_graph`. Parsed dictionaries
   and cold builder vectors MUST NOT survive into the definition or prepared
@@ -423,21 +425,21 @@ in all capitals.
   physical sub-frame event semantics SHOULD use direct Julia composition
   rather than acquire implicit file semantics.
 
-The version 1 tables are:
+The version 1 mappings and sequences are:
 
-| Table | Required fields | Meaning |
+| Mapping or sequence | Required fields | Meaning |
 |---|---|---|
 | root | `schema_version`, `name`, `nodes` | Schema and graph identity |
-| `[[nodes]]` | `name`, `type`, `[nodes.config]` | One node in execution order; `[nodes.props]` is optional |
-| `[[inputs]]` | `name`, `destination`, `binding` | Caller-owned frame input |
-| `[[outputs]]` | `name`, `source` | Caller-visible allocated graph output |
-| `[[links]]` | `source`, `destination` | Same-step direct link |
-| `[[delayed_links]]` | `source`, `destination`, `initial` | One-successful-step delayed link; `initial` is a binding name |
-| `[[parameters]]` | `destination`, `binding` | Required startup ndarray sparse parameter |
+| `nodes` | `name`, `type`, `config` | One node in execution order; `props` is optional |
+| `inputs` | `name`, `destination`, `binding` | Caller-owned frame input |
+| `outputs` | `name`, `source` | Caller-visible allocated graph output |
+| `links` | `source`, `destination` | Same-step direct link |
+| `delayed_links` | `source`, `destination`, `initial` | One-successful-step delayed link; `initial` is a binding name |
+| `parameters` | `destination`, `binding` | Required startup ndarray sparse parameter |
 
-For example, an AOS TOML graph may describe the optical plant and detector
-sequence. AOS no longer documents a TOML controller example: reconstruction,
-controller recurrence, and VDM/PDM RTC routing are maintained by
+For example, an AOS YAML graph may describe the optical plant and detector
+sequence. Reconstruction, controller recurrence, and VDM/PDM RTC routing are
+maintained by
 FilterGraphAlgorithms/JuliaFilterGraph. Use the
 [`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/)
 for the complete AOS-plant/FGA-RTC composition.
@@ -463,7 +465,7 @@ map for optional packages such as the Proper companion.
 
 ### Downstream instrument packages
 
-AOS owns the reusable plant graph nodes, static TOML schema, lockstep HIL
+AOS owns the reusable plant graph nodes, static YAML schema, lockstep HIL
 boundary, and pyRTC-compatible shared-memory adapter. Instrument command geometry,
 detector settings, calibration policy, complete graph files, and scientific
 acceptance tests belong to downstream packages:

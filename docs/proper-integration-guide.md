@@ -155,15 +155,16 @@ boundary. The prescription remains an ordinary Julia function and receives the
 prepared `pupil_opd`, `pupil_amplitude`, `diameter_m`, field, wavefront, output,
 and run context as keyword arguments.
 
-For a TOML-defined graph, the application explicitly admits the trusted Julia
+For a YAML-defined graph, the application explicitly admits the trusted Julia
 prescription under a node-type name with `proper_propagation_node_factory` and
-passes that factory in the loader's immutable `node_types` map. The TOML file
+passes that factory in the loader's immutable `node_types` map. The YAML file
 can select the admitted name and construction values, but it cannot resolve or
 evaluate Julia code. Direct Julia graph construction remains available when a
 SPIDERS prescription or topology is generated or conditional.
 
-The companion contains separate `spiders_llowfs_hil.toml` and
-`spiders_scc_hil.toml` topology files. An application registers each node type
+The companion contains separate LLOWFS and SCC topology examples. Applications
+can express these topologies in the maintained YAML schema. An application
+registers each node type
 with `proper_propagation_node_factory(configuration)`, where the captured
 configuration owns the trusted prescription and all physical values. The files
 are separate because the simple executor invokes every node once per graph

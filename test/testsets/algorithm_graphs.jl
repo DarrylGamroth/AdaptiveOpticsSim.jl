@@ -1,3 +1,5 @@
+using YAML
+
 const AOG = AdaptiveOpticsSim.AlgorithmGraphs
 
 include(joinpath(
@@ -1393,31 +1395,35 @@ end
     @test warmed_graph_step_allocation_bytes(shifted) == 0
 
     text = """
-    schema_version = 1
-    name = "fractional_pupils"
-    [[nodes]]
-    name = "pwfs"
-    type = "pyramid_rate_f32"
-    [nodes.config]
-    resolution = 8
-    telescope_diameter_m = 1.22
-    pupil_samples = 4
-    modulation = 0.0
-    modulation_points = 4
-    modulation_propagation_strategy = "pupil_tilt"
-    source_wavelength_m = 5.5e-7
-    source_photon_irradiance_m2_s = 1.0
-    opd_schema = "test.opd/1"
-    photon_rate_schema = "test.rate/1"
-    pupil_shift_x_pixels = 0.25
-    pupil_shift_y_pixels = [0.1, -0.3, 0.15, -0.2]
-    [[inputs]]
-    name = "opd"
-    destination = "pwfs.opd"
-    binding = "opd"
-    [[outputs]]
-    name = "rate"
-    source = "pwfs.photon_rate"
+    schema_version: 1
+    name: fractional_pupils
+    nodes:
+    - name: pwfs
+      type: pyramid_rate_f32
+      config:
+        resolution: 8
+        telescope_diameter_m: 1.22
+        pupil_samples: 4
+        modulation: 0.0
+        modulation_points: 4
+        modulation_propagation_strategy: pupil_tilt
+        source_wavelength_m: 5.5e-07
+        source_photon_irradiance_m2_s: 1.0
+        opd_schema: test.opd/1
+        photon_rate_schema: test.rate/1
+        pupil_shift_x_pixels: 0.25
+        pupil_shift_y_pixels:
+        - 0.1
+        - -0.3
+        - 0.15
+        - -0.2
+    inputs:
+    - name: opd
+      destination: pwfs.opd
+      binding: opd
+    outputs:
+    - name: rate
+      source: pwfs.photon_rate
     """
     mktemp() do path, io
         write(io, text)
@@ -1426,12 +1432,12 @@ end
         step_graph!(loaded)
         @test graph_output(loaded, Val(:rate)) == graph_output(shifted, Val(:rate))
         write(path, replace(text,
-            "modulation_propagation_strategy = \"pupil_tilt\"" =>
-                "modulation_propagation_strategy = \"shifted_mask\""))
+            "modulation_propagation_strategy: pupil_tilt" =>
+                "modulation_propagation_strategy: shifted_mask"))
         @test_throws AlgorithmGraphError load_algorithm_graph(path; bindings=(; opd))
         for invalid in ("[0.1, 0.2]", "[0.1, 0.2, inf, 0.4]", "true", "1e40")
             write(path, replace(text,
-                "pupil_shift_x_pixels = 0.25" => "pupil_shift_x_pixels = $invalid"))
+                "pupil_shift_x_pixels: 0.25" => "pupil_shift_x_pixels: $invalid"))
             @test_throws AlgorithmGraphError load_algorithm_graph(path; bindings=(; opd))
         end
     end
@@ -1684,13 +1690,13 @@ end
 end
 
 
-@testset "TOML graph files compile to native graph definitions" begin
-    normalized_toml =
+@testset "YAML graph files compile to native graph definitions" begin
+    normalized_yaml =
         AdaptiveOpticsSim.AlgorithmGraphs._normalize_graph_value(
             Any[1, "two", Any[true, 3.0]],
         )
-    @test normalized_toml == (1, "two", (true, 3.0))
-    @test isconcretetype(typeof(normalized_toml))
+    @test normalized_yaml == (1, "two", (true, 3.0))
+    @test isconcretetype(typeof(normalized_yaml))
 
     coefficients = Float32[0.1, 0.2]
     basis = zeros(Float32, 2, 2, 2)
@@ -1700,7 +1706,7 @@ end
     path = joinpath(
         dirname(@__DIR__),
         "graph_files",
-        "native_modal_opd.toml",
+        "native_modal_opd.yaml",
     )
 
     definition = load_algorithm_graph(
@@ -1725,6 +1731,40 @@ end
         path;
         bindings=(; coefficients, basis),
     )
+    valid_yaml = read(path, String)
+    merged_yaml = replace(valid_yaml, "  config:\n" =>
+        "  config:\n    <<: &defaults\n      mode_count: 1\n")
+    mktemp() do merged_path, io
+        write(io, merged_yaml)
+        close(io)
+        merged_definition = load_algorithm_graph(
+            merged_path;
+            bindings=(; coefficients, basis, pupil_support),
+        )
+        @test typeof(merged_definition) === typeof(definition)
+        merged_graph = prepare_algorithm_graph(merged_definition)
+        step_graph!(merged_graph)
+        @test graph_output(merged_graph, Val(:opd)) == graph_output(graph, Val(:opd))
+    end
+    for invalid in (
+        replace(valid_yaml, "schema_version: 1" =>
+            "schema_version: 1\nschema_version: 1"),
+        replace(valid_yaml, "- name: modal_opd" =>
+            "- name: modal_opd\n  name: modal_opd"),
+        replace(merged_yaml, "    mode_count: 2" =>
+            "    mode_count: 2\n    mode_count: 2"),
+        valid_yaml * "---\n" * valid_yaml,
+    )
+        mktemp() do invalid_path, io
+            write(io, invalid)
+            close(io)
+            @test_throws AlgorithmGraphError load_algorithm_graph(
+                invalid_path;
+                bindings=(; coefficients, basis, pupil_support),
+            )
+        end
+    end
+
     @test keys(builtin_graph_node_types()) == (
         :ccd_detector_acquisition_f32,
         :cmos_detector_acquisition_f32,
@@ -1739,39 +1779,37 @@ end
         :shack_hartmann_rate_f32,
     )
 
-    mktemp() do invalid_path, io
-        write(io, "schema_version = 2\nname = \"invalid_version\"\nnodes = []\n")
-        close(io)
-        @test_throws AlgorithmGraphError load_algorithm_graph(invalid_path)
-    end
-    mktemp() do invalid_path, io
-        write(
-            io,
-            "schema_version = 1\nname = \"unknown_field\"\n" *
-            "unexpected = true\nnodes = []\n",
-        )
-        close(io)
-        @test_throws AlgorithmGraphError load_algorithm_graph(invalid_path)
-    end
-    mktemp() do invalid_path, io
-        write(
-            io,
-            "schema_version = 1\nname = \"unknown_type\"\n" *
-            "[[nodes]]\nname = \"node\"\ntype = \"not_registered\"\n" *
-            "[nodes.config]\nextent = 2\n",
-        )
-        close(io)
-        @test_throws AlgorithmGraphError load_algorithm_graph(invalid_path)
+    for invalid in (
+        "schema_version: 2\nname: invalid_version\nnodes: []\n",
+        "schema_version: 1\nname: unknown_field\nunexpected: true\nnodes: []\n",
+        "schema_version: 1\nname: unknown_type\nnodes:\n" *
+            "  - name: node\n    type: not_registered\n    config:\n      extent: 2\n",
+        "schema_version: [unterminated\n",
+        "- not_a_root_mapping\n",
+        "null\n",
+        "# empty document\n",
+    )
+        mktemp() do invalid_path, io
+            write(io, invalid)
+            close(io)
+            @test_throws AlgorithmGraphError load_algorithm_graph(invalid_path)
+        end
     end
 
     mktemp() do custom_path, io
-        write(
-            io,
-            "schema_version = 1\nname = \"custom_type\"\n" *
-            "[[nodes]]\nname = \"source\"\ntype = \"test_source\"\n" *
-            "[nodes.config]\nextent = 2\nvalue = 7.0\n" *
-            "[[outputs]]\nname = \"sample\"\nsource = \"source.output\"\n",
-        )
+        write(io, """
+        schema_version: 1
+        name: custom_type
+        nodes:
+          - name: source
+            type: test_source
+            config:
+              extent: 2
+              value: 7.0
+        outputs:
+          - name: sample
+            source: source.output
+        """)
         close(io)
         test_source = function (name, config, props)
             isempty(props) || error("test-source props must be empty")
@@ -1835,7 +1873,7 @@ end
     end
 end
 
-@testset "TOML graph binds a measured deformable mirror" begin
+@testset "YAML graph binds a measured deformable mirror" begin
     pdm_command = Float32[2, 3]
     actuator_coordinates = Float32[-0.5 0.5; 0 0]
     influence_functions = Float32[
@@ -1847,7 +1885,7 @@ end
     path = joinpath(
         dirname(@__DIR__),
         "graph_files",
-        "measured_deformable_mirror.toml",
+        "measured_deformable_mirror.yaml",
     )
     definition = load_algorithm_graph(
         path;
@@ -1869,9 +1907,9 @@ end
         (:shack_hartmann, :pyramid)
     @test HILReferenceSystems.actuator_count() == 25
     @test basename(HILReferenceSystems.graph_path(:shack_hartmann)) ==
-        "shack_hartmann_hil_reference.toml"
+        "shack_hartmann_hil_reference.yaml"
     @test basename(HILReferenceSystems.graph_path(:pyramid)) ==
-        "pyramid_hil_reference.toml"
+        "pyramid_hil_reference.yaml"
     @test_throws ArgumentError HILReferenceSystems.graph_path(:unknown)
 
     coordinates = HILReferenceSystems.actuator_coordinates(Float32)

@@ -143,7 +143,9 @@ graph loader. Built-in graph nodes also need:
 - executable tests for file loading and, when used, parsed-dictionary loading
 - documentation of scientific schemas and units
 
-Keep the file format static and declarative. Applications may decode another
+YAML file loading is provided by the optional YAML.jl extension, activated with
+`using YAML`; dictionary compilation remains available without it. Keep the file
+format static and declarative. Applications may decode another
 interchange representation and pass its parsed root dictionary to
 `load_algorithm_graph`; that does not add a second maintained file format. A
 value that changes port shape or topology is configuration and requires graph
@@ -249,5 +251,5 @@ same ownership, metadata, reset, backend, and allocation contracts. See
 - outputs are unchanged or the owner becomes failed when execution throws
 - CPU reference behavior is covered
 - applicable AMDGPU/CUDA paths run with scalar indexing disabled
-- graph adapters have direct Julia and TOML tests when both surfaces are public
+- graph adapters have direct Julia and YAML tests when both surfaces are public
 - new public terminology is added to [`glossary.md`](glossary.md)

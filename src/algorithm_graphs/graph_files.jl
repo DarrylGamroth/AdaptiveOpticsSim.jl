@@ -1,4 +1,4 @@
-const ALGORITHM_GRAPH_TOML_SCHEMA_VERSION = 1
+const ALGORITHM_GRAPH_SCHEMA_VERSION = 1
 
 @inline function _file_error(context::AbstractString, message::AbstractString)
     return AlgorithmGraphError("$context: $message")
@@ -1387,6 +1387,12 @@ function _parse_entries(entries, parse_entry)
     )
 end
 
+function _read_algorithm_graph(path)
+    throw(AlgorithmGraphError(
+        "YAML graph file loading requires YAML.jl; load it with `using YAML`",
+    ))
+end
+
 """
     load_algorithm_graph(path; node_types=builtin_graph_node_types(),
                          bindings=NamedTuple())
@@ -1396,7 +1402,8 @@ end
 
 Load a versioned, declarative graph and compile it into the same concrete
 [`AlgorithmGraphDefinition`](@ref) used by direct Julia construction. The path
-method parses TOML; the dictionary method accepts an already-parsed root, such
+method parses YAML after `using YAML` activates the optional file extension;
+the dictionary method accepts an already-parsed root, such
 as one decoded by an application-owned interchange layer.
 `node_types` is an explicit immutable named tuple of cold factories. `bindings`
 supplies caller-owned frame inputs, delayed-link initial values, and large
@@ -1409,7 +1416,7 @@ function load_algorithm_graph(
     bindings::NamedTuple=NamedTuple(),
 )
     root = try
-        TOML.parsefile(path)
+        _read_algorithm_graph(path)
     catch error
         throw(AlgorithmGraphError(
             "could not parse algorithm graph '$path': $(sprint(showerror, error))",
@@ -1458,9 +1465,9 @@ function _load_algorithm_graph(
         context,
     )
     version = _file_integer(root["schema_version"], "schema_version")
-    version == ALGORITHM_GRAPH_TOML_SCHEMA_VERSION || throw(AlgorithmGraphError(
+    version == ALGORITHM_GRAPH_SCHEMA_VERSION || throw(AlgorithmGraphError(
         "unsupported algorithm graph schema_version $version; expected " *
-        "$ALGORITHM_GRAPH_TOML_SCHEMA_VERSION",
+        "$ALGORITHM_GRAPH_SCHEMA_VERSION",
     ))
     name = _file_identifier(root["name"], "name")
 
@@ -1498,4 +1505,13 @@ function _load_algorithm_graph(
         delayed_links=delayed_links,
         parameters=parameters,
     )
+end
+
+function _load_algorithm_graph(
+    root;
+    node_types::NamedTuple,
+    bindings::NamedTuple,
+    context::AbstractString,
+)
+    throw(_file_error(context, "expected a root mapping, got $(typeof(root))"))
 end

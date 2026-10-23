@@ -576,7 +576,7 @@ surface OPD. No actuator layout or influence width is inferred.
 
 The default actuator response is the native linear static response. Direct
 Julia construction may supply an explicit native `actuator_model`; the
-maintained TOML factory deliberately keeps that choice out of configuration
+maintained YAML factory deliberately keeps that choice out of configuration
 until a typed file representation is defined.
 """
 function deformable_mirror_surface_node(

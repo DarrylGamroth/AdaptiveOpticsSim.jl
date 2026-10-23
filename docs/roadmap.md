@@ -27,7 +27,7 @@ the maintained package.
 - Explicit params, run-immutable plans, persistent state, replaceable
   workspaces, caller-visible products, and prepared execution owners.
 - CPU algorithms plus optional CUDA and AMDGPU execution for covered kernels.
-- Static graph definitions in Julia or TOML, direct and one-frame delayed links,
+- Static graph definitions in Julia or YAML, direct and one-frame delayed links,
   model-time drivers, preparation-time validation, and reset.
 - Native graph nodes for atmosphere OPD, deformable-mirror surfaces, pupil OPD
   composition, Shack–Hartmann and Pyramid optical rates, detector acquisition,
@@ -71,8 +71,9 @@ the maintained package.
 
 ## Graph Scope
 
-TOML is the user-facing format for static graphs because it is readable,
-reviewable, and already supported by Julia without an additional parser. Julia
+YAML is the user-facing format for static graphs because it is readable,
+reviewable, and supports comments. Its optional YAML.jl parser runs only during
+cold preparation. Julia
 remains the authority for compositions that cannot be expressed cleanly in the
 versioned file schema.
 

@@ -115,7 +115,7 @@ step sequence; `step_graph!` composes both operations for synchronous callers.
 `reset_graph!` restores node state, delayed links, RNG seeds, and sequence state
 according to each node contract and rejects a still-pending frame.
 
-TOML graph files are a versioned static authoring surface. Julia definitions
+YAML graph files are a versioned static authoring surface. Julia definitions
 remain available for generated or application-specific composition. The graph
 runtime owns no wall-clock pacer, transport, dynamic topology, or automatic
 placement.

@@ -32,6 +32,11 @@ the checkout environment:
 julia --project=. --startup-file=no -e 'using Pkg; Pkg.instantiate()'
 ```
 
+Static simulation graphs use YAML. Add YAML.jl to the application environment
+and run `using YAML` before `load_algorithm_graph(path; bindings=...)` to
+activate the optional parser. Direct Julia graphs and parsed dictionaries need
+no file parser. See the [YAML graph guide](docs/user-guide.md#yaml-graphs).
+
 ## Start Here
 
 If you are a normal user, read these in order:

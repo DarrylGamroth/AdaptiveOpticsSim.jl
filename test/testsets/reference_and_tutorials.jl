@@ -79,10 +79,14 @@
         "Project.toml"))
     @test !haskey(project["deps"], "Serialization")
     @test !haskey(project["compat"], "Serialization")
-    @test haskey(project["deps"], "TOML")
+    @test !haskey(project["deps"], "TOML")
     @test haskey(project["compat"], "TOML")
-    @test !haskey(project["extras"], "TOML")
-    @test !("TOML" in project["targets"]["test"])
+    @test haskey(project["extras"], "TOML")
+    @test "TOML" in project["targets"]["test"]
+    @test !haskey(project["deps"], "YAML")
+    @test haskey(project["weakdeps"], "YAML")
+    @test project["extensions"]["AdaptiveOpticsSimYAMLExt"] == "YAML"
+    @test "YAML" in project["targets"]["test"]
 end
 
 @testset "Reference compare conventions" begin

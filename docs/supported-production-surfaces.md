@@ -30,7 +30,7 @@ The Julia 1.12 CPU baseline includes:
   callback; maintained RTC reconstruction and controller execution is in
   FilterGraphAlgorithms/JuliaFilterGraph
 - deterministic and ordinary coarse-grained ensemble execution
-- static `AlgorithmGraphs` definitions in Julia and TOML
+- static `AlgorithmGraphs` definitions in Julia and YAML
 - direct and explicit one-frame delayed graph links
 - exact model-time values and deterministic drivers
 - prepared coherent wavelength synthesis with explicit photon weights,
@@ -47,7 +47,7 @@ They are not a promise for arbitrary user callbacks or every optional library.
 
 ## Downstream Instrument Packages
 
-AOS supports the reusable algorithms, graph adapters, static TOML schema, and
+AOS supports the reusable algorithms, graph adapters, static YAML schema, and
 lockstep HIL boundary used by downstream instrument packages. It does not own
 an instrument's command geometry, detector profile, calibration policy, or
 scientific acceptance claim.

@@ -255,9 +255,10 @@ frame output:
 
 ~~~julia
 using AdaptiveOpticsSim.AlgorithmGraphs
+using YAML
 
 definition = load_algorithm_graph(
-    "examples/graphs/shack_hartmann_hil_reference.toml";
+    "examples/graphs/shack_hartmann_hil_reference.yaml";
     bindings=(;
         dm_command=zeros(Float32, 25),
         uncompensated_opd=zeros(Float32, 64, 64),

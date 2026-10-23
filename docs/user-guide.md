@@ -17,7 +17,7 @@ flow.
 
 Use `AlgorithmGraphs` when the model is a static, single-rate sequence that
 publishes complete frames. Graphs can be declared in Julia or in a versioned
-TOML file.
+YAML file.
 
 Use `PreparedGraphHILBoundary` when an external RTC consumes each completed
 simulated frame and returns one complete command for the next frame. An external
@@ -182,8 +182,8 @@ sensor = PyramidWFS(telescope; pupil_samples=30,
 The four entries follow the existing q1–q4 face order. A scalar applies to all
 four faces. Values are in native detector pixels before binning and change the
 focal-plane phase mask before diffraction and detector integration. The
-`pyramid_rate_node` constructor and `pyramid_rate_f32` TOML configuration accept
-the same two parameters; TOML accepts scalars or four-element arrays. Zero is
+`pyramid_rate_node` constructor and `pyramid_rate_f32` YAML configuration accept
+the same two parameters; YAML accepts scalars or four-element arrays. Zero is
 the default. These are fixed construction values: prepare a new sensor or graph
 when changing them, and acquire calibration responses with that optical model.
 
@@ -230,11 +230,14 @@ workspaces, delayed values, and RNG state remain owned by that frame until
 independent concurrent work. The lockstep HIL API already waits at its required
 host-visible frame boundary.
 
-## TOML Graphs
+## YAML Graphs
 
-TOML is the convenient static authoring surface:
+YAML is the convenient static authoring surface. Add YAML.jl to the application
+environment and load it to activate file parsing:
 
 ~~~julia
+using YAML
+
 bindings = (
     dm_command=zeros(Float32, 25),
     uncompensated_opd=zeros(Float32, 64, 64),
@@ -245,7 +248,7 @@ bindings = (
 )
 
 definition = load_algorithm_graph(
-    "examples/graphs/shack_hartmann_hil_reference.toml";
+    "examples/graphs/shack_hartmann_hil_reference.yaml";
     bindings,
 )
 graph = prepare_algorithm_graph(definition)
@@ -257,8 +260,8 @@ values, and large ndarray parameters by stable name.
 
 Maintained package-level reference examples include:
 
-- `examples/graphs/shack_hartmann_hil_reference.toml`
-- `examples/graphs/pyramid_hil_reference.toml`
+- `examples/graphs/shack_hartmann_hil_reference.yaml`
+- `examples/graphs/pyramid_hil_reference.yaml`
 
 Instrument definitions, calibration inputs, and operational acceptance tests
 belong in downstream instrument packages. REVOLT Classic and Copper are

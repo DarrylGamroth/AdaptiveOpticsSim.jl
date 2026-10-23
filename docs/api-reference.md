@@ -295,7 +295,8 @@ using AdaptiveOpticsSim.AlgorithmGraphs
 - `algorithm_node`, `algorithm_graph`, `graph_input`, `graph_output`,
   `link`, and `delayed_link`
 
-Use `load_algorithm_graph(path; bindings=...)` to compile a versioned TOML graph
+Use `load_algorithm_graph(path; bindings=...)` to compile a versioned YAML graph
+(after `using YAML` activates the optional extension)
 or construct the same definition directly in Julia.
 
 ### Native Nodes

@@ -1,6 +1,7 @@
 module HILReferenceSystems
 
 using AdaptiveOpticsSim.AlgorithmGraphs
+using YAML
 using AdaptiveOpticsSim.Backends: HostComputeDevice
 using AdaptiveOpticsSim.Optics
 import AdaptiveOpticsSim.Optics: pupil_support
@@ -306,8 +307,8 @@ function shack_hartmann_lenslet_order(
 end
 
 @inline _graph_filename(::Val{:shack_hartmann}) =
-    "shack_hartmann_hil_reference.toml"
-@inline _graph_filename(::Val{:pyramid}) = "pyramid_hil_reference.toml"
+    "shack_hartmann_hil_reference.yaml"
+@inline _graph_filename(::Val{:pyramid}) = "pyramid_hil_reference.yaml"
 
 """Return the maintained graph file for one fully declared HIL reference system."""
 function graph_path(wavefront_sensor::Symbol)

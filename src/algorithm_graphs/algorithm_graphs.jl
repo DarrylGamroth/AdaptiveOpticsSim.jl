@@ -10,7 +10,6 @@ module AlgorithmGraphs
 
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
-using TOML
 import ..Backends
 
 import ..AdaptiveOpticsSim: AdaptiveOpticsSimError

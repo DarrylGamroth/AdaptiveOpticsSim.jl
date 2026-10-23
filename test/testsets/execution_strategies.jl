@@ -32,7 +32,7 @@ function pe02_maintained_text()
         for (parent, _, files) in walkdir(root)
             for file in files
                 extension = splitext(file)[2]
-                extension in (".jl", ".toml", ".md") || continue
+                extension in (".jl", ".toml", ".yaml", ".yml", ".md") || continue
                 push!(paths, joinpath(parent, file))
             end
         end
