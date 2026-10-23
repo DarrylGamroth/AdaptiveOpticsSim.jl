@@ -1686,7 +1686,7 @@ end
 
 @testset "TOML graph files compile to native graph definitions" begin
     normalized_toml =
-        AdaptiveOpticsSim.AlgorithmGraphs._normalize_toml_value(
+        AdaptiveOpticsSim.AlgorithmGraphs._normalize_graph_value(
             Any[1, "two", Any[true, 3.0]],
         )
     @test normalized_toml == (1, "two", (true, 3.0))
@@ -1788,12 +1788,50 @@ end
             builtin_graph_node_types(),
             (; test_source),
         )
-        custom = prepare_algorithm_graph(load_algorithm_graph(
-            custom_path;
-            node_types,
-        ))
+        root = Dict{String,Any}(
+            "schema_version" => 1,
+            "name" => "custom_type",
+            "nodes" => [Dict{String,Any}(
+                "name" => "source",
+                "type" => "test_source",
+                "config" => Dict{String,Any}("extent" => 2, "value" => 7.0),
+            )],
+            "outputs" => [Dict{String,Any}(
+                "name" => "sample",
+                "source" => "source.output",
+            )],
+        )
+        file_definition = load_algorithm_graph(custom_path; node_types)
+        dictionary_definition = load_algorithm_graph(root; node_types)
+        @test typeof(dictionary_definition) === typeof(file_definition)
+        @test graph_name(dictionary_definition) === graph_name(file_definition)
+
+        custom = prepare_algorithm_graph(dictionary_definition)
+        file_graph = prepare_algorithm_graph(file_definition)
         step_graph!(custom)
+        step_graph!(file_graph)
         @test graph_output(custom, Val(:sample)) == Float32[7, 7]
+        @test graph_output(custom, Val(:sample)) ==
+            graph_output(file_graph, Val(:sample))
+
+        invalid_root = deepcopy(root)
+        invalid_root["schema_version"] = 2
+        @test_throws AlgorithmGraphError load_algorithm_graph(
+            invalid_root;
+            node_types,
+        )
+        invalid_root = deepcopy(root)
+        invalid_root["unexpected"] = true
+        @test_throws AlgorithmGraphError load_algorithm_graph(
+            invalid_root;
+            node_types,
+        )
+        invalid_root = deepcopy(root)
+        invalid_root["nodes"] = ["not a node table"]
+        @test_throws AlgorithmGraphError load_algorithm_graph(
+            invalid_root;
+            node_types,
+        )
     end
 end
 

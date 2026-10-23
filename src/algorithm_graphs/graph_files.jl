@@ -113,24 +113,24 @@ function _file_endpoint(value, context::AbstractString)
     return AlgorithmPortReference(node, port)
 end
 
-_normalize_toml_value(value::Union{Bool,Integer,AbstractFloat,AbstractString}) =
+_normalize_graph_value(value::Union{Bool,Integer,AbstractFloat,AbstractString}) =
     value
 
-function _normalize_toml_value(values::AbstractVector)
-    return Tuple(_normalize_toml_value(value) for value in values)
+function _normalize_graph_value(values::AbstractVector)
+    return Tuple(_normalize_graph_value(value) for value in values)
 end
 
 
-function _normalize_toml_value(table::AbstractDict)
+function _normalize_graph_value(table::AbstractDict)
     names = sort!(collect(String, keys(table)))
     symbols = Tuple(Symbol(name) for name in names)
-    values = Tuple(_normalize_toml_value(table[name]) for name in names)
+    values = Tuple(_normalize_graph_value(table[name]) for name in names)
     return NamedTuple{symbols}(values)
 end
 
-function _normalize_toml_value(value)
+function _normalize_graph_value(value)
     throw(AlgorithmGraphError(
-        "unsupported TOML value type $(typeof(value)) in graph config or props",
+        "unsupported graph value type $(typeof(value)) in config or props",
     ))
 end
 
@@ -1270,7 +1270,7 @@ end
 """
     builtin_graph_node_types()
 
-Return the immutable node-type map accepted by the maintained TOML loader.
+Return the immutable node-type map accepted by the maintained declarative graph loader.
 Optional packages may merge additional cold factories into this named tuple
 and pass the result explicitly to [`load_algorithm_graph`](@ref). No mutable
 global registry or dynamic Julia evaluation is used.
@@ -1310,10 +1310,10 @@ function _parse_file_node(entry::AbstractDict, node_types::NamedTuple, index::In
         "$context.type",
         "unknown graph node type '$node_type'",
     ))
-    config = _normalize_toml_value(
+    config = _normalize_graph_value(
         _table_or_empty(entry, "config", context),
     )
-    props = _normalize_toml_value(
+    props = _normalize_graph_value(
         _table_or_empty(entry, "props", context),
     )
     factory = getproperty(node_types, node_type)
@@ -1390,13 +1390,18 @@ end
 """
     load_algorithm_graph(path; node_types=builtin_graph_node_types(),
                          bindings=NamedTuple())
+    load_algorithm_graph(root::AbstractDict;
+                         node_types=builtin_graph_node_types(),
+                         bindings=NamedTuple())
 
-Load a versioned, declarative TOML graph and compile it into the same concrete
-[`AlgorithmGraphDefinition`](@ref) used by direct Julia construction.
+Load a versioned, declarative graph and compile it into the same concrete
+[`AlgorithmGraphDefinition`](@ref) used by direct Julia construction. The path
+method parses TOML; the dictionary method accepts an already-parsed root, such
+as one decoded by an application-owned interchange layer.
 `node_types` is an explicit immutable named tuple of cold factories. `bindings`
 supplies caller-owned frame inputs, delayed-link initial values, and large
-sparse parameters by name; the TOML file never embeds or implicitly loads
-calibration arrays.
+sparse parameters by name; the graph dictionary never embeds or implicitly
+loads calibration arrays.
 """
 function load_algorithm_graph(
     path::AbstractString;
@@ -1410,6 +1415,33 @@ function load_algorithm_graph(
             "could not parse algorithm graph '$path': $(sprint(showerror, error))",
         ))
     end
+    return _load_algorithm_graph(
+        root;
+        node_types,
+        bindings,
+        context="algorithm graph '$path'",
+    )
+end
+
+function load_algorithm_graph(
+    root::AbstractDict;
+    node_types::NamedTuple=builtin_graph_node_types(),
+    bindings::NamedTuple=NamedTuple(),
+)
+    return _load_algorithm_graph(
+        root;
+        node_types,
+        bindings,
+        context="algorithm graph dictionary",
+    )
+end
+
+function _load_algorithm_graph(
+    root::AbstractDict;
+    node_types::NamedTuple,
+    bindings::NamedTuple,
+    context::AbstractString,
+)
     _require_table_keys(
         root,
         (
@@ -1423,7 +1455,7 @@ function load_algorithm_graph(
             "parameters",
         ),
         ("schema_version", "name", "nodes"),
-        "algorithm graph '$path'",
+        context,
     )
     version = _file_integer(root["schema_version"], "schema_version")
     version == ALGORITHM_GRAPH_TOML_SCHEMA_VERSION || throw(AlgorithmGraphError(
@@ -1432,20 +1464,12 @@ function load_algorithm_graph(
     ))
     name = _file_identifier(root["name"], "name")
 
-    node_entries = _table_array_or_empty(root, "nodes", "algorithm graph '$path'")
-    input_entries = _table_array_or_empty(root, "inputs", "algorithm graph '$path'")
-    output_entries = _table_array_or_empty(root, "outputs", "algorithm graph '$path'")
-    link_entries = _table_array_or_empty(root, "links", "algorithm graph '$path'")
-    delayed_entries = _table_array_or_empty(
-        root,
-        "delayed_links",
-        "algorithm graph '$path'",
-    )
-    parameter_entries = _table_array_or_empty(
-        root,
-        "parameters",
-        "algorithm graph '$path'",
-    )
+    node_entries = _table_array_or_empty(root, "nodes", context)
+    input_entries = _table_array_or_empty(root, "inputs", context)
+    output_entries = _table_array_or_empty(root, "outputs", context)
+    link_entries = _table_array_or_empty(root, "links", context)
+    delayed_entries = _table_array_or_empty(root, "delayed_links", context)
+    parameter_entries = _table_array_or_empty(root, "parameters", context)
 
     nodes = _parse_entries(
         node_entries,

@@ -132,21 +132,23 @@ needs runtime property updates, define an explicit node-specific transactional
 owner before exposing that behavior; do not mutate a plan in place from an
 uncoordinated task.
 
-## Adding A Built-In TOML Node
+## Adding A Built-In Declarative Graph Node
 
-A Julia graph adapter does not automatically become available to the TOML
-loader. Built-in file nodes also need:
+A Julia graph adapter does not automatically become available to the declarative
+graph loader. Built-in graph nodes also need:
 
 - a stable type label in `builtin_graph_node_types`
 - strict parsing of the node's configuration and props
 - explicit external binding names for large arrays or application objects
-- round-trip or executable graph-file tests
+- executable tests for file loading and, when used, parsed-dictionary loading
 - documentation of scientific schemas and units
 
-Keep the file format static and declarative. A value that changes port shape or
-topology is configuration and requires graph preparation. Large matrices,
-masks, influence functions, and calibration data are ndarray parameters or
-external bindings, not scalar property text.
+Keep the file format static and declarative. Applications may decode another
+interchange representation and pass its parsed root dictionary to
+`load_algorithm_graph`; that does not add a second maintained file format. A
+value that changes port shape or topology is configuration and requires graph
+preparation. Large matrices, masks, influence functions, and calibration data
+are ndarray parameters or external bindings, not scalar property text.
 
 ## Backend Extensions
 

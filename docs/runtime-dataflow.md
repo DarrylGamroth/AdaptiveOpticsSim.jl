@@ -381,11 +381,13 @@ same buffers and sequences to its transport lifecycle.
 
 TOML is the maintained human-authored format because it supports comments,
 keeps arrays of node and link tables readable, and is available as a Julia
-standard library. JSON may be added later as an interchange representation,
-but it is not a second maintained authoring schema. Direct Julia construction
-remains the unrestricted API for generated topology, conditional composition,
-multi-rate orchestration, and other arrangements that do not fit the static
-file subset.
+standard library. `load_algorithm_graph(root::AbstractDict; ...)` also accepts
+an already-decoded dictionary, so an application may use its own interchange
+decoder and pass the resulting graph through the same schema validation and
+node factories. This entry point does not define or maintain another serialized
+format. Direct Julia construction remains the unrestricted API for generated
+topology, conditional composition, multi-rate orchestration, and other
+arrangements that do not fit the static file subset.
 
 The key words **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**,
 and **MAY** in the following requirements are to be interpreted as described by
@@ -411,10 +413,11 @@ in all capitals.
   delayed links, boundary inputs and outputs, and sparse parameters MUST pass
   the same type, shape, schema, layout, ownership, and connectivity admission
   checks as direct Julia construction.
-- **AOS-GRAPH-FILE-006:** `load_algorithm_graph` MUST compile a valid file into
-  the same concrete `AlgorithmGraphDefinition` used by `algorithm_graph`. The
-  parsed TOML dictionaries and cold builder vectors MUST NOT survive into the
-  definition or prepared execution owner.
+- **AOS-GRAPH-FILE-006:** `load_algorithm_graph` MUST compile a valid TOML file
+  or validated parsed root dictionary into the same concrete
+  `AlgorithmGraphDefinition` used by `algorithm_graph`. Parsed dictionaries
+  and cold builder vectors MUST NOT survive into the definition or prepared
+  execution owner.
 - **AOS-GRAPH-FILE-007:** Version 1 is a static, single-rate, complete-frame
   subset. Multi-rate scheduling, conditional topology, generated nodes, and
   physical sub-frame event semantics SHOULD use direct Julia composition
