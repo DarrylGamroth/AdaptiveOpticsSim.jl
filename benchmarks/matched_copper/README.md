@@ -36,6 +36,16 @@ choices while retaining native propagation and lifecycle. Preserve an
 unmodified native diagnostic separately. This comparison is of engines under
 a common prescription, not proof of identical native defaults.
 
+The current matching adapter also evaluates SPECULA's cold prism exponential
+in Float64 before rounding to its runtime complex storage. Native Float32
+phase arithmetic fails the frozen raw-slope gates even after the AOS centering
+fix. The precision rerun preserves that negative evidence separately; its
+passing comparison uses this explicit setup correction. Native propagation,
+runtime precision and timing boundaries remain unchanged. Historical campaigns
+must use their archived harness snapshot, which predates this correction.
+See the [precision rerun](../results/platform/2026-10-22-centering-precision/README.md)
+for the corrected comparison and the original-arithmetic failures.
+
 `protocol.toml` freezes accuracy thresholds and timing boundaries before
 numerical results. No fitted gain, flux, registration or response scaling is
 allowed. Investigate and retain failed comparisons before accepting timings.

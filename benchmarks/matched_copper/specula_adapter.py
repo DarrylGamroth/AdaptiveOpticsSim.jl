@@ -15,6 +15,16 @@ from specula.processing_objects.modulated_pyramid import ModulatedPyramid
 class MatchedCopperPyramid(ModulatedPyramid):
     """A common 512 FFT, square stop, outward-prism Copper prescription."""
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Native ComplexF32 exp rounds the large phase before evaluating it.
+        # Preserve the native prism surface, evaluate its cold exponential in
+        # Float64, then round once to the unchanged runtime complex storage.
+        phase = self.pyr_tlt if self.xp is np else self.xp.asnumpy(self.pyr_tlt)
+        prism = np.exp((-2j * np.pi) * np.asarray(phase, dtype=np.float64))
+        prism = self.xp.asarray(prism.astype(self.complex_dtype))
+        self.shifted_masked_exp = self.xp.fft.fftshift(prism * self.fp_mask)
+
     def calc_pyr_geometry(self, DpupPix, pixel_pitch, lambda_, FoV,
                           pup_diam, ccd_side, fov_errinf=0.1,
                           fov_errsup=0.5, pup_dist=None, pup_margin=2,
@@ -131,4 +141,5 @@ class CopperSpeculaRunner:
             tilt_scale=float(sensor.tilt_scale),
             stop="square" if self.matched else "circular",
             prism_phase="negative_abs_frequency" if self.matched else "positive_abs_frequency",
+            prism_exponential="Float64_then_runtime_storage" if self.matched else "native_arithmetic",
             cuda_graph= sensor.cuda_graph is not None)
