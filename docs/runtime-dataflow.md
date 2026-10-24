@@ -184,8 +184,8 @@ executor.
 
 `prepare_graph_hil_boundary` wraps one unstepped prepared graph without
 changing its topology or scientific owners. It snapshots the initial graph
-command for reset and binds two distinct host `Array` exchange buffers: a
-caller-readable completed frame and a caller-writable command response. For an
+commands for reset and binds distinct host `Array` exchange buffers: a
+caller-readable completed frame and caller-writable command responses. For an
 accelerator graph, these buffers are the explicit GPU-to-CPU and CPU-to-GPU
 boundary; each copy completes in the graph's retained device context before
 the operation returns.
@@ -213,6 +213,18 @@ receive_command!(
 )
 adopt_hil_command!(boundary, sequence)
 ```
+
+For a graph with several command inputs, pass a tuple of 1 to 16 unique port
+names, such as `command_input=(:dm_command, :tiptilt_command, :offload_command)`.
+`hil_command_buffer(boundary)` then returns a `NamedTuple` with these names and
+one host `Array` per input. Commands can have different shapes and floating-point
+types. To supply the arrays, pass `command_buffer=(dm_command=dm_buffer,
+tiptilt_command=tiptilt_buffer, offload_command=offload_buffer)` with the same
+names and order. The single-`Symbol` form continues to return one `Array`.
+All graph command inputs, the graph frame, and the exchange arrays must have
+distinct storage. Every command is checked for finite values before any graph
+input changes; one `adopt_hil_command!` call adopts the complete response under
+the outstanding frame sequence. The next frame waits for that complete response.
 
 The sequence-zero command already present in the graph produces frame one.
 Command `n` is a response to frame `n` and becomes active only for frame

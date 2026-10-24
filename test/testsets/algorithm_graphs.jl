@@ -2594,3 +2594,186 @@ end
     @test !hil_boundary_status(copy_failure).failed
     @test_throws AlgorithmGraphError step_hil_exposure!(copy_failure)
 end
+
+function multi_command_hil_test_graph(;
+    commands=(dm=Float32[1, 2], tiptilt=Float32[3], offload=Float32[4, 5, 6]),
+)
+    nodes = map(keys(commands), values(commands)) do name, command
+        algorithm_node(name, GraphTestExactBindingDeclaration, length(command))
+    end
+    inputs = map(keys(commands), values(commands)) do name, command
+        graph_input(name, name => :input, command)
+    end
+    return prepare_algorithm_graph(algorithm_graph(
+        nodes; inputs, outputs=(graph_output(:frame, :dm => :output),),
+    ))
+end
+
+function multi_command_hil_test_boundary(graph=multi_command_hil_test_graph(); kwargs...)
+    return prepare_graph_hil_boundary(
+        graph; command_input=(:dm, :tiptilt, :offload), frame_output=:frame, kwargs...,
+    )
+end
+
+@testset "graph HIL complete multi-command response" begin
+    graph = multi_command_hil_test_graph()
+    buffers = (dm=zeros(Float32, 2), tiptilt=zeros(Float32, 1), offload=zeros(Float32, 3))
+    boundary = multi_command_hil_test_boundary(graph; command_buffer=buffers)
+    initial = map(copy, boundary.command_input)
+    @test hil_command_buffer(boundary) === buffers
+    @test hil_frame_buffer(boundary) isa Array
+    @test buffers == initial
+    @test all(isconcretetype, fieldtypes(typeof(boundary)))
+    @test_throws AlgorithmGraphError adopt_hil_command!(boundary, UInt64(1))
+    @test @inferred(step_hil_frame!(boundary)) == UInt64(1)
+    @test hil_frame_buffer(boundary) == initial.dm
+    @test_throws AlgorithmGraphError step_hil_frame!(boundary)
+    foreach(buffer -> fill!(buffer, 9.0f0), buffers)
+    @test_throws AlgorithmGraphError adopt_hil_command!(boundary, UInt64(2))
+    @test_throws AlgorithmGraphError adopt_hil_command!(boundary, 1)
+    @test boundary.command_input == initial
+    for invalid in (NaN32, Inf32, -Inf32)
+        buffers.offload[end] = invalid
+        @test_throws AlgorithmGraphError adopt_hil_command!(boundary, UInt64(1))
+        @test boundary.command_input == initial # Neither finite earlier port was copied.
+        @test !hil_boundary_status(boundary).failed
+        @test hil_boundary_status(boundary).command_response_required
+    end
+    buffers.offload[end] = 9.0f0
+    @test @inferred(adopt_hil_command!(boundary, UInt64(1))) == UInt64(1)
+    @test boundary.command_input == buffers
+    @test_throws AlgorithmGraphError adopt_hil_command!(boundary, UInt64(1))
+    @test step_hil_frame!(boundary) == UInt64(2)
+    @test hil_frame_buffer(boundary) == Float32[9, 9]
+    foreach(buffer -> fill!(buffer, 7.0f0), buffers)
+    @test @allocated(adopt_hil_command!(boundary, UInt64(2))) == 0
+    @test @allocated(step_hil_frame!(boundary)) == 0
+    @test @allocated(adopt_hil_command!(boundary, UInt64(3))) == 0
+    @test @inferred(reset_hil_boundary!(boundary)) === boundary
+    @test boundary.command_input == initial
+    @test buffers == initial
+    @test all(iszero, hil_frame_buffer(boundary))
+    @test hil_boundary_status(boundary) == (
+        frame_sequence=UInt64(0), active_command_sequence=UInt64(0),
+        command_response_required=false, failed=false,
+    )
+
+    one = prepare_graph_hil_boundary(
+        calibration_test_graph(); command_input=(:command,), frame_output=:frame,
+    )
+    @test hil_command_buffer(one) isa NamedTuple{(:command,)}
+    @test step_hil_frame!(one) == UInt64(1)
+    @test adopt_hil_command!(one, UInt64(1)) == UInt64(1)
+end
+
+@testset "graph HIL multi-command preparation contracts" begin
+    graph = multi_command_hil_test_graph()
+    for names in ((), (:dm, :dm), (:dm, :missing), (:dm, 1), ntuple(_ -> :dm, 17))
+        @test_throws AlgorithmGraphError prepare_graph_hil_boundary(
+            graph; command_input=names, frame_output=:frame,
+        )
+    end
+    valid = (dm=zeros(Float32, 2), tiptilt=zeros(Float32, 1), offload=zeros(Float32, 3))
+    for invalid in (
+        (dm=valid.dm, tiptilt=valid.tiptilt),
+        (tiptilt=valid.tiptilt, dm=valid.dm, offload=valid.offload),
+        merge(valid, (extra=zeros(Float32, 1),)),
+        merge(valid, (offload=zeros(Float32, 2),)),
+        merge(valid, (offload=zeros(Float64, 3),)),
+        merge(valid, (offload=view(zeros(Float32, 3), :),)),
+        zeros(Float32, 6),
+    )
+        @test_throws AlgorithmGraphError multi_command_hil_test_boundary(
+            graph; command_buffer=invalid,
+        )
+    end
+    nonfinite = multi_command_hil_test_graph(;
+        commands=(dm=Float32[1, 2], tiptilt=Float32[3], offload=Float32[4, NaN, 6]),
+    )
+    foreach(buffer -> fill!(buffer, 42.0f0), valid)
+    @test_throws AlgorithmGraphError multi_command_hil_test_boundary(
+        nonfinite; command_buffer=valid,
+    )
+    @test all(buffer -> all(==(42.0f0), buffer), valid)
+    ticket = step_graph_async!(graph)
+    @test_throws AlgorithmGraphError multi_command_hil_test_boundary(graph)
+    wait_graph_step!(ticket)
+    @test_throws AlgorithmGraphError multi_command_hil_test_boundary(graph)
+end
+
+@testset "graph HIL multi-command storage ownership" begin
+    alias_vector(values) = reshape(reshape(values, 1, length(values)), length(values))
+    for role in (:graph_commands, :graph_frame, :exchange_commands,
+                 :command_other_graph, :command_graph_frame,
+                 :frame_other_graph, :frame_exchange)
+        commands = (dm=Float32[1, 2], tiptilt=Float32[3, 4], offload=Float32[5, 6])
+        role === :graph_commands && (commands = merge(commands, (offload=alias_vector(commands.dm),)))
+        graph = multi_command_hil_test_graph(; commands)
+        graph_frame = graph_output(graph, Val(:frame))
+        role === :graph_frame && (graph_frame = commands.offload)
+        # Substitute only the published frame for fault injection; exact node owners remain intact.
+        role === :graph_frame && (graph = AOG.PreparedAlgorithmGraph(
+            graph.name, graph.target, graph.context, graph.nodes, graph.execution,
+            graph.delayed_links, graph.inputs, (frame=graph_frame,), graph.state,
+        ))
+        buffers = (dm=Float32[8, 9], tiptilt=Float32[10, 11], offload=Float32[12, 13])
+        frame_buffer = Float32[14, 15]
+        if role === :exchange_commands
+            buffers = merge(buffers, (offload=alias_vector(buffers.dm),))
+        elseif role === :command_other_graph
+            buffers = merge(buffers, (dm=alias_vector(commands.offload),))
+        elseif role === :command_graph_frame
+            buffers = merge(buffers, (offload=alias_vector(graph_frame),))
+        elseif role === :frame_other_graph
+            frame_buffer = alias_vector(commands.offload)
+        elseif role === :frame_exchange
+            frame_buffer = alias_vector(buffers.offload)
+        end
+        saved_commands, saved_buffers, saved_frame = map(copy, commands), map(copy, buffers), copy(frame_buffer)
+        @test_throws AlgorithmGraphError multi_command_hil_test_boundary(
+            graph; command_buffer=buffers, frame_buffer,
+        )
+        @test commands == saved_commands
+        @test buffers == saved_buffers
+        @test frame_buffer == saved_frame
+    end
+end
+
+@testset "graph HIL multi-command pending frames and partial copy failure" begin
+    pending = multi_command_hil_test_boundary()
+    step_hil_frame!(pending)
+    ticket = step_graph_async!(pending.graph) # Deliberate violation of sole execution ownership.
+    saved = map(copy, pending.command_input)
+    foreach(buffer -> fill!(buffer, 8.0f0), hil_command_buffer(pending))
+    @test_throws AlgorithmGraphError adopt_hil_command!(pending, UInt64(1))
+    @test pending.command_input == saved
+    wait_graph_step!(ticket)
+    @test_throws AlgorithmGraphError adopt_hil_command!(pending, UInt64(1))
+    reset_hil_boundary!(pending)
+    @test step_hil_frame!(pending) == UInt64(1)
+
+    prepared = multi_command_hil_test_boundary()
+    fault = CalibrationTestFailingCommand(prepared.command_input.offload, Ref(true))
+    failing = PreparedGraphHILBoundary(
+        prepared.graph, merge(prepared.command_input, (offload=fault,)),
+        prepared.frame_output, prepared.command_buffer, prepared.frame_buffer,
+        prepared.initial_command, prepared.state,
+    )
+    step_hil_frame!(failing)
+    foreach(buffer -> fill!(buffer, 8.0f0), hil_command_buffer(failing))
+    @test_throws ErrorException adopt_hil_command!(failing, UInt64(1))
+    @test failing.command_input.dm == Float32[8, 8]
+    @test failing.command_input.offload.values == Float32[8, 5, 6]
+    @test hil_boundary_status(failing).failed
+    @test hil_boundary_status(failing).active_command_sequence == UInt64(0)
+    @test_throws AlgorithmGraphError step_hil_frame!(failing)
+    @test_throws AlgorithmGraphError adopt_hil_command!(failing, UInt64(1))
+    @test_throws ErrorException reset_hil_boundary!(failing)
+    @test hil_boundary_status(failing).failed
+    fault.fail[] = false
+    reset_hil_boundary!(failing)
+    @test failing.command_input.dm == Float32[1, 2]
+    @test failing.command_input.offload.values == Float32[4, 5, 6]
+    @test hil_command_buffer(failing) == failing.initial_command
+    @test !hil_boundary_status(failing).failed
+end

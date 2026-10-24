@@ -22,11 +22,11 @@ command snapshot.
 """
 struct PreparedGraphHILBoundary{
     Graph<:PreparedAlgorithmGraph,
-    CommandInput<:AbstractArray,
+    CommandInput<:Union{AbstractArray,NamedTuple},
     FrameOutput<:AbstractArray,
-    CommandBuffer<:Array,
+    CommandBuffer<:Union{Array,NamedTuple},
     FrameBuffer<:Array,
-    InitialCommand<:Array,
+    InitialCommand<:Union{Array,NamedTuple},
 }
     graph::Graph
     command_input::CommandInput
@@ -35,6 +35,76 @@ struct PreparedGraphHILBoundary{
     frame_buffer::FrameBuffer
     initial_command::InitialCommand
     state::GraphHILBoundaryState
+end
+
+function _prepare_hil_command_buffers(commands::NamedTuple, ::Nothing)
+    return map(command -> _prepare_hil_host_buffer(command, nothing, "HIL command"), commands)
+end
+
+function _prepare_hil_command_buffers(commands::NamedTuple{Names}, buffers::NamedTuple) where {Names}
+    keys(buffers) == Names || throw(AlgorithmGraphError(
+        "HIL command buffer names must match command_input names and order $Names",
+    ))
+    prepared = map(values(commands), values(buffers)) do command, buffer
+        _prepare_hil_host_buffer(command, buffer, "HIL command")
+    end
+    return NamedTuple{Names}(prepared)
+end
+
+function _prepare_hil_command_buffers(commands::NamedTuple, buffers)
+    throw(AlgorithmGraphError("multiple HIL commands require a NamedTuple of host buffers"))
+end
+
+function _require_distinct_hil_buffers(buffers::Tuple)
+    isempty(buffers) && return nothing
+    first_buffer = first(buffers)
+    for buffer in Base.tail(buffers)
+        Base.mightalias(first_buffer, buffer) && throw(AlgorithmGraphError(
+            "HIL graph command, graph frame, and exchange buffers must not share storage",
+        ))
+    end
+    _require_distinct_hil_buffers(Base.tail(buffers))
+    return nothing
+end
+
+function _prepare_hil_boundary_buffers(
+    graph::PreparedAlgorithmGraph,
+    command_input::Tuple,
+    frame_output::Symbol,
+    command_buffer,
+    frame_buffer,
+)
+    (1 <= length(command_input) <= 16 && all(name -> name isa Symbol, command_input)) ||
+        throw(AlgorithmGraphError("HIL command_input must contain 1 to 16 Symbols"))
+    allunique(command_input) || throw(AlgorithmGraphError(
+        "HIL command_input names must be unique",
+    ))
+    graph_failed(graph) && throw(AlgorithmGraphError(
+        "a failed graph cannot be bound to a HIL boundary",
+    ))
+    graph_step_pending(graph) && throw(AlgorithmGraphError(
+        "a graph with a pending frame cannot be bound to a HIL boundary",
+    ))
+    iszero(graph_step_sequence(graph)) || throw(AlgorithmGraphError(
+        "a HIL boundary requires an unstepped graph",
+    ))
+    commands = NamedTuple{command_input}(map(name -> graph_input(graph, name), command_input))
+    for command in values(commands)
+        eltype(command) <: AbstractFloat || throw(AlgorithmGraphError(
+            "a HIL command input must use an AbstractFloat element type",
+        ))
+    end
+    frame = graph_output(graph, frame_output)
+    prepared_commands = _prepare_hil_command_buffers(commands, command_buffer)
+    prepared_frame = _prepare_hil_host_buffer(frame, frame_buffer, "HIL frame")
+    _require_distinct_hil_buffers((values(commands)..., frame,
+        values(prepared_commands)..., prepared_frame))
+    initial_commands = map(similar, prepared_commands)
+    _copy_hil_commands!(graph, initial_commands, commands)
+    _validate_hil_command(initial_commands)
+    _restore_hil_host_commands!(prepared_commands, initial_commands)
+    fill!(prepared_frame, zero(eltype(prepared_frame)))
+    return (commands, frame, prepared_commands, prepared_frame, initial_commands)
 end
 
 function _prepare_hil_host_buffer(
@@ -135,17 +205,20 @@ end
     prepare_graph_hil_boundary(graph; command_input, frame_output,
                                command_buffer=nothing, frame_buffer=nothing)
 
-Prepare a lockstep external-RTC boundary around an unstepped graph. The named
-command input and frame output remain the graph's exact-target arrays. The
-exchange buffers are ordinary host `Array`s, allocated during preparation
-unless supplied by the caller. Preparation snapshots the initial graph command
+Prepare a lockstep external-RTC boundary around an unstepped graph. `command_input`
+is one `Symbol` or a tuple of 1 to 16 unique `Symbol`s. For the tuple form,
+`command_buffer` is `nothing` or a `NamedTuple` of host arrays with the same names
+and order; each command can have a different shape and floating-point type.
+The named command inputs and frame output remain the graph's exact-target arrays.
+The exchange buffers are ordinary host `Array`s, allocated during preparation
+unless supplied by the caller. Preparation snapshots the initial graph commands
 for deterministic reset. After preparation, the boundary must be the only
 owner that steps the graph or mutates its exact command input; transport code
 writes only [`hil_command_buffer`](@ref).
 """
 function prepare_graph_hil_boundary(
     graph::PreparedAlgorithmGraph;
-    command_input::Symbol,
+    command_input::Union{Symbol,Tuple},
     frame_output::Symbol,
     command_buffer=nothing,
     frame_buffer=nothing,
@@ -156,7 +229,7 @@ function prepare_graph_hil_boundary(
     return PreparedGraphHILBoundary(graph, buffers..., GraphHILBoundaryState())
 end
 
-"""Return the caller-writable host command exchange buffer."""
+"""Return the caller-writable host command Array, or NamedTuple of Arrays for multiple ports."""
 @inline hil_command_buffer(boundary::PreparedGraphHILBoundary) =
     boundary.command_buffer
 
@@ -193,6 +266,9 @@ function _require_hil_frame_step(boundary::PreparedGraphHILBoundary)
         _throw_hil_boundary_failed()
     state.command_response_required &&
         _throw_hil_command_response_required(state.frame_sequence)
+    graph_step_pending(boundary.graph) && throw(AlgorithmGraphError(
+        "a graph with a pending frame cannot advance a HIL boundary",
+    ))
     graph_step_sequence(boundary.graph) == state.frame_sequence || throw(
         AlgorithmGraphError(
             "the graph and HIL boundary frame sequences are not aligned",
@@ -268,13 +344,51 @@ function _validate_hil_command(values::Array{T}) where {T<:AbstractFloat}
     return nothing
 end
 
+@inline function _validate_hil_command(commands::NamedTuple)
+    foreach(_validate_hil_command, values(commands))
+    return nothing
+end
+
+@inline function _copy_hil_commands!(
+    graph::PreparedAlgorithmGraph,
+    destination::AbstractArray,
+    source::AbstractArray,
+)
+    _copy_hil_buffer!(graph, destination, source)
+    return nothing
+end
+
+@inline function _copy_hil_commands!(
+    graph::PreparedAlgorithmGraph,
+    destinations::NamedTuple{Names},
+    sources::NamedTuple{Names},
+) where {Names}
+    foreach(values(destinations), values(sources)) do destination, source
+        _copy_hil_buffer!(graph, destination, source)
+    end
+    return nothing
+end
+
+@inline function _restore_hil_host_commands!(destination::Array, source::Array)
+    copyto!(destination, source)
+    return nothing
+end
+
+@inline function _restore_hil_host_commands!(
+    destinations::NamedTuple{Names},
+    sources::NamedTuple{Names},
+) where {Names}
+    foreach(copyto!, values(destinations), values(sources))
+    return nothing
+end
+
 """
     adopt_hil_command!(boundary, sequence) -> sequence
 
-Validate the complete caller-written host command buffer and adopt it for the
+Validate every complete caller-written host command buffer and adopt them for the
 next graph frame. `sequence` must match the outstanding frame. Validation
-finishes before the exact-target graph command is mutated; a failed target copy
-stops the boundary because it may have partially changed that buffer.
+finishes for all ports before any exact-target graph command is mutated; a failed
+target copy stops the boundary because commands may have been partially adopted.
 """
 function adopt_hil_command!(
     boundary::PreparedGraphHILBoundary,
@@ -289,9 +403,15 @@ function adopt_hil_command!(
     sequence == state.frame_sequence || throw(AlgorithmGraphError(
         "expected command sequence $(state.frame_sequence), received $sequence",
     ))
+    graph_step_pending(boundary.graph) && throw(AlgorithmGraphError(
+        "a graph with a pending frame cannot adopt a HIL command",
+    ))
+    graph_step_sequence(boundary.graph) == state.frame_sequence || throw(AlgorithmGraphError(
+        "the graph and HIL boundary frame sequences are not aligned",
+    ))
     _validate_hil_command(boundary.command_buffer)
     try
-        _copy_hil_buffer!(
+        _copy_hil_commands!(
             boundary.graph,
             boundary.command_input,
             boundary.command_buffer,
@@ -321,8 +441,8 @@ function reset_hil_boundary!(boundary::PreparedGraphHILBoundary)
     state = boundary.state
     state.failed = true
     reset_graph!(boundary.graph)
-    copyto!(boundary.command_buffer, boundary.initial_command)
-    _copy_hil_buffer!(
+    _restore_hil_host_commands!(boundary.command_buffer, boundary.initial_command)
+    _copy_hil_commands!(
         boundary.graph,
         boundary.command_input,
         boundary.initial_command,
