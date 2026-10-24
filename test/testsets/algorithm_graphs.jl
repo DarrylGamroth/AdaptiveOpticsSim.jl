@@ -2777,3 +2777,84 @@ end
     @test hil_command_buffer(failing) == failing.initial_command
     @test !hil_boundary_status(failing).failed
 end
+
+@testset "HIL single-command and calibration buffers retain complete shapes" begin
+    for prepare in (prepare_graph_hil_boundary, prepare_graph_calibration_boundary), delta in (-1, 1)
+        graph = calibration_test_graph()
+        boundary = prepare(graph; command_input=:command, frame_output=:frame)
+        adopt! = prepare === prepare_graph_hil_boundary ? adopt_hil_command! : adopt_hil_probe!
+        step! = prepare === prepare_graph_hil_boundary ? step_hil_frame! : step_hil_exposure!
+        prepare === prepare_graph_hil_boundary && step!(boundary)
+        command = hil_command_buffer(boundary)
+        resize!(command, 2 + delta)
+        fill!(command, 8.0f0)
+        saved_status = hil_boundary_status(boundary)
+        @test_throws AlgorithmGraphError adopt!(boundary, UInt64(1))
+        @test graph_input(graph, Val(:command)) == Float32[1, 2]
+        @test hil_boundary_status(boundary) == saved_status
+        resize!(command, 2)
+        fill!(command, 8.0f0)
+        @test adopt!(boundary, UInt64(1)) == UInt64(1)
+        step!(boundary)
+        saved_sequence = graph_step_sequence(graph)
+        saved_frame = copy(hil_frame_buffer(boundary))
+        resize!(command, 2 + delta)
+        fill!(command, 9.0f0)
+        saved_command = copy(command)
+        @test_throws AlgorithmGraphError reset_hil_boundary!(boundary)
+        @test hil_boundary_status(boundary).failed
+        @test graph_step_sequence(graph) == saved_sequence
+        @test graph_input(graph, Val(:command)) == Float32[8, 8]
+        @test command == saved_command
+        @test hil_frame_buffer(boundary) == saved_frame
+        @test_throws AlgorithmGraphError adopt!(boundary, UInt64(2))
+        @test_throws AlgorithmGraphError step!(boundary)
+        resize!(command, 2)
+        @test reset_hil_boundary!(boundary) === boundary
+        @test command == Float32[1, 2]
+        @test graph_input(graph, Val(:command)) == Float32[1, 2]
+        @test !hil_boundary_status(boundary).failed
+        @test graph_step_sequence(graph) == UInt64(0)
+    end
+end
+
+@testset "HIL multi-command shape checks complete before mutation" begin
+    for name in (:dm, :offload), delta in (-1, 1)
+        boundary = multi_command_hil_test_boundary()
+        initial = map(copy, boundary.command_input)
+        step_hil_frame!(boundary)
+        buffers = hil_command_buffer(boundary)
+        command = buffers[name]
+        extent = length(command)
+        resize!(command, extent + delta)
+        foreach(buffer -> fill!(buffer, 8.0f0), buffers)
+        saved_status = hil_boundary_status(boundary)
+        @test_throws AlgorithmGraphError adopt_hil_command!(boundary, UInt64(1))
+        @test boundary.command_input == initial
+        @test hil_boundary_status(boundary) == saved_status
+        resize!(command, extent)
+        fill!(command, 8.0f0)
+        @test adopt_hil_command!(boundary, UInt64(1)) == UInt64(1)
+        step_hil_frame!(boundary)
+        saved_sequence = graph_step_sequence(boundary.graph)
+        saved_commands = map(copy, boundary.command_input)
+        saved_frame = copy(hil_frame_buffer(boundary))
+        resize!(command, extent + delta)
+        foreach(buffer -> fill!(buffer, 9.0f0), buffers)
+        saved_buffers = map(copy, buffers)
+        @test_throws AlgorithmGraphError reset_hil_boundary!(boundary)
+        @test hil_boundary_status(boundary).failed
+        @test graph_step_sequence(boundary.graph) == saved_sequence
+        @test boundary.command_input == saved_commands
+        @test buffers == saved_buffers
+        @test hil_frame_buffer(boundary) == saved_frame
+        @test_throws AlgorithmGraphError adopt_hil_command!(boundary, UInt64(2))
+        @test_throws AlgorithmGraphError step_hil_frame!(boundary)
+        resize!(command, extent)
+        @test reset_hil_boundary!(boundary) === boundary
+        @test boundary.command_input == initial
+        @test buffers == initial
+        @test !hil_boundary_status(boundary).failed
+        @test graph_step_sequence(boundary.graph) == UInt64(0)
+    end
+end

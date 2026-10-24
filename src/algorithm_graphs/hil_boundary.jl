@@ -349,6 +349,21 @@ end
     return nothing
 end
 
+@inline function _validate_hil_command_shape(command::Array, target::AbstractArray)
+    size(command) == size(target) || throw(AlgorithmGraphError(
+        "HIL command buffer shape $(size(command)) does not match $(size(target))",
+    ))
+    return nothing
+end
+
+@inline function _validate_hil_command_shape(
+    commands::NamedTuple{Names},
+    targets::NamedTuple{Names},
+) where {Names}
+    foreach(_validate_hil_command_shape, values(commands), values(targets))
+    return nothing
+end
+
 @inline function _copy_hil_commands!(
     graph::PreparedAlgorithmGraph,
     destination::AbstractArray,
@@ -409,6 +424,7 @@ function adopt_hil_command!(
     graph_step_sequence(boundary.graph) == state.frame_sequence || throw(AlgorithmGraphError(
         "the graph and HIL boundary frame sequences are not aligned",
     ))
+    _validate_hil_command_shape(boundary.command_buffer, boundary.command_input)
     _validate_hil_command(boundary.command_buffer)
     try
         _copy_hil_commands!(
@@ -440,6 +456,7 @@ driver must also be reset before `step_hil_frame_at!` is used again.
 function reset_hil_boundary!(boundary::PreparedGraphHILBoundary)
     state = boundary.state
     state.failed = true
+    _validate_hil_command_shape(boundary.command_buffer, boundary.initial_command)
     reset_graph!(boundary.graph)
     _restore_hil_host_commands!(boundary.command_buffer, boundary.initial_command)
     _copy_hil_commands!(

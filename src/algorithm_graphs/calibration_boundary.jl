@@ -107,6 +107,7 @@ function adopt_hil_probe!(
     probe_sequence > state.active_probe_sequence || throw(AlgorithmGraphError(
         "probe sequence must be positive and advance beyond $(state.active_probe_sequence), received $probe_sequence",
     ))
+    _validate_hil_command_shape(boundary.command_buffer, boundary.command_input)
     _validate_hil_command(boundary.command_buffer)
     try
         _copy_hil_buffer!(boundary.graph, boundary.command_input, boundary.command_buffer)
@@ -195,6 +196,7 @@ owner operation, not confirmation of physical probe restoration by a transport.
 function reset_hil_boundary!(boundary::PreparedGraphCalibrationBoundary)
     state = boundary.state
     state.failed = true
+    _validate_hil_command_shape(boundary.command_buffer, boundary.initial_command)
     reset_graph!(boundary.graph)
     copyto!(boundary.command_buffer, boundary.initial_command)
     _copy_hil_buffer!(boundary.graph, boundary.command_input, boundary.initial_command)
