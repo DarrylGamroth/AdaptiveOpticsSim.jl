@@ -175,6 +175,19 @@ function _require_binding(
     return getproperty(bindings, name)
 end
 
+function _second_order_response_f32_node(name::Symbol, config::NamedTuple, props::NamedTuple)
+    fields = (:natural_frequency_hz, :damping_ratio, :sample_period_s, :count, :schema)
+    context = "node '$name' config"
+    _require_named_fields(config, fields, fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    return second_order_response_node(name;
+        natural_frequency_hz=_file_real(config.natural_frequency_hz, "$context.natural_frequency_hz"),
+        damping_ratio=_file_real(config.damping_ratio, "$context.damping_ratio"),
+        sample_period_s=_file_real(config.sample_period_s, "$context.sample_period_s"),
+        count=_file_integer(config.count, "$context.count"),
+        schema=_file_string(config.schema, "$context.schema"), T=Float32)
+end
+
 function _modal_opd_expansion_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -1288,6 +1301,7 @@ function builtin_graph_node_types()
         grid_gaussian_deformable_mirror_surface_f32=
             _grid_gaussian_deformable_mirror_surface_f32_node,
         modal_opd_expansion_f32=_modal_opd_expansion_f32_node,
+        second_order_response_f32=_second_order_response_f32_node,
         multilayer_atmosphere_opd_f32=
             _multilayer_atmosphere_opd_f32_node,
         pupil_opd_composition_f32=_pupil_opd_composition_f32_node,

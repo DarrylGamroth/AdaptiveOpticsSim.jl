@@ -14,6 +14,7 @@ export CapturedModelTimestamp, PreparedCapturedModelTimeDriver
 export algorithm_node, algorithm_graph, graph_input, graph_output
 export link, delayed_link, sparse_parameter
 export modal_opd_expansion_node
+export second_order_response_node
 export multilayer_atmosphere_opd_node
 export deformable_mirror_surface_node
 export gaussian_deformable_mirror_surface_node
@@ -53,6 +54,7 @@ public step_graph_node!, enqueue_graph_node!, reset_graph_node!
 public graph_node_capture_capability
 public GraphNodeCaptureSafe, GraphNodeCaptureUnsupported
 public ModalOPDExpansionNode, ModalOPDExpansionNodeConfig
+public SecondOrderResponseNode, SecondOrderResponseNodeConfig
 public MultiLayerAtmosphereOPDNode, MultiLayerAtmosphereOPDNodeConfig
 public DeformableMirrorSurfaceNode, DeformableMirrorSurfaceNodeConfig
 public GaussianDeformableMirrorSurfaceNode

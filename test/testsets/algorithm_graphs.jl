@@ -1773,6 +1773,7 @@ end
         :gaussian_deformable_mirror_surface_f32,
         :grid_gaussian_deformable_mirror_surface_f32,
         :modal_opd_expansion_f32,
+        :second_order_response_f32,
         :multilayer_atmosphere_opd_f32,
         :pupil_opd_composition_f32,
         :pyramid_rate_f32,

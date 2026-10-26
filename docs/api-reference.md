@@ -302,6 +302,20 @@ Factory functions include:
   explicit metric pixel grid and integrated spectral channel
 - `pixel_mtf_node` for a caller-calibrated response on exact image buffers
 - `modal_opd_expansion_node`
+- `second_order_response_node` for an explicit unity-static-gain mechanical
+  response before modal expansion or other physical coordinate use
+
+`Optics.SecondOrderResponsePlan(; natural_frequency_hz, damping_ratio,
+sample_period_s, T=Float32)` prepares exact zero-order-hold coefficients for
+independent coordinates. `prepare_second_order_response(input, plan; output)`
+binds distinct same-precision vectors and zero-initialized persistent position
+and velocity. `advance_response!` emits the end-of-hold position;
+`reset_response!` restores rest without replacing storage. The graph adapter's
+`:input` and `:output` use one caller-declared `schema` and `count`. Applications
+must match `sample_period_s` to their graph cadence and declare whether chosen
+frequency/damping parameters are provisional or measured. No instrument values,
+extra pure delay, or controller filter are supplied. Host stream and CUDA
+captured execution are covered by focused response tests.
 
 `ingaas_detector_acquisition_node` declares one complete-frame, global-shutter
 InGaAs acquisition. The photon-rate input is cell-integrated photons per
