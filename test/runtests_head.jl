@@ -116,13 +116,17 @@ end
 include("reference_harness.jl")
 include("gate0_characterization_harness.jl")
 
-function run_tutorial_example(name::AbstractString)
+function load_tutorial_example(name::AbstractString)
     path = joinpath(dirname(@__DIR__), "examples", "tutorials", name)
     mod = Module(Symbol("Tutorial_", replace(basename(name), "." => "_")))
     Core.eval(mod, :(include(path::AbstractString) = Base.include($mod, path)))
     Base.include(mod, path)
-    main_fn = Core.eval(mod, :main)
-    return Base.invokelatest(main_fn)
+    return mod
+end
+
+function run_tutorial_example(name::AbstractString; kwargs...)
+    main_fn = getfield(load_tutorial_example(name), :main)
+    return Base.invokelatest(main_fn; kwargs...)
 end
 
 function assert_source_interface(src)

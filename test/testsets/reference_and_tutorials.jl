@@ -225,16 +225,40 @@ end
     @test length(asterism.component_images) == 4
     @test sum(asterism.combined_image) >= sum(first(asterism.component_images))
 
-    extended = run_tutorial_example("extended_source_sensing.jl")
+    extended_tutorial = load_tutorial_example("extended_source_sensing.jl")
+    extended = Base.invokelatest(extended_tutorial.main)
     @test extended.n_samples == 25
     @test extended.sh_extended_rate ≈ extended.sh_point_rate rtol=1e-12
     @test extended.pyramid_extended_rate ≈
         extended.pyramid_point_rate rtol=1e-12
     @test extended.sh_extended_peak <= extended.sh_point_peak * (1 + 1e-12)
-    # Direct WFS propagation does not yet apply each quadrature component's
-    # angular offset to detector-plane morphology.
-    @test_broken extended.sh_relative_morphology > 1e-6
-    @test_broken extended.pyramid_relative_morphology > 1e-6
+    @test extended.sh_relative_morphology > 1e-6
+    @test extended.pyramid_relative_morphology > 1e-6
+
+    unresolved = Base.invokelatest(extended_tutorial.main;
+        model=PointCloudSourceModel([(0.0, 0.0)], [1.0]))
+    @test unresolved.sh_relative_morphology < 1e-12
+    @test unresolved.pyramid_relative_morphology < 1e-12
+    @test unresolved.sh_extended_rate ≈ unresolved.sh_point_rate rtol=1e-12
+    @test unresolved.pyramid_extended_rate ≈
+        unresolved.pyramid_point_rate rtol=1e-12
+
+    # Independent asymmetric carrier with a nonzero tracking direction:
+    # θ_sample − θ_center = (+0.04, −0.03) arcsec.
+    carrier_pupil = PupilFunction(Telescope(resolution=8, diameter=8.0))
+    fill!(carrier_pupil.opd, 4e-8)
+    reference = Source(band=:I, magnitude=6.0, separation_arcsec=0.2)
+    component = Source(band=:I, magnitude=6.0,
+        separation_arcsec=hypot(0.24, -0.03),
+        position_angle_deg=atand(-0.03, 0.24))
+    tilted = Base.invokelatest(extended_tutorial.source_pupil,
+        carrier_pupil, component, reference)
+    expected_opd = [4e-8 + (pi / 648000) *
+        (0.04 * (i - 4.5) - 0.03 * (j - 4.5))
+        for i in 1:8, j in 1:8]
+    @test tilted.opd ≈ expected_opd rtol=1e-12
+    @test all(==(4e-8), carrier_pupil.opd)
+    @test tilted.opd !== carrier_pupil.opd
 
     sh_subaps = run_tutorial_example("shack_hartmann_subapertures.jl")
     @test sh_subaps.n_valid > 0
