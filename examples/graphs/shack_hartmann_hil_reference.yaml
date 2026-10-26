@@ -56,8 +56,10 @@ nodes:
     opd_schema: org.adaptiveopticssim.hil-reference.pupil-opd-m.f32/1
     photon_rate_schema: org.adaptiveopticssim.hil-reference.shack-hartmann-photon-rate.f32/1
 - name: detector
-  type: ccd_detector_acquisition_f32
+  type: detector
+  detector: ccd
   config:
+    shutter: global
     rows: 64
     columns: 64
     binning: 1

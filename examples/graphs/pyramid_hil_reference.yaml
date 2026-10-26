@@ -57,8 +57,10 @@ nodes:
     opd_schema: org.adaptiveopticssim.hil-reference.pupil-opd-m.f32/1
     photon_rate_schema: org.adaptiveopticssim.hil-reference.pyramid-photon-rate.f32/1
 - name: detector
-  type: emccd_detector_acquisition_f32
+  type: detector
+  detector: emccd
   config:
+    shutter: global
     rows: 36
     columns: 36
     binning: 1

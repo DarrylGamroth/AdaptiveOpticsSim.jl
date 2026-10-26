@@ -1876,6 +1876,84 @@ end
 end
 
 
+@testset "declarative detector selectors preserve native acquisitions" begin
+    photon_rate = fill(1_000.0f0, 2, 3)
+    common = (
+        rows=2,
+        columns=3,
+        wavelength_m=0.75e-6,
+        exposure_duration_s=0.01,
+        quantum_efficiency=0.9,
+        photon_noise=true,
+        readout_noise=true,
+        readout_noise_e=1.0,
+        rng_seed=42,
+        photon_rate_schema="test.detector.photon-rate/1",
+        frame_schema="test.detector.frame/1",
+    )
+    families = (
+        ("ccd", ccd_detector_acquisition_node, (; pixel_scale_arcsec=0.1)),
+        ("cmos", cmos_detector_acquisition_node, (; pixel_scale_arcsec=0.1)),
+        ("emccd", emccd_detector_acquisition_node,
+            (; normalized_pupil_sampling=0.05, gain=10, em_gain_max=10)),
+    )
+    for (detector, constructor, response) in families
+        config = merge(common, response)
+        entry = Dict{String,Any}(
+            "name" => "camera",
+            "type" => "detector",
+            "detector" => detector,
+            "config" => Dict{String,Any}(string(k) => v for (k, v) in pairs(config)),
+        )
+        document = Dict{String,Any}(
+            "schema_version" => 1,
+            "name" => "detector_selection",
+            "nodes" => [entry],
+            "inputs" => [Dict("name" => "photons",
+                "destination" => "camera.photon_rate", "binding" => "photons")],
+            "outputs" => [Dict("name" => "frame", "source" => "camera.frame")],
+        )
+        native = algorithm_graph(
+            (constructor(:camera; config...),);
+            inputs=(graph_input(:photons, :camera => :photon_rate, photon_rate),),
+            outputs=(graph_output(:frame, :camera => :frame),),
+        )
+        for explicit_shutter in (false, true)
+            explicit_shutter && (entry["config"]["shutter"] = "global")
+            loaded = load_algorithm_graph(document; bindings=(; photons=photon_rate))
+            actual = prepare_algorithm_graph(loaded)
+            expected = prepare_algorithm_graph(native)
+            for _ in 1:2
+                step_graph!(actual)
+                step_graph!(expected)
+                @test graph_output(actual, Val(:frame)) == graph_output(expected, Val(:frame))
+            end
+            @test size(graph_output(actual, Val(:frame))) == (2, 3)
+            reset_graph!(actual)
+            reset_graph!(expected)
+            step_graph!(actual)
+            step_graph!(expected)
+            @test graph_output(actual, Val(:frame)) == graph_output(expected, Val(:frame))
+        end
+        for shutter in ("rolling", "frame_transfer", "invalid", 1)
+            entry["config"]["shutter"] = shutter
+            @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons=photon_rate))
+        end
+        entry["config"]["shutter"] = "global"
+        for unsupported in ("ingaas", "hgcdte", "invalid", 1)
+            entry["detector"] = unsupported
+            @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons=photon_rate))
+        end
+        delete!(entry, "detector")
+        @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons=photon_rate))
+        entry["detector"] = detector
+        entry["type"] = "$(detector)_detector_acquisition_f32"
+        @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons=photon_rate))
+        entry["type"] = "modal_opd_expansion_f32"
+        @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons=photon_rate))
+    end
+end
+
 @testset "YAML graph files compile to native graph definitions" begin
     normalized_yaml =
         AdaptiveOpticsSim.AlgorithmGraphs._normalize_graph_value(
@@ -1952,10 +2030,8 @@ end
     end
 
     @test keys(builtin_graph_node_types()) == (
-        :ccd_detector_acquisition_f32,
-        :cmos_detector_acquisition_f32,
+        :detector,
         :deformable_mirror_surface_f32,
-        :emccd_detector_acquisition_f32,
         :gaussian_deformable_mirror_surface_f32,
         :grid_gaussian_deformable_mirror_surface_f32,
         :modal_opd_expansion_f32,

@@ -453,7 +453,7 @@ The version 1 mappings and sequences are:
 | Mapping or sequence | Required fields | Meaning |
 |---|---|---|
 | root | `schema_version`, `name`, `nodes` | Schema and graph identity |
-| `nodes` | `name`, `type`, `config` | One node in declaration order; preparation derives execution order; `props` is optional |
+| `nodes` | `name`, `type`, `config` | One node in declaration order; preparation derives execution order; `props` is optional; `type: detector` also requires a `detector` selector |
 | `inputs` | `name`, `destination`, `binding` | Caller-owned frame input |
 | `outputs` | `name`, `source` | Caller-visible allocated graph output |
 | `links` | `source`, `destination` | Same-step direct link |
@@ -473,10 +473,8 @@ prepares that plant graph with `load_algorithm_graph`; the RTC graph and its
 calibration products are prepared by FGA/JFG in the maintained
 [`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/).
 
-The built-in type map currently contains `ccd_detector_acquisition_f32`,
-`cmos_detector_acquisition_f32`,
+The built-in type map currently contains `detector`,
 `deformable_mirror_surface_f32`,
-`emccd_detector_acquisition_f32`,
 `gaussian_deformable_mirror_surface_f32`,
 `modal_opd_expansion_f32`,
 `second_order_response_f32`,
@@ -486,6 +484,34 @@ The built-in type map currently contains `ccd_detector_acquisition_f32`,
 and `shack_hartmann_rate_f32`.
 `merge(builtin_graph_node_types(), companion_types)` creates an explicit larger
 map for optional packages such as the Proper companion.
+
+Detector nodes use a short scientific selector rather than a Julia implementation
+name:
+
+```yaml
+- name: camera
+  type: detector
+  detector: emccd
+  config:
+    shutter: global
+    # Exposure, sensor response, noise, schemas and RNG settings follow here.
+```
+
+The supported selectors are `ccd`, `cmos` and `emccd`. They select the existing
+Float32 complete-frame acquisitions; UInt16 camera output remains a separate
+ADC/formatting step. `shutter` defaults to `global`. Other shutter modes and
+unsupported detector names are rejected, rather than approximated silently.
+Rolling exposure and frame-transfer timing require explicit acquisition
+composition; this selector does not implement those temporal models.
+
+The declarative subset does not expose every native Julia graph feature:
+
+- The current atmosphere factory renders an on-axis, infinite-distance source.
+  WFS source-separation settings do not select a different atmospheric line of
+  sight. Source-dependent atmosphere renderers exist in Julia composition.
+- InGaAs acquisition and calibrated pixel MTF have native graph constructors,
+  but do not yet have built-in YAML factories. Their calibration bindings need
+  an explicit declaration before these features can be selected from YAML.
 
 `second_order_response_f32` declares same-schema vector ports `input` and
 `output`. Its required config fields are `natural_frequency_hz`, `damping_ratio`,

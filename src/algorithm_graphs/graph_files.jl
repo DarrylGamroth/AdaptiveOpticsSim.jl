@@ -1280,6 +1280,32 @@ function _emccd_detector_acquisition_f32_node(
     )
 end
 
+function _detector_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple;
+    detector::Symbol,
+)
+    factories = (
+        ccd=_ccd_detector_acquisition_f32_node,
+        cmos=_cmos_detector_acquisition_f32_node,
+        emccd=_emccd_detector_acquisition_f32_node,
+    )
+    hasproperty(factories, detector) || throw(_file_error(
+        "node '$name' detector",
+        "unsupported detector '$detector'; supported detectors are ccd, cmos, emccd",
+    ))
+    if hasproperty(config, :shutter)
+        shutter = _file_string(config.shutter, "node '$name' config.shutter")
+        shutter == "global" || throw(_file_error(
+            "node '$name' config.shutter",
+            "unsupported shutter '$shutter'; this graph node supports only global acquisition",
+        ))
+    end
+    acquisition_config = Base.structdiff(config, NamedTuple{(:shutter,)})
+    return getproperty(factories, detector)(name, acquisition_config, props)
+end
+
 """
     builtin_graph_node_types()
 
@@ -1290,12 +1316,9 @@ global registry or dynamic Julia evaluation is used.
 """
 function builtin_graph_node_types()
     return (
-        ccd_detector_acquisition_f32=_ccd_detector_acquisition_f32_node,
-        cmos_detector_acquisition_f32=_cmos_detector_acquisition_f32_node,
+        detector=_detector_node,
         deformable_mirror_surface_f32=
             _deformable_mirror_surface_f32_node,
-        emccd_detector_acquisition_f32=
-            _emccd_detector_acquisition_f32_node,
         gaussian_deformable_mirror_surface_f32=
             _gaussian_deformable_mirror_surface_f32_node,
         grid_gaussian_deformable_mirror_surface_f32=
@@ -1314,7 +1337,7 @@ function _parse_file_node(entry::AbstractDict, node_types::NamedTuple, index::In
     context = "nodes[$index]"
     _require_table_keys(
         entry,
-        ("name", "type", "config", "props"),
+        ("name", "type", "detector", "config", "props"),
         ("name", "type", "config"),
         context,
     )
@@ -1324,6 +1347,14 @@ function _parse_file_node(entry::AbstractDict, node_types::NamedTuple, index::In
         "$context.type",
         "unknown graph node type '$node_type'",
     ))
+    if node_type === :detector
+        haskey(entry, "detector") || throw(_file_error(
+            context,
+            "missing field 'detector'",
+        ))
+    elseif haskey(entry, "detector")
+        throw(_file_error(context, "field 'detector' is only valid for type 'detector'"))
+    end
     config = _normalize_graph_value(
         _table_or_empty(entry, "config", context),
     )
@@ -1331,7 +1362,12 @@ function _parse_file_node(entry::AbstractDict, node_types::NamedTuple, index::In
         _table_or_empty(entry, "props", context),
     )
     factory = getproperty(node_types, node_type)
-    definition = factory(name, config, props)
+    definition = if node_type === :detector
+        detector = _file_identifier(entry["detector"], "$context.detector")
+        factory(name, config, props; detector)
+    else
+        factory(name, config, props)
+    end
     definition isa AlgorithmNodeDefinition || throw(_file_error(
         context,
         "node type '$node_type' did not return an AlgorithmNodeDefinition",
