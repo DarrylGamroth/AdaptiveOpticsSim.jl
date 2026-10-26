@@ -430,8 +430,9 @@ in all capitals.
   and graph-rebuild values. Each node's `props` mapping MAY contain scalar initial
   props but MUST NOT change a node's admitted ports. Version 1 does not define
   live prop transactions.
-- **AOS-GRAPH-FILE-004:** Frame inputs, delayed-link initial arrays, and sparse
-  parameter arrays MUST be referenced by external binding name. The core
+- **AOS-GRAPH-FILE-004:** Frame inputs, delayed-link initial arrays, sparse
+  parameter arrays, and cold node calibration arrays MUST be referenced by
+  external binding name. The core
   loader MUST NOT infer FITS or another calibration file format and MUST NOT
   insert a host/device transfer.
 - **AOS-GRAPH-FILE-005:** Endpoints MUST use `node.port` syntax. Direct links,
@@ -473,7 +474,7 @@ prepares that plant graph with `load_algorithm_graph`; the RTC graph and its
 calibration products are prepared by FGA/JFG in the maintained
 [`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/).
 
-The built-in type map currently contains `detector`,
+The built-in type map currently contains `detector`, `pixel_mtf`,
 `deformable_mirror_surface_f32`,
 `gaussian_deformable_mirror_surface_f32`,
 `modal_opd_expansion_f32`,
@@ -483,7 +484,14 @@ The built-in type map currently contains `detector`,
 `pyramid_rate_f32`,
 and `shack_hartmann_rate_f32`.
 `merge(builtin_graph_node_types(), companion_types)` creates an explicit larger
-map for optional packages such as the Proper companion.
+map for optional packages such as the Proper companion. Cold factories accept
+`(name, config, props)`. Factories that need external calibration arrays may
+accept `(name, config, props, bindings)` instead; the loader selects that
+signature when applicable. They resolve explicit binding names from the same
+caller-supplied named tuple used by inputs and sparse parameters. Cold factories
+must convert these bindings into the native node's configuration ownership;
+the binding tuple does not become execution state. Detector factories use
+`(name, config, props; detector)` with the scientific selector as a keyword.
 
 Detector nodes use a short scientific selector rather than a Julia implementation
 name:
@@ -497,8 +505,8 @@ name:
     # Exposure, sensor response, noise, schemas and RNG settings follow here.
 ```
 
-The supported selectors are `ccd`, `cmos` and `emccd`. They select the existing
-Float32 complete-frame acquisitions; UInt16 camera output remains a separate
+The supported selectors are `ccd`, `cmos`, `emccd` and `ingaas`. They select
+the existing Float32 complete-frame acquisitions; UInt16 camera output remains a separate
 ADC/formatting step. `shutter` defaults to `global`. Other shutter modes and
 unsupported detector names are rejected, rather than approximated silently.
 Rolling exposure and frame-transfer timing require explicit acquisition
@@ -511,9 +519,63 @@ The declarative subset does not expose every native Julia graph feature:
   same source as the WFS consuming that atmospheric OPD. They default to on axis.
   Multiple directions sharing one evolving atmosphere and finite-height sources
   still require explicit Julia composition.
-- InGaAs acquisition and calibrated pixel MTF have native graph constructors,
-  but do not yet have built-in YAML factories. Their calibration bindings need
-  an explicit declaration before these features can be selected from YAML.
+
+`detector: ingaas` uses the existing complete-frame InGaAs acquisition with
+metric `pixel_sampling_m: [row_pitch_m, column_pitch_m]` and an explicit
+integrated `spectral_channel` identifier. Required fields are `rows`, `columns`,
+`pixel_sampling_m`, `spectral_channel`, `exposure_duration_s`,
+`quantum_efficiency`, `rng_seed`, `photon_rate_schema`, and `frame_schema`.
+Optional scalar fields are `gain` (default 1), `dark_current_e_per_pixel_s` and
+`glow_e_per_pixel_s` (default 0), `photon_noise` (default true), `readout_noise`
+(default false), and `readout_noise_e` (default 0). Optional `bits` requires
+`full_well_e`; omitting both leaves saturation and ADC quantization disabled.
+Glow is charge per integration time, rather than read-cadence glow. Scalar QE
+is effective across the declared channel; no wavelength-dependent response,
+pixel blur, camera profile, or axis conversion is inferred.
+
+Optional persistence and nonlinearity use the native model names and explicit
+modes:
+
+```yaml
+persistence_model:
+  mode: exponential
+  coupling: 0.25
+  decay: 0.5
+nonlinearity_model:
+  mode: saturating
+  coefficient: 0.01
+```
+
+Both models default to `mode: none`. The `none` mode accepts no coefficients;
+`exponential` requires `coupling` and `decay` in [0, 1], and `saturating`
+requires a finite nonnegative `coefficient`. Persistence coefficients are
+dimensionless per completed frame: lₖ₊₁ = decay × lₖ + coupling × qₖ. For this
+sensor, qₖ is the post-nonlinearity, post-saturation, post-charge-coupling frame
+before read noise, gain, correction, quantization, and background subtraction.
+The coefficients specify no elapsed-time constant or calibrated trap model.
+These non-null models use ordinary stream execution under the existing native
+admission rules.
+
+`type: pixel_mtf` declares the separate deterministic spatial response. Its
+required config is:
+
+```yaml
+input_shape: [3, 5]
+padding: 2
+input_schema: instrument.photon-rate/1
+output_schema: instrument.photon-rate/1
+transfer: calibrated_transfer
+```
+
+The application supplies `bindings=(; calibrated_transfer, ...)`, where the
+real finite matrix has shape `(rows + 2padding, columns + 2padding)`, unit DC at
+`[1, 1]`, and zero-frequency origin at that first element. The Float32 native
+node snapshots this calibration during loading, then prepares it for the graph's
+compute device. YAML embeds no transfer matrix or calibration filename. The
+`input` and `output` ports preserve the declared rectangular shape; the filter
+zero-pads, applies the transfer, crops, and does not clamp. Link its `output`
+to the detector's `photon_rate` input with matching schemas. See the executable
+[InGaAs and pixel MTF fixture](../test/graph_files/ingaas_pixel_mtf.yaml).
 
 `second_order_response_f32` declares same-schema vector ports `input` and
 `output`. Its required config fields are `natural_frequency_hz`, `damping_ratio`,

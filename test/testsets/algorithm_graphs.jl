@@ -2001,7 +2001,7 @@ end
             @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons=photon_rate))
         end
         entry["config"]["shutter"] = "global"
-        for unsupported in ("ingaas", "hgcdte", "invalid", 1)
+        for unsupported in ("hgcdte", "invalid", 1)
             entry["detector"] = unsupported
             @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons=photon_rate))
         end
@@ -2012,6 +2012,113 @@ end
         @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons=photon_rate))
         entry["type"] = "modal_opd_expansion_f32"
         @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons=photon_rate))
+    end
+end
+
+@testset "YAML InGaAs acquisition and calibrated pixel MTF" begin
+    photons = reshape(Float32.(20:34), 3, 5)
+    calibration = pixel_mtf_transfer((7, 9); box_width_pixels=1.03,
+        diffusion_variance_pixels2=0.09, ipc_per_neighbor=0.03, T=Float32)
+    path = joinpath(dirname(@__DIR__), "graph_files", "ingaas_pixel_mtf.yaml")
+    document = YAML.load_file(path)
+    bindings = (; photons, calibrated_transfer=copy(calibration))
+    loaded = load_algorithm_graph(path; bindings)
+    native = algorithm_graph((
+        pixel_mtf_node(:response; input_shape=(3, 5), padding=2, T=Float32,
+            input_schema="test.ingaas.photon-rate/1",
+            output_schema="test.ingaas.photon-rate/1", transfer=calibration),
+        ingaas_detector_acquisition_node(:camera; rows=3, columns=5,
+            pixel_sampling_m=(12e-6, 14e-6), spectral_channel=:test_ingaas_band,
+            exposure_duration_s=0.5, quantum_efficiency=0.75, gain=2,
+            dark_current_e_per_pixel_s=2, glow_e_per_pixel_s=3,
+            bits=12, full_well_e=1000, photon_noise=true, readout_noise=true,
+            readout_noise_e=0.7, persistence_model=ExponentialPersistence(0.25, 0.5),
+            nonlinearity_model=SaturatingFrameNonlinearity(0.01), rng_seed=43969,
+            photon_rate_schema="test.ingaas.photon-rate/1",
+            frame_schema="test.ingaas.frame/1")); name=:ingaas_pixel_mtf,
+        inputs=(graph_input(:photons, :response => :input, photons),),
+        links=(link(:response => :output, :camera => :photon_rate),),
+        outputs=(graph_output(:filtered, :response => :output),
+            graph_output(:frame, :camera => :frame)))
+    @test typeof(loaded) === typeof(native)
+    # Both constructors snapshot the binding before graph preparation.
+    fill!(bindings.calibrated_transfer, Float32(NaN))
+    actual, expected = prepare_algorithm_graph(loaded), prepare_algorithm_graph(native)
+    owner = prepared_graph_node(actual, Val(:camera))
+    @test owner.prepared.input.metadata.sampling == (12f-6, 14f-6)
+    @test owner.prepared.input.metadata.spectral == IntegratedSpectralChannel(:test_ingaas_band)
+    @test size(graph_output(actual, Val(:frame))) == (3, 5)
+    first_frame = nothing
+    for factor in (1, 2, 0)
+        photons .= reshape(Float32.(20:34), 3, 5) .* factor
+        step_graph!(actual)
+        step_graph!(expected)
+        @test graph_output(actual, Val(:filtered)) == graph_output(expected, Val(:filtered))
+        @test graph_output(actual, Val(:frame)) == graph_output(expected, Val(:frame))
+        @test owner.latent_buffer == prepared_graph_node(expected, Val(:camera)).latent_buffer
+        factor == 1 && (first_frame = copy(graph_output(actual, Val(:frame))))
+    end
+    @test any(>(0), owner.latent_buffer)
+    reset_graph!(actual)
+    reset_graph!(expected)
+    @test all(iszero, owner.latent_buffer)
+    @test all(iszero, graph_output(actual, Val(:frame)))
+    @test all(iszero, graph_output(actual, Val(:filtered)))
+    photons .= reshape(Float32.(20:34), 3, 5)
+    step_graph!(actual)
+    step_graph!(expected)
+    @test graph_output(actual, Val(:frame)) == first_frame
+    @test graph_output(actual, Val(:frame)) == graph_output(expected, Val(:frame))
+
+    valid_bindings = (; photons, calibrated_transfer=calibration)
+    # Null models may be omitted or declared explicitly, with identical frames.
+    null_document = deepcopy(document)
+    config = null_document["nodes"][2]["config"]
+    config["persistence_model"] = Dict("mode" => "none")
+    config["nonlinearity_model"] = Dict("mode" => "none")
+    explicit_null = prepare_algorithm_graph(load_algorithm_graph(null_document; bindings=valid_bindings))
+    delete!(config, "persistence_model")
+    delete!(config, "nonlinearity_model")
+    delete!(config, "shutter")
+    implicit_null = prepare_algorithm_graph(load_algorithm_graph(null_document; bindings=valid_bindings))
+    step_graph!(explicit_null)
+    step_graph!(implicit_null)
+    @test graph_output(explicit_null, Val(:frame)) == graph_output(implicit_null, Val(:frame))
+
+    for (field, invalid) in (
+            ("pixel_sampling_m", [12e-6]), ("pixel_sampling_m", [12e-6, 0]),
+            ("spectral_channel", 1), ("shutter", "rolling"),
+            ("photon_noise", 1), ("bits", true), ("full_well_e", -1),
+            ("quantum_efficiency", 1.1), ("glow_e_per_pixel_s", -1),
+            ("persistence_model", "exponential"),
+            ("persistence_model", Dict("mode" => "unknown")),
+            ("persistence_model", Dict("mode" => "exponential", "coupling" => 0.2)),
+            ("persistence_model", Dict("mode" => "none", "decay" => 0.2)),
+            ("persistence_model", Dict("mode" => "exponential", "coupling" => -0.1, "decay" => 0.5)),
+            ("persistence_model", Dict("mode" => "exponential", "coupling" => 0.1, "decay" => 1.1)),
+            ("persistence_model", Dict("mode" => "exponential", "coupling" => true, "decay" => 0.5)),
+            ("nonlinearity_model", Dict("mode" => "unknown")),
+            ("nonlinearity_model", Dict("mode" => "saturating")),
+            ("nonlinearity_model", Dict("mode" => "none", "coefficient" => 0)),
+            ("nonlinearity_model", Dict("mode" => "saturating", "coefficient" => -0.1)),
+            ("nonlinearity_model", Dict("mode" => "saturating", "coefficient" => Inf)),
+            ("wavelength_m", 1.5e-6))
+        invalid_document = deepcopy(document)
+        invalid_document["nodes"][2]["config"][field] = invalid
+        @test_throws AlgorithmGraphError load_algorithm_graph(invalid_document; bindings=valid_bindings)
+    end
+    @test_throws AlgorithmGraphError load_algorithm_graph(document; bindings=(; photons))
+    for transfer in (zeros(Float32, 9, 7), ones(Float32, 7),
+            fill(2f0, 7, 9), fill(Float32(NaN), 7, 9), ones(ComplexF32, 7, 9))
+        @test_throws AlgorithmGraphError load_algorithm_graph(document;
+            bindings=(; photons, calibrated_transfer=transfer))
+    end
+    for (field, invalid) in (("input_shape", [5, 3]), ("input_shape", [3]),
+            ("padding", -1), ("transfer", [[1, 1], [1, 1]]),
+            ("transfer", "missing"), ("file", "calibration.fits"))
+        invalid_document = deepcopy(document)
+        invalid_document["nodes"][1]["config"][field] = invalid
+        @test_throws AlgorithmGraphError load_algorithm_graph(invalid_document; bindings=valid_bindings)
     end
 end
 
@@ -2092,6 +2199,7 @@ end
 
     @test keys(builtin_graph_node_types()) == (
         :detector,
+        :pixel_mtf,
         :deformable_mirror_surface_f32,
         :gaussian_deformable_mirror_surface_f32,
         :grid_gaussian_deformable_mirror_surface_f32,
@@ -2164,7 +2272,7 @@ end
             )],
         )
         file_definition = load_algorithm_graph(custom_path; node_types)
-        dictionary_definition = load_algorithm_graph(root; node_types)
+        dictionary_definition = load_algorithm_graph(root; node_types, bindings=(; unused=42))
         @test typeof(dictionary_definition) === typeof(file_definition)
         @test graph_name(dictionary_definition) === graph_name(file_definition)
 
@@ -2175,6 +2283,15 @@ end
         @test graph_output(custom, Val(:sample)) == Float32[7, 7]
         @test graph_output(custom, Val(:sample)) ==
             graph_output(file_graph, Val(:sample))
+
+        bound_source(name, config, props, bindings) = test_source(name,
+            merge(config, (; value=bindings.initial_value)), props)
+        bound_definition = load_algorithm_graph(root;
+            node_types=merge(node_types, (; test_source=bound_source)),
+            bindings=(; initial_value=9.0))
+        bound_graph = prepare_algorithm_graph(bound_definition)
+        step_graph!(bound_graph)
+        @test graph_output(bound_graph, Val(:sample)) == Float32[9, 9]
 
         invalid_root = deepcopy(root)
         invalid_root["schema_version"] = 2

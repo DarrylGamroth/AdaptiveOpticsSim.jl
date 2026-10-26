@@ -1286,6 +1286,112 @@ function _emccd_detector_acquisition_f32_node(
     )
 end
 
+function _file_persistence_model(value, context::AbstractString)
+    value isa NamedTuple || throw(_file_error(context, "expected a mapping"))
+    _require_named_fields(value, (:mode, :coupling, :decay), (:mode,), context)
+    mode = _file_string(value.mode, "$context.mode")
+    if mode == "none"
+        _require_named_fields(value, (:mode,), (:mode,), context)
+        return NullPersistence()
+    elseif mode == "exponential"
+        fields = (:mode, :coupling, :decay)
+        _require_named_fields(value, fields, fields, context)
+        coupling = _file_real(value.coupling, "$context.coupling")
+        decay = _file_real(value.decay, "$context.decay")
+        0 <= coupling <= 1 || throw(_file_error(context, "coupling must lie in [0, 1]"))
+        0 <= decay <= 1 || throw(_file_error(context, "decay must lie in [0, 1]"))
+        return ExponentialPersistence(coupling, decay)
+    end
+    throw(_file_error(context, "unsupported persistence mode '$mode'"))
+end
+
+function _file_nonlinearity_model(value, context::AbstractString)
+    value isa NamedTuple || throw(_file_error(context, "expected a mapping"))
+    _require_named_fields(value, (:mode, :coefficient), (:mode,), context)
+    mode = _file_string(value.mode, "$context.mode")
+    if mode == "none"
+        _require_named_fields(value, (:mode,), (:mode,), context)
+        return NullFrameNonlinearity()
+    elseif mode == "saturating"
+        fields = (:mode, :coefficient)
+        _require_named_fields(value, fields, fields, context)
+        coefficient = _file_real(value.coefficient, "$context.coefficient")
+        coefficient >= 0 || throw(_file_error(context, "coefficient must be nonnegative"))
+        return SaturatingFrameNonlinearity(coefficient)
+    end
+    throw(_file_error(context, "unsupported nonlinearity mode '$mode'"))
+end
+
+function _ingaas_detector_acquisition_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    required_fields = (:rows, :columns, :pixel_sampling_m, :spectral_channel,
+        :exposure_duration_s, :quantum_efficiency, :rng_seed,
+        :photon_rate_schema, :frame_schema)
+    config_fields = (required_fields..., :gain, :dark_current_e_per_pixel_s,
+        :glow_e_per_pixel_s, :bits, :full_well_e, :photon_noise, :readout_noise,
+        :readout_noise_e, :persistence_model, :nonlinearity_model)
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    sampling = _file_real_tuple(config.pixel_sampling_m, "$context.pixel_sampling_m")
+    length(sampling) == 2 || throw(_file_error(
+        "$context.pixel_sampling_m", "expected row and column pitches"))
+    return ingaas_detector_acquisition_node(name;
+        rows=_file_integer(config.rows, "$context.rows"),
+        columns=_file_integer(config.columns, "$context.columns"),
+        pixel_sampling_m=sampling,
+        spectral_channel=_file_identifier(config.spectral_channel, "$context.spectral_channel"),
+        exposure_duration_s=_file_real(config.exposure_duration_s, "$context.exposure_duration_s"),
+        quantum_efficiency=_file_real(config.quantum_efficiency, "$context.quantum_efficiency"),
+        rng_seed=_file_integer(config.rng_seed, "$context.rng_seed"),
+        photon_rate_schema=_file_string(config.photon_rate_schema, "$context.photon_rate_schema"),
+        frame_schema=_file_string(config.frame_schema, "$context.frame_schema"),
+        gain=_file_real(get(config, :gain, 1), "$context.gain"),
+        dark_current_e_per_pixel_s=_file_real(get(config, :dark_current_e_per_pixel_s, 0),
+            "$context.dark_current_e_per_pixel_s"),
+        glow_e_per_pixel_s=_file_real(get(config, :glow_e_per_pixel_s, 0),
+            "$context.glow_e_per_pixel_s"),
+        bits=hasproperty(config, :bits) ? _file_integer(config.bits, "$context.bits") : nothing,
+        full_well_e=hasproperty(config, :full_well_e) ?
+            _file_real(config.full_well_e, "$context.full_well_e") : nothing,
+        photon_noise=_file_bool(get(config, :photon_noise, true), "$context.photon_noise"),
+        readout_noise=_file_bool(get(config, :readout_noise, false), "$context.readout_noise"),
+        readout_noise_e=_file_real(get(config, :readout_noise_e, 0), "$context.readout_noise_e"),
+        persistence_model=hasproperty(config, :persistence_model) ?
+            _file_persistence_model(config.persistence_model, "$context.persistence_model") :
+            NullPersistence(),
+        nonlinearity_model=hasproperty(config, :nonlinearity_model) ?
+            _file_nonlinearity_model(config.nonlinearity_model, "$context.nonlinearity_model") :
+            NullFrameNonlinearity(),
+        T=Float32)
+end
+
+function _pixel_mtf_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+    bindings::NamedTuple,
+)
+    context = "node '$name' config"
+    fields = (:input_shape, :padding, :input_schema, :output_schema, :transfer)
+    _require_named_fields(config, fields, fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    shape = _file_tuple(config.input_shape, "$context.input_shape")
+    length(shape) == 2 || throw(_file_error("$context.input_shape", "expected two dimensions"))
+    input_shape = ntuple(i -> _file_integer(shape[i], "$context.input_shape[$i]"), 2)
+    transfer = _require_binding(bindings, config.transfer, "$context.transfer")
+    transfer isa AbstractMatrix || throw(_file_error(
+        "$context.transfer", "external binding must be a matrix"))
+    return pixel_mtf_node(name; input_shape,
+        padding=_file_integer(config.padding, "$context.padding"),
+        input_schema=_file_string(config.input_schema, "$context.input_schema"),
+        output_schema=_file_string(config.output_schema, "$context.output_schema"),
+        transfer, T=Float32)
+end
+
 function _detector_node(
     name::Symbol,
     config::NamedTuple,
@@ -1296,10 +1402,11 @@ function _detector_node(
         ccd=_ccd_detector_acquisition_f32_node,
         cmos=_cmos_detector_acquisition_f32_node,
         emccd=_emccd_detector_acquisition_f32_node,
+        ingaas=_ingaas_detector_acquisition_f32_node,
     )
     hasproperty(factories, detector) || throw(_file_error(
         "node '$name' detector",
-        "unsupported detector '$detector'; supported detectors are ccd, cmos, emccd",
+        "unsupported detector '$detector'; supported detectors are ccd, cmos, emccd, ingaas",
     ))
     if hasproperty(config, :shutter)
         shutter = _file_string(config.shutter, "node '$name' config.shutter")
@@ -1323,6 +1430,7 @@ global registry or dynamic Julia evaluation is used.
 function builtin_graph_node_types()
     return (
         detector=_detector_node,
+        pixel_mtf=_pixel_mtf_f32_node,
         deformable_mirror_surface_f32=
             _deformable_mirror_surface_f32_node,
         gaussian_deformable_mirror_surface_f32=
@@ -1339,7 +1447,12 @@ function builtin_graph_node_types()
     )
 end
 
-function _parse_file_node(entry::AbstractDict, node_types::NamedTuple, index::Int)
+function _parse_file_node(
+    entry::AbstractDict,
+    node_types::NamedTuple,
+    bindings::NamedTuple,
+    index::Int,
+)
     context = "nodes[$index]"
     _require_table_keys(
         entry,
@@ -1371,6 +1484,8 @@ function _parse_file_node(entry::AbstractDict, node_types::NamedTuple, index::In
     definition = if node_type === :detector
         detector = _file_identifier(entry["detector"], "$context.detector")
         factory(name, config, props; detector)
+    elseif applicable(factory, name, config, props, bindings)
+        factory(name, config, props, bindings)
     else
         factory(name, config, props)
     end
@@ -1461,10 +1576,13 @@ Load a versioned, declarative graph and compile it into the same concrete
 method parses YAML after `using YAML` activates the optional file extension;
 the dictionary method accepts an already-parsed root, such
 as one decoded by an application-owned interchange layer.
-`node_types` is an explicit immutable named tuple of cold factories. `bindings`
-supplies caller-owned frame inputs, delayed-link initial values, and large
-sparse parameters by name; the graph dictionary never embeds or implicitly
-loads calibration arrays.
+`node_types` is an explicit immutable named tuple of cold factories. Detector
+factories accept `(name, config, props; detector)`. Other factories accept
+`(name, config, props)` or `(name, config, props, bindings)`; the latter is
+selected when applicable and can resolve explicit calibration binding names.
+`bindings` supplies caller-owned frame inputs, delayed-link initial values,
+sparse parameters, and cold node calibrations by name; the graph dictionary
+never embeds or implicitly loads calibration arrays.
 """
 function load_algorithm_graph(
     path::AbstractString;
@@ -1536,7 +1654,7 @@ function _load_algorithm_graph(
 
     nodes = _parse_entries(
         node_entries,
-        (entry, index) -> _parse_file_node(entry, node_types, index),
+        (entry, index) -> _parse_file_node(entry, node_types, bindings, index),
     )
     inputs = _parse_entries(
         input_entries,
