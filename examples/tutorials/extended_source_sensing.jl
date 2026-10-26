@@ -2,10 +2,33 @@ include(joinpath(@__DIR__, "common.jl"))
 
 using LinearAlgebra
 
-function main(; resolution::Int=24)
+function source_pupil(pupil, source, reference)
+    component = PupilFunction(pupil)
+    direction = Optics.coordinates_xy_arcsec(source)
+    pointing = Optics.coordinates_xy_arcsec(reference)
+    # The sensor tracks the reference source. Supply the complete pupil OPD,
+    # including W(r) = (θ_source - θ_reference) ⋅ r, with angles in radians.
+    angle = (x=(direction[1] - pointing[1]) * pi / 648000,
+        y=(direction[2] - pointing[2]) * pi / 648000)
+    metadata = pupil.metadata
+    slopes = ntuple(2) do d
+        metadata.orientation.signs[d] *
+            getproperty(angle, metadata.orientation.axes[d])
+    end
+    for j in axes(component.opd, 2), i in axes(component.opd, 1)
+        r1 = metadata.origin[1] + (i - 1) * metadata.sampling[1]
+        r2 = metadata.origin[2] + (j - 1) * metadata.sampling[2]
+        component.opd[i, j] += slopes[1] * r1 + slopes[2] * r2
+    end
+    return component
+end
+
+function main(; resolution::Int=24,
+    model=GaussianDiskSourceModel(sigma_arcsec=0.04, n_side=5))
     tel = base_telescope(resolution=resolution, central_obstruction=0.0)
     src = base_source(magnitude=6.0)
-    model = GaussianDiskSourceModel(sigma_arcsec=0.4, n_side=5)
+    # At this grid spacing, the default ±0.08 arcsec source samples are below
+    # the I-band pupil angular Nyquist limit (about 0.24 arcsec).
     ext = with_extended_source(src, model)
 
     zb = ZernikeBasis(tel, 5)
@@ -13,8 +36,13 @@ function main(; resolution::Int=24)
     pupil = PupilFunction(tel)
     @. pupil.opd = 5e-8 * zb.modes[:, :, 5]
 
-    sh_point = ShackHartmannWFS(tel; n_lenslets=6)
-    sh_ext = ShackHartmannWFS(tel; n_lenslets=6)
+    # Retain the full padded FFT footprint: a cropped spot window loses
+    # photons when source tilt moves light toward its edge.
+    spot_samples = 2 * div(resolution, 6)
+    sh_point = ShackHartmannWFS(tel; n_lenslets=6, n_pix_subap=spot_samples,
+        diffraction_padding=2)
+    sh_ext = ShackHartmannWFS(tel; n_lenslets=6, n_pix_subap=spot_samples,
+        diffraction_padding=2)
 
     pyr_point = PyramidWFS(tel; pupil_samples=6, modulation=1.0)
     pyr_ext = PyramidWFS(tel; pupil_samples=6, modulation=1.0)
@@ -26,8 +54,10 @@ function main(; resolution::Int=24)
     form_wfs_optical_products!(
         pyramid_point_rate, pupil, pyramid_point_optics)
 
-    extended_paths = extended_source_asterism(ext)
-    extended_pupils = ntuple(_ -> pupil, length(extended_paths))
+    extended_paths = extended_source_asterism(ext).sources
+    extended_pupils = ntuple(length(extended_paths)) do i
+        source_pupil(pupil, extended_paths[i], src)
+    end
     pyramid_extended_front_end = PyramidOpticalFrontEnd(pyr_ext, ext)
     pyramid_extended_rates = pyramid_rate_map(
         pyramid_extended_front_end, extended_pupils)
@@ -48,16 +78,22 @@ function main(; resolution::Int=24)
     point_optics = prepare_wfs_optics(
         shack_hartmann_optics(sh_point, src), pupil, point_rate)
     form_wfs_optical_products!(point_rate, pupil, point_optics)
-    extended_asterism = extended_source_asterism(ext)
-    extended_rate = shack_hartmann_rate_map(
-        sh_ext, pupil, extended_asterism)
-    extended_optics = prepare_wfs_optics(
-        shack_hartmann_optics(sh_ext, extended_asterism),
-        pupil, extended_rate)
-    form_wfs_optical_products!(
-        extended_rate, pupil, extended_optics)
     point_spots = point_rate.values
-    extended_spots = extended_rate.values
+    extended_spots = zeros(eltype(point_spots), size(point_spots))
+    # Source samples are mutually incoherent: sum photon rates, not fields.
+    # Each quadrature source already carries its normalized flux weight.
+    for i in eachindex(extended_pupils)
+        component_pupil = extended_pupils[i]
+        component_source = extended_paths[i]
+        component_rate = shack_hartmann_rate_map(
+            sh_ext, component_pupil, component_source)
+        component_optics = prepare_wfs_optics(
+            shack_hartmann_optics(sh_ext, component_source),
+            component_pupil, component_rate)
+        form_wfs_optical_products!(
+            component_rate, component_pupil, component_optics)
+        extended_spots .+= component_rate.values
+    end
     point_peak = maximum(point_spots)
     ext_peak = maximum(extended_spots)
     sh_delta = copy(extended_spots .- point_spots)

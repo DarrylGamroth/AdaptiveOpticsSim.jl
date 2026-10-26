@@ -61,6 +61,16 @@ Each script exposes a `main()` function and logs a short completion summary with
   `Detector(noise=(NoisePhoton(), NoiseReadout(0.5)))`.
 - The maintained closed-loop fixtures keep the AOS plant and the FGA/JFG RTC
   in separate packages with explicit cross-package products.
+- `extended_source_sensing.jl` models a WFS tracking the source center. Each
+  incoherent angular sample gets a separate pupil containing the common
+  aberration plus the geometric OPD `(θ_sample − θ_center) ⋅ r`, with angles
+  in radians and pupil coordinates in metres. The WFS consumes that complete
+  pupil; binding a source supplies radiometry and wavelength without adding
+  another angular tilt. Component photon rates are summed after propagation.
+  The default Gaussian width is 0.04 arcsec, keeping its ±0.08 arcsec samples
+  below the 24-sample pupil's I-band angular Nyquist limit of about 0.24 arcsec.
+  Shack–Hartmann spot windows retain the full padded FFT footprint so that
+  finite detector cropping does not confound the photon-rate comparison.
 
 ## Representative AOS mappings
 
