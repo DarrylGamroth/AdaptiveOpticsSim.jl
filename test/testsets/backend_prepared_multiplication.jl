@@ -12,8 +12,12 @@ prepared_mul_allocations(C, A, B, coeffs) =
         A = prepared_mul_fixture(T, (13, 11))
         right = prepared_mul_fixture(T, (11, 9))
         transposed = transpose(prepared_mul_fixture(T, (9, 11)))
+        adjointed = adjoint(prepared_mul_fixture(T, (9, 11)))
+        strided = view(prepared_mul_fixture(T, (22, 9)), 1:2:22, :)
         vector = vec(prepared_mul_fixture(T, (11,)))
-        for B in (right, transposed, vector)
+        right_operands = T === Float16 ? (right, transposed, adjointed, strided, vector) :
+            (right, transposed, adjointed, vector)
+        @testset "$T × $(typeof(B))" for B in right_operands
             expected = A * B
             C = similar(expected)
             coeffs = Backends._prepare_mul_coefficients(C)
