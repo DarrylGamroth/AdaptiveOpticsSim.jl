@@ -434,7 +434,10 @@ in all capitals.
   parameter arrays, and cold node calibration arrays MUST be referenced by
   external binding name. The core
   loader MUST NOT infer FITS or another calibration file format and MUST NOT
-  insert a host/device transfer.
+  insert an implicit host/device transfer into graph connectivity. Frame inputs,
+  links, and sparse parameters MUST retain the native exact-device admission
+  checks. Explicit native calibration snapshots and per-device calibration
+  preparation MAY perform the transfers declared by their native constructors.
 - **AOS-GRAPH-FILE-005:** Endpoints MUST use `node.port` syntax. Direct links,
   delayed links, boundary inputs and outputs, and sparse parameters MUST pass
   the same type, shape, schema, layout, ownership, and connectivity admission
@@ -548,8 +551,12 @@ nonlinearity_model:
 
 Both models default to `mode: none`. The `none` mode accepts no coefficients;
 `exponential` requires `coupling` and `decay` in [0, 1], and `saturating`
-requires a finite nonnegative `coefficient`. Persistence coefficients are
-dimensionless per completed frame: lₖ₊₁ = decay × lₖ + coupling × qₖ. For this
+requires a finite nonnegative `coefficient`. Saturating nonlinearity applies
+q → q / (1 + c q) to charge q in electrons, with `coefficient` c in electron⁻¹,
+before full-well clipping.
+
+Persistence `coupling` and `decay` are dimensionless per completed frame:
+lₖ₊₁ = decay × lₖ + coupling × qₖ. For this
 sensor, qₖ is the post-nonlinearity, post-saturation, post-charge-coupling frame
 before read noise, gain, correction, quantization, and background subtraction.
 The coefficients specify no elapsed-time constant or calibrated trap model.

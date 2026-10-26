@@ -2097,6 +2097,7 @@ end
             ("persistence_model", Dict("mode" => "exponential", "coupling" => -0.1, "decay" => 0.5)),
             ("persistence_model", Dict("mode" => "exponential", "coupling" => 0.1, "decay" => 1.1)),
             ("persistence_model", Dict("mode" => "exponential", "coupling" => true, "decay" => 0.5)),
+            ("nonlinearity_model", "saturating"),
             ("nonlinearity_model", Dict("mode" => "unknown")),
             ("nonlinearity_model", Dict("mode" => "saturating")),
             ("nonlinearity_model", Dict("mode" => "none", "coefficient" => 0)),

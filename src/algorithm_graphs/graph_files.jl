@@ -1286,8 +1286,10 @@ function _emccd_detector_acquisition_f32_node(
     )
 end
 
-function _file_persistence_model(value, context::AbstractString)
-    value isa NamedTuple || throw(_file_error(context, "expected a mapping"))
+_file_persistence_model(value, context::AbstractString) =
+    throw(_file_error(context, "expected a mapping"))
+
+function _file_persistence_model(value::NamedTuple, context::AbstractString)
     _require_named_fields(value, (:mode, :coupling, :decay), (:mode,), context)
     mode = _file_string(value.mode, "$context.mode")
     if mode == "none"
@@ -1305,8 +1307,10 @@ function _file_persistence_model(value, context::AbstractString)
     throw(_file_error(context, "unsupported persistence mode '$mode'"))
 end
 
-function _file_nonlinearity_model(value, context::AbstractString)
-    value isa NamedTuple || throw(_file_error(context, "expected a mapping"))
+_file_nonlinearity_model(value, context::AbstractString) =
+    throw(_file_error(context, "expected a mapping"))
+
+function _file_nonlinearity_model(value::NamedTuple, context::AbstractString)
     _require_named_fields(value, (:mode, :coefficient), (:mode,), context)
     mode = _file_string(value.mode, "$context.mode")
     if mode == "none"
@@ -1369,6 +1373,10 @@ function _ingaas_detector_acquisition_f32_node(
         T=Float32)
 end
 
+_file_matrix(value::AbstractMatrix, context::AbstractString) = value
+_file_matrix(value, context::AbstractString) =
+    throw(_file_error(context, "external binding must be a matrix"))
+
 function _pixel_mtf_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -1382,9 +1390,9 @@ function _pixel_mtf_f32_node(
     shape = _file_tuple(config.input_shape, "$context.input_shape")
     length(shape) == 2 || throw(_file_error("$context.input_shape", "expected two dimensions"))
     input_shape = ntuple(i -> _file_integer(shape[i], "$context.input_shape[$i]"), 2)
-    transfer = _require_binding(bindings, config.transfer, "$context.transfer")
-    transfer isa AbstractMatrix || throw(_file_error(
-        "$context.transfer", "external binding must be a matrix"))
+    transfer = _file_matrix(
+        _require_binding(bindings, config.transfer, "$context.transfer"),
+        "$context.transfer")
     return pixel_mtf_node(name; input_shape,
         padding=_file_integer(config.padding, "$context.padding"),
         input_schema=_file_string(config.input_schema, "$context.input_schema"),
