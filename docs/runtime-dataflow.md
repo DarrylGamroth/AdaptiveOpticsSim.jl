@@ -420,7 +420,10 @@ in all capitals.
   contain a `nodes` sequence with at least one mapping. A loader MUST reject
   unknown schema versions and unknown fields. A YAML file MUST contain exactly
   one document, with unique keys in each mapping.
-- **AOS-GRAPH-FILE-002:** Node order MUST be execution order. Each node MUST
+- **AOS-GRAPH-FILE-002:** The `nodes` sequence MUST define declaration order.
+  Preparation MUST derive a fixed execution order from direct links, selecting
+  the earliest declared ready node at each step, and MUST reject direct cycles.
+  Delayed links MUST NOT constrain same-step execution order. Each node MUST
   identify an explicitly supplied `type`; the loader MUST NOT evaluate Julia
   source, resolve arbitrary module paths, or mutate a global type registry.
 - **AOS-GRAPH-FILE-003:** Each node's `config` mapping MUST contain construction
@@ -450,7 +453,7 @@ The version 1 mappings and sequences are:
 | Mapping or sequence | Required fields | Meaning |
 |---|---|---|
 | root | `schema_version`, `name`, `nodes` | Schema and graph identity |
-| `nodes` | `name`, `type`, `config` | One node in execution order; `props` is optional |
+| `nodes` | `name`, `type`, `config` | One node in declaration order; preparation derives execution order; `props` is optional |
 | `inputs` | `name`, `destination`, `binding` | Caller-owned frame input |
 | `outputs` | `name`, `source` | Caller-visible allocated graph output |
 | `links` | `source`, `destination` | Same-step direct link |

@@ -491,6 +491,40 @@ AOG.reset_graph_node!(::GraphTestFailureOwner) = nothing
             (:add,), (:source, :isolated)))
 end
 
+@testset "algorithm graph dependency fan-in and repeated node pairs" begin
+    schema = "test.graph.signal.f32/1"
+    source = algorithm_node(:source, GraphTestSourceDeclaration,
+        GraphTestSourceConfiguration(2, 2.0f0))
+    left = algorithm_node(:left, GraphTestAddDeclaration,
+        GraphTestAddConfiguration(2, schema, 1.0f0))
+    right = algorithm_node(:right, GraphTestAddDeclaration,
+        GraphTestAddConfiguration(2, schema, 2.0f0))
+    sum_node = algorithm_node(:sum, GraphTestSumDeclaration,
+        GraphTestSumConfiguration(2, schema))
+    diamond = prepare_algorithm_graph(algorithm_graph((sum_node, right, left, source);
+        outputs=(graph_output(:result, :sum => :output),),
+        links=(link(:source => :output, :left => :input),
+            link(:source => :output, :right => :input),
+            link(:left => :output, :sum => :left),
+            link(:right => :output, :sum => :right))))
+    @test keys(diamond.nodes) == (:source, :right, :left, :sum)
+    sum_owner = prepared_graph_node(diamond, :sum)
+    @test sum_owner.left === prepared_graph_node(diamond, :left).output
+    @test sum_owner.right === prepared_graph_node(diamond, :right).output
+    step_graph!(diamond)
+    @test graph_output(diamond, :result) == fill(7.0f0, 2)
+
+    shared = prepare_algorithm_graph(algorithm_graph((sum_node, source);
+        outputs=(graph_output(:result, :sum => :output),),
+        links=(link(:source => :output, :sum => :left),
+            link(:source => :output, :sum => :right))))
+    @test keys(shared.nodes) == (:source, :sum)
+    shared_sum = prepared_graph_node(shared, :sum)
+    @test shared_sum.left === shared_sum.right === prepared_graph_node(shared, :source).output
+    step_graph!(shared)
+    @test graph_output(shared, :result) == fill(4.0f0, 2)
+end
+
 @testset "algorithm graph direct cycles and delayed feedback" begin
     configuration = GraphTestAddConfiguration(2, "test.graph.signal.f32/1", 1.0f0)
     first = algorithm_node(:first, GraphTestAddDeclaration, configuration)

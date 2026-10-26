@@ -137,6 +137,7 @@ function run_gpu_backend_target(::Type{B}) where {B<:Backends.GPUBackendTag}
     @testset "$(backend_label(B)) hardware target" begin
         run_captured_coordinate_gaussian_graph_execution_smoke(B)
         run_captured_graph_execution_smoke(B)
+        run_dependency_ordered_graph_execution_smoke(B)
         run_captured_atmosphere_replay_smoke(B)
         run_captured_wfs_replay_smoke(B)
         run_shack_hartmann_sampling_parity(B)
@@ -927,6 +928,68 @@ function run_captured_graph_execution_smoke(
     reset_graph!(graph)
     @test captured_graph_node_count(graph) == 2
     @test all(iszero, Array(graph_output(graph, Val(:surface))))
+    return nothing
+end
+
+_dependency_graph_step_allocation_bytes(graph) = @allocated step_graph!(graph)
+
+function run_dependency_ordered_graph_execution_smoke(
+    ::Type{B},
+) where {B<:Backends.GPUBackendTag}
+    BackendArray = Backends.gpu_backend_array_type(B)
+    schema = "test.graph.dependency-opd-m.f32/1"
+    input_host = reshape(Float32[2, 4, -1, 3], 2, 2) .* 1.0f-8
+    offset_host = reshape(Float32[1, -2, 3, -4], 2, 2) .* 1.0f-8
+    initial_host = fill(0.25f-8, 2, 2)
+    node(name) = pupil_opd_composition_node(name; resolution=2,
+        uncompensated_opd_schema=schema, surface_opd_schema=schema,
+        pupil_opd_schema=schema)
+    for execution in (StreamGraphExecution(), CapturedGraphExecution())
+        input = BackendArray(input_host)
+        offset = BackendArray(offset_host)
+        initial = BackendArray(initial_host)
+        Backends.synchronize_backend!(Backends.execution_style(input))
+        definition = algorithm_graph((node(:second), node(:first));
+            inputs=(graph_input(:input, :first => :uncompensated_opd, input),
+                graph_input(:offset, :second => :surface_opd, offset)),
+            outputs=(graph_output(:result, :second => :pupil_opd),),
+            links=(link(:first => :pupil_opd, :second => :uncompensated_opd),),
+            delayed_links=(delayed_link(:second => :pupil_opd,
+                :first => :surface_opd, initial),))
+        graph = prepare_algorithm_graph(definition; target=compute_device(input), execution)
+        @test keys(graph.nodes) == (:first, :second)
+        @test graph_input(graph, :input) === input
+        @test graph_input(graph, :offset) === offset
+        @test AlgorithmGraphs.prepared_graph_node(graph, Val(:second)).uncompensated_opd ===
+            AlgorithmGraphs.prepared_graph_node(graph, Val(:first)).pupil_opd
+        result = graph_output(graph, Val(:result))
+        delayed = only(graph.state.delayed_values)
+        for _ in 1:2
+            reset_graph!(graph)
+            @test graph_output(graph, Val(:result)) === result
+            @test only(graph.state.delayed_values) === delayed
+            @test Array(delayed) == initial_host
+            expected = copy(initial_host)
+            for frame in 1:3
+                published_input = Float32(frame) .* input_host
+                copyto!(input, published_input)
+                Backends.synchronize_backend!(Backends.execution_style(input))
+                @. expected = (published_input + expected) + offset_host
+                ticket = @inferred step_graph_async!(graph)
+                @test graph_step_sequence(graph) == UInt64(frame - 1)
+                @test @inferred(wait_graph_step!(ticket)) === graph
+                @test graph_step_sequence(graph) == UInt64(frame)
+                @test Array(result) ≈ expected rtol=2.0f-5 atol=1.0f-12
+                @test Array(delayed) == Array(result)
+            end
+        end
+        if execution isa CapturedGraphExecution
+            @test captured_graph_node_count(graph) == 2
+            _dependency_graph_step_allocation_bytes(graph)
+            @test _dependency_graph_step_allocation_bytes(graph) <=
+                captured_graph_step_allocation_budget(B)
+        end
+    end
     return nothing
 end
 
