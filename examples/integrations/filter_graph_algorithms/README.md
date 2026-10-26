@@ -35,7 +35,7 @@ trajectory as numerical migration oracles. They run the public FGA/JFG and
 AOC interfaces only; AOS remains the plant owner.
 
 The `current/` environment separately checks the same deterministic S1
-trajectory and warmed zero-allocation CPU step against registered AOC 0.17.0,
+trajectory and warmed zero-allocation CPU step against registered AOC 0.17.1,
 FGA 0.5.5, and JFG 0.2.3. The original environment below remains pinned to
 its frozen S1/S4 release identities. The fixture entry points select the source
 direction constructor keywords for their pinned AOS revision; this does not

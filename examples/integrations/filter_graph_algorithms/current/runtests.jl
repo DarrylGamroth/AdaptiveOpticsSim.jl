@@ -20,7 +20,7 @@ const EXPECTED_DEMANDED_COMMANDS = Float32[
 ]
 
 @testset "registered AOC/FGA/JFG current S1 composition" begin
-    @test pkgversion(AdaptiveOpticsCalibration) == v"0.17.0"
+    @test pkgversion(AdaptiveOpticsCalibration) == v"0.17.1"
     @test pkgversion(FilterGraphAlgorithms) == v"0.5.5"
     @test pkgversion(JuliaFilterGraph) == v"0.2.3"
 

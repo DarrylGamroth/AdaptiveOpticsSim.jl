@@ -10,7 +10,7 @@ YAML = "ddb6d928-2868-570f-bddf-ab3f9cf99eb6"
 AdaptiveOpticsSim = {path = "../../.."}
 
 [compat]
-AdaptiveOpticsSim = "0.2"
+AdaptiveOpticsSim = "0.3"
 PythonCall = "0.9"
 UnsafeArrays = "1"
 YAML = "0.4.17"

@@ -18,7 +18,7 @@ AdaptiveOpticsSim = {path = "../.."}
 
 [compat]
 AppleAccelerate = "0.7"
-AdaptiveOpticsSim = "0.2"
+AdaptiveOpticsSim = "0.3"
 Aqua = "0.8"
 FFTW = "1.10"
 FixedSizeArrays = "1.3"
