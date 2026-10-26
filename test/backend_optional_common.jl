@@ -2630,6 +2630,12 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
             AOCPhaseRetrieval.LiFTSpecification(
                 aoc_device_model, aoc_rate_domain), KernelAbstractions.CPU()))
 
+    # Julia 1.13 can leave a partially initialized specification box rooted
+    # across this rejection (JuliaLang/julia#62524). Exercise GC before the
+    # subsequent valid plans and numerical comparisons.
+    Backends.synchronize_backend!(execution_style(lift_rate))
+    GC.gc(true)
+
     ordered_method = AOCPhaseRetrieval.LiFT(
         iterations=2,
         jacobian_method=AOCPhaseRetrieval.LiFTAnalyticJacobian(),
