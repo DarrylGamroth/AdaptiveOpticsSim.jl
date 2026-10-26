@@ -54,6 +54,7 @@ const TEST_SUITE_SPECS = (
         "testsets/execution_strategies.jl",
     ),
     TestSuiteSpec("algorithm-graphs", "testsets/algorithm_graphs.jl"),
+    TestSuiteSpec("second-order-response", "testsets/second_order_response.jl"),
     TestSuiteSpec("backend-prepared-multiplication", "testsets/backend_prepared_multiplication.jl"),
     TestSuiteSpec("dm-capture-admission", "testsets/dm_capture_admission.jl"),
     TestSuiteSpec("ingaas-detector-node", "testsets/ingaas_detector_node.jl"),
@@ -220,6 +221,7 @@ const TEST_GROUP_SPECS = (
     "detectors" => DETECTOR_TEST_SUITE_NAMES,
     "core" => (
         "core-optics",
+        "second-order-response",
         "spectral-synthesis",
         "direct-science",
         "direct-imaging-batch",
@@ -248,6 +250,7 @@ const TEST_CI_SHARD_SPECS = (
         "prepared-execution-interfaces",
         "execution-strategies",
         "algorithm-graphs",
+        "second-order-response",
         "output-snapshot",
         "backend-prepared-multiplication",
         "dm-capture-admission",

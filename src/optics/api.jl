@@ -65,6 +65,8 @@ export FunctionModalBasis, MatrixModalBasis, ZernikeOpticBasis
 export CartesianTiltBasis
 export ModalControllableOptic, TipTiltMirror, FocusStage
 export set_command!
+export prepare_second_order_response, advance_response!, reset_response!
+public SecondOrderResponsePlan, PreparedSecondOrderResponse
 
 export DMAdditive, DMReplace
 

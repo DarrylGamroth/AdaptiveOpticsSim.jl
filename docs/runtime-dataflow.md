@@ -468,12 +468,21 @@ The built-in type map currently contains `ccd_detector_acquisition_f32`,
 `emccd_detector_acquisition_f32`,
 `gaussian_deformable_mirror_surface_f32`,
 `modal_opd_expansion_f32`,
+`second_order_response_f32`,
 `multilayer_atmosphere_opd_f32`,
 `pupil_opd_composition_f32`,
 `pyramid_rate_f32`,
 and `shack_hartmann_rate_f32`.
 `merge(builtin_graph_node_types(), companion_types)` creates an explicit larger
 map for optional packages such as the Proper companion.
+
+`second_order_response_f32` declares same-schema vector ports `input` and
+`output`. Its required config fields are `natural_frequency_hz`, `damping_ratio`,
+`sample_period_s`, `count`, and `schema`; it has no runtime properties or sparse
+parameters. It advances a physical response once per graph step and produces the
+position after that held-input interval. Place it upstream of modal expansion
+when those modal coordinates have the declared response, and match its sample
+period to the application's cadence.
 
 ### Downstream instrument packages
 

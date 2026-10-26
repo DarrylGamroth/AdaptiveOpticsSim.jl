@@ -72,6 +72,7 @@ include("opd_map.jl")
 include("misregistration.jl")
 include("ncpa.jl")
 include("controllable_optics.jl")
+include("second_order_response.jl")
 include("deformable_mirror.jl")
 
 # Canonical Optics-owned operation; do not extend Base.filter! because this
