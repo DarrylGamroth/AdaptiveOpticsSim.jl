@@ -729,9 +729,12 @@ function write_output!(det::Detector)
         window === nothing && return det.products.frame
         throw(InvalidConfiguration("Detector readout_window requires an allocated output buffer"))
     end
-    source = window === nothing ? det.products.frame : @view(det.products.frame[window.rows, window.cols])
     strategy = detector_execution_strategy(typeof(execution_style(output)), typeof(det))
-    return _write_output!(strategy, det, output, source)
+    if window === nothing
+        return _write_output!(strategy, det, output, det.products.frame)
+    end
+    return _write_output!(strategy, det, output,
+        @view(det.products.frame[window.rows, window.cols]))
 end
 
 @inline function require_whole_capture_idle(det::Detector)
