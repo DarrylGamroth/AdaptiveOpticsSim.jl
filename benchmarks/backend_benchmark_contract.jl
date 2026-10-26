@@ -1,24 +1,10 @@
-using AdaptiveOpticsSim
-using AdaptiveOpticsSim.Optics
-using AdaptiveOpticsSim.Backends
-using AdaptiveOpticsSim.Tomography
+import AdaptiveOpticsSim
+using AdaptiveOpticsSim.Backends: GPUBackendTag, CUDABackendTag, AMDGPUBackendTag,
+    SplitGPUPrecision
+using AdaptiveOpticsSim.Tomography: Tomography, LGSWFSParams, LGSAsterismParams,
+    TomographyParams, TomographyAtmosphereParams, TomographyDMParams,
+    ModelBasedTomography, InteractionMatrixTomography, build_reconstructor
 using BenchmarkTools
-using Random
-
-for name in names(AdaptiveOpticsSim; all=true)
-    s = String(name)
-    if Base.isidentifier(s) && !startswith(s, "#") && !isdefined(@__MODULE__, name)
-        @eval const $(name) = getfield(AdaptiveOpticsSim, $(QuoteNode(name)))
-    end
-end
-
-for name in names(Backends; all=true)
-    s = String(name)
-    if Base.isidentifier(s) && !startswith(s, "#") &&
-            !isdefined(@__MODULE__, name)
-        @eval const $(name) = getfield(Backends, $(QuoteNode(name)))
-    end
-end
 
 abstract type BenchmarkExecutionTarget end
 struct CPUBenchmarkTarget <: BenchmarkExecutionTarget end
@@ -31,9 +17,6 @@ function _sync_target!(::GPUBenchmarkTarget, A)
     return nothing
 end
 
-_gpu_target_type(::CPUBenchmarkTarget) = nothing
-_gpu_target_type(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} = B
-
 _benchmark_policy(::CPUBenchmarkTarget) = SplitGPUPrecision(Float32, Float32)
 _benchmark_policy(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} =
     AdaptiveOpticsSim.Backends.default_gpu_precision_policy(B)
@@ -41,21 +24,6 @@ _benchmark_policy(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} =
 _high_accuracy_policy(::CPUBenchmarkTarget) = SplitGPUPrecision(Float32, Float64)
 _high_accuracy_policy(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} =
     AdaptiveOpticsSim.Backends.high_accuracy_gpu_precision_policy(B)
-
-_benchmark_backend_array(::CPUBenchmarkTarget) = CPUBackend()
-
-_benchmark_backend_array(::GPUBenchmarkTarget{CUDABackendTag}) = CUDABackend()
-
-_benchmark_backend_array(::GPUBenchmarkTarget{AMDGPUBackendTag}) = AMDGPUBackend()
-
-_require_benchmark_gpu_backend(::CPUBenchmarkTarget) = nothing
-
-function _require_benchmark_gpu_backend(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag}
-    AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
-    BackendArray = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
-    BackendArray === nothing && error("GPU backend $(B) is not available")
-    return BackendArray
-end
 
 _build_backend(::CPUBenchmarkTarget) = AdaptiveOpticsSim.Calibration.CPUBuildBackend()
 _build_backend(::GPUBenchmarkTarget{B}) where {B<:GPUBackendTag} =
@@ -236,12 +204,18 @@ end
 
 function run_backend_benchmark_suite(target::BenchmarkExecutionTarget)
     suite = _canonical_suite(target)
-    println("backend_benchmark_suite backend=", suite.backend)
+    workloads = isnothing(suite.builder_high_accuracy_label) ?
+        (suite.builder_label,) :
+        (suite.builder_label, suite.builder_high_accuracy_label)
+    println("backend_benchmark_suite backend=", suite.backend,
+        " workloads=", join(workloads, ','))
     _print_trial(suite.builder_label, suite.builder_trial)
     _print_trial(suite.builder_high_accuracy_label, suite.builder_high_accuracy_trial)
     return suite
 end
 
+# AMDGPU qualifies the interaction-matrix builder here. Its timings must not be
+# compared with the model-based CPU/CUDA cases as if they performed equal work.
 function _builder_benchmarks(::GPUBenchmarkTarget{AMDGPUBackendTag}, p)
     interaction_trial = run(@benchmarkable begin
         recon_local = build_reconstructor(

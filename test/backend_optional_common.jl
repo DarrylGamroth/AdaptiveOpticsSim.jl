@@ -2764,16 +2764,8 @@ function run_optional_lift_pipeline_checks(::Type{B}, array_backend,
     return nothing
 end
 
-function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}, tel, backend)
+function run_optional_atmospheric_field_plan_checks(tel, pupil, src, backend)
     T = Float32
-    array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(backend)
-    pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), T=T, backend=backend)
-    bio = BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), T=T, backend=backend)
-    det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeSensor(T=T), T=T, backend=backend)
-    det_capture = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, bits=12, full_well=T(100),
-        sensor=CMOSSensor(T=T), T=T, backend=backend)
-    src = Source(band=:I, magnitude=0.0, T=T)
-    pupil = PupilFunction(tel; T=T, backend=backend)
     atm = MultiLayerAtmosphere(tel;
         r0=T(0.2),
         reference_wavelength_m=T(500e-9),
@@ -2793,106 +2785,6 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         model=LayeredFresnelAtmosphericPropagation(T=T),
         zero_padding=1,
         T=T)
-    pyr_propagation = WavefrontSensors.pyramid_propagation_workspace(pyr)
-    bio_propagation = WavefrontSensors.bi_o_edge_propagation_workspace(bio)
-    @test pyr_propagation.modulation_batch isa
-        WavefrontSensors.PyramidModulationBatchWorkspace
-    @test pyr_propagation.modulation_batch.batch_size == 8
-    @test size(pyr_propagation.modulation_batch.field_stack, 3) == 8
-    @test WavefrontSensors.grouped_accumulation_strategy(
-        AdaptiveOpticsSim.Backends.execution_style(
-            pyr_propagation.intensity), pyr) isa
-        WavefrontSensors.GroupedStaged2DStrategy
-    @test WavefrontSensors.grouped_accumulation_strategy(
-        AdaptiveOpticsSim.Backends.execution_style(
-            bio_propagation.intensity), bio) isa
-        WavefrontSensors.GroupedStaged2DStrategy
-    sh = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
-    sh_rate = shack_hartmann_rate_map(sh, pupil, src)
-    sh_plan = prepare_wfs_optics(shack_hartmann_optics(sh, src), pupil,
-        sh_rate)
-    @test form_wfs_optical_products!(sh_rate, pupil, sh_plan) === sh_rate
-    @test sh_rate.values isa array_backend
-    @test all(isfinite, Array(sh_rate.values))
-    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.products.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy
-    capture_photon_arrival_rate = array_backend{T}(undef, 4, 4)
-    fill!(capture_photon_arrival_rate, T(10))
-    captured = capture!(det_capture, capture_photon_arrival_rate;
-        rng=MersenneTwister(2))
-    @test captured isa array_backend
-    @test maximum(Array(captured)) <= Float64(exp2(T(12)) - one(T))
-    cpu_poisson_det = Detector(noise=NoisePhoton(), exposure_duration=T(1.0), qe=T(1.0),
-        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T,
-        backend=CPUBackend())
-    gpu_poisson_det = Detector(noise=NoisePhoton(), exposure_duration=T(1.0), qe=T(1.0),
-        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T,
-        backend=backend)
-    poisson_input = fill(T(10), 4, 4)
-    cpu_poisson = capture!(cpu_poisson_det, copy(poisson_input); rng=MersenneTwister(23))
-    gpu_poisson = capture!(gpu_poisson_det, array_backend(copy(poisson_input));
-        rng=MersenneTwister(23))
-    @test Array(gpu_poisson) == cpu_poisson
-    poisson_method = which(
-        AdaptiveOpticsSim.Detectors._poisson_noise_frame!,
-        (
-            AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
-            typeof(gpu_poisson_det),
-            typeof(MersenneTwister(1)),
-            typeof(gpu_poisson_det.products.frame),
-        ),
-    )
-    @test occursin("AdaptiveOpticsSimAMDGPUExt", String(poisson_method.file))
-    @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr_propagation.intensity) isa AdaptiveOpticsSim.Backends.HostMirrorReductionStrategy
-    @test AdaptiveOpticsSim.Backends.backend_sum_value(
-        capture_photon_arrival_rate) == T(160)
-
-    phase_freqs = T[-0.2, -0.1, 0.1, 0.2]
-    cpu_phase_psd = zeros(T, 4, 4)
-    gpu_phase_freqs = array_backend(phase_freqs)
-    gpu_phase_psd = array_backend(zeros(T, 4, 4))
-    phase_args = (T(0.02), T(0.01), T(-11 / 6), zero(T), 4)
-    AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
-        cpu_phase_psd, phase_freqs, phase_args...)
-    phase_style = AdaptiveOpticsSim.Backends.execution_style(gpu_phase_psd)
-    AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(phase_style, gpu_phase_psd,
-        gpu_phase_freqs, phase_args...)
-    @test isapprox(Array(gpu_phase_psd), cpu_phase_psd; rtol=1f-6, atol=1f-7)
-    phase_method = which(
-        AdaptiveOpticsSim.Atmospheres._fill_phase_psd!,
-        (typeof(phase_style), typeof(gpu_phase_psd), typeof(gpu_phase_freqs),
-            T, T, T, T, Int),
-    )
-    @test occursin("AdaptiveOpticsSimAMDGPUExt", String(phase_method.file))
-
-    host_opd = reshape(T.(1:256), 16, 16) .* T(1e-9)
-    host_valid = trues(4, 4)
-    cpu_geometric_slopes = zeros(T, 32)
-    gpu_geometric_slopes = array_backend(zeros(T, 32))
-    gpu_opd = array_backend(host_opd)
-    gpu_valid = array_backend(host_valid)
-    AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
-        cpu_geometric_slopes, host_opd, host_valid)
-    AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
-        gpu_geometric_slopes, gpu_opd, gpu_valid)
-    @test isapprox(Array(gpu_geometric_slopes), cpu_geometric_slopes;
-        rtol=1f-6, atol=1f-8)
-    geometric_method = which(
-        AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!,
-        (typeof(AdaptiveOpticsSim.Backends.execution_style(gpu_geometric_slopes)),
-            typeof(gpu_geometric_slopes), typeof(gpu_opd), typeof(gpu_valid),
-            Int, Int, Int),
-    )
-    @test occursin("AdaptiveOpticsSimAMDGPUExt", String(geometric_method.file))
-    randn_method = which(
-        AdaptiveOpticsSim.Detectors._randn_frame_noise!,
-        (
-            AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
-            typeof(det),
-            typeof(MersenneTwister(1)),
-            typeof(det.products.frame),
-        ),
-    )
-    @test occursin("AdaptiveOpticsSimAMDGPUExt", String(randn_method.file))
     @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
         AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
         geom_prop.params.model,
@@ -2901,6 +2793,11 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
         AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
         fresnel_prop.params.model,
     ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldAsyncStrategy
+    return nothing
+end
+
+function run_optional_detector_readout_parity_checks(array_backend, backend)
+    T = Float32
     correction_models = (
         ReferencePixelCommonModeCorrection(1, 1),
         ReferenceRowCommonModeCorrection(1),
@@ -3021,6 +2918,121 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDG
     return nothing
 end
 
+function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}, tel, backend)
+    T = Float32
+    array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(backend)
+    pyr = PyramidWFS(tel; pupil_samples=4, modulation=T(1.0), T=T, backend=backend)
+    bio = BiOEdgeWFS(tel; pupil_samples=4, modulation=T(1.0), T=T, backend=backend)
+    det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeSensor(T=T), T=T, backend=backend)
+    det_capture = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, bits=12, full_well=T(100),
+        sensor=CMOSSensor(T=T), T=T, backend=backend)
+    src = Source(band=:I, magnitude=0.0, T=T)
+    pupil = PupilFunction(tel; T=T, backend=backend)
+    run_optional_atmospheric_field_plan_checks(tel, pupil, src, backend)
+    pyr_propagation = WavefrontSensors.pyramid_propagation_workspace(pyr)
+    bio_propagation = WavefrontSensors.bi_o_edge_propagation_workspace(bio)
+    @test pyr_propagation.modulation_batch isa
+        WavefrontSensors.PyramidModulationBatchWorkspace
+    @test pyr_propagation.modulation_batch.batch_size == 8
+    @test size(pyr_propagation.modulation_batch.field_stack, 3) == 8
+    @test WavefrontSensors.grouped_accumulation_strategy(
+        AdaptiveOpticsSim.Backends.execution_style(
+            pyr_propagation.intensity), pyr) isa
+        WavefrontSensors.GroupedStaged2DStrategy
+    @test WavefrontSensors.grouped_accumulation_strategy(
+        AdaptiveOpticsSim.Backends.execution_style(
+            bio_propagation.intensity), bio) isa
+        WavefrontSensors.GroupedStaged2DStrategy
+    sh = ShackHartmannWFS(tel; n_lenslets=4, T=T, backend=backend)
+    sh_rate = shack_hartmann_rate_map(sh, pupil, src)
+    sh_plan = prepare_wfs_optics(shack_hartmann_optics(sh, src), pupil,
+        sh_rate)
+    @test form_wfs_optical_products!(sh_rate, pupil, sh_plan) === sh_rate
+    @test sh_rate.values isa array_backend
+    @test all(isfinite, Array(sh_rate.values))
+    @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.products.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy
+    capture_photon_arrival_rate = array_backend{T}(undef, 4, 4)
+    fill!(capture_photon_arrival_rate, T(10))
+    captured = capture!(det_capture, capture_photon_arrival_rate;
+        rng=MersenneTwister(2))
+    @test captured isa array_backend
+    @test maximum(Array(captured)) <= Float64(exp2(T(12)) - one(T))
+    cpu_poisson_det = Detector(noise=NoisePhoton(), exposure_duration=T(1.0), qe=T(1.0),
+        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T,
+        backend=CPUBackend())
+    gpu_poisson_det = Detector(noise=NoisePhoton(), exposure_duration=T(1.0), qe=T(1.0),
+        sensor=CMOSSensor(T=T), response_model=NullFrameResponse(), T=T,
+        backend=backend)
+    poisson_input = fill(T(10), 4, 4)
+    cpu_poisson = capture!(cpu_poisson_det, copy(poisson_input); rng=MersenneTwister(23))
+    gpu_poisson = capture!(gpu_poisson_det, array_backend(copy(poisson_input));
+        rng=MersenneTwister(23))
+    @test Array(gpu_poisson) == cpu_poisson
+    poisson_method = which(
+        AdaptiveOpticsSim.Detectors._poisson_noise_frame!,
+        (
+            AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
+            typeof(gpu_poisson_det),
+            typeof(MersenneTwister(1)),
+            typeof(gpu_poisson_det.products.frame),
+        ),
+    )
+    @test occursin("AdaptiveOpticsSimAMDGPUExt", String(poisson_method.file))
+    @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr_propagation.intensity) isa AdaptiveOpticsSim.Backends.HostMirrorReductionStrategy
+    @test AdaptiveOpticsSim.Backends.backend_sum_value(
+        capture_photon_arrival_rate) == T(160)
+
+    phase_freqs = T[-0.2, -0.1, 0.1, 0.2]
+    cpu_phase_psd = zeros(T, 4, 4)
+    gpu_phase_freqs = array_backend(phase_freqs)
+    gpu_phase_psd = array_backend(zeros(T, 4, 4))
+    phase_args = (T(0.02), T(0.01), T(-11 / 6), zero(T), 4)
+    AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(AdaptiveOpticsSim.Backends.ScalarCPUStyle(),
+        cpu_phase_psd, phase_freqs, phase_args...)
+    phase_style = AdaptiveOpticsSim.Backends.execution_style(gpu_phase_psd)
+    AdaptiveOpticsSim.Atmospheres._fill_phase_psd!(phase_style, gpu_phase_psd,
+        gpu_phase_freqs, phase_args...)
+    @test isapprox(Array(gpu_phase_psd), cpu_phase_psd; rtol=1f-6, atol=1f-7)
+    phase_method = which(
+        AdaptiveOpticsSim.Atmospheres._fill_phase_psd!,
+        (typeof(phase_style), typeof(gpu_phase_psd), typeof(gpu_phase_freqs),
+            T, T, T, T, Int),
+    )
+    @test occursin("AdaptiveOpticsSimAMDGPUExt", String(phase_method.file))
+
+    host_opd = reshape(T.(1:256), 16, 16) .* T(1e-9)
+    host_valid = trues(4, 4)
+    cpu_geometric_slopes = zeros(T, 32)
+    gpu_geometric_slopes = array_backend(zeros(T, 32))
+    gpu_opd = array_backend(host_opd)
+    gpu_valid = array_backend(host_valid)
+    AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
+        cpu_geometric_slopes, host_opd, host_valid)
+    AdaptiveOpticsSim.WavefrontSensors.geometric_slopes!(
+        gpu_geometric_slopes, gpu_opd, gpu_valid)
+    @test isapprox(Array(gpu_geometric_slopes), cpu_geometric_slopes;
+        rtol=1f-6, atol=1f-8)
+    geometric_method = which(
+        AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!,
+        (typeof(AdaptiveOpticsSim.Backends.execution_style(gpu_geometric_slopes)),
+            typeof(gpu_geometric_slopes), typeof(gpu_opd), typeof(gpu_valid),
+            Int, Int, Int),
+    )
+    @test occursin("AdaptiveOpticsSimAMDGPUExt", String(geometric_method.file))
+    randn_method = which(
+        AdaptiveOpticsSim.Detectors._randn_frame_noise!,
+        (
+            AdaptiveOpticsSim.Detectors.DetectorHostMirrorStrategy,
+            typeof(det),
+            typeof(MersenneTwister(1)),
+            typeof(det.products.frame),
+        ),
+    )
+    @test occursin("AdaptiveOpticsSimAMDGPUExt", String(randn_method.file))
+    run_optional_detector_readout_parity_checks(array_backend, backend)
+    return nothing
+end
+
 function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}, tel, backend)
     T = Float32
     array_backend = AdaptiveOpticsSim.Backends._resolve_array_backend(backend)
@@ -3029,25 +3041,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     det = Detector(noise=NoiseReadout(T(1.0)), qe=1.0, sensor=HgCdTeSensor(T=T), T=T, backend=backend)
     src = Source(band=:I, magnitude=0.0, T=T)
     pupil = PupilFunction(tel; T=T, backend=backend)
-    atm = MultiLayerAtmosphere(tel;
-        r0=T(0.2),
-        reference_wavelength_m=T(500e-9),
-        L0=T(25.0),
-        fractional_cn2=T[1.0],
-        wind_speed=T[0.0],
-        wind_direction_deg=T[0.0],
-        altitude=T[0.0],
-        T=T,
-        backend=backend,
-    )
-    geom_prop = AtmosphericFieldPropagation(atm, pupil, src;
-        model=GeometricAtmosphericPropagation(T=T),
-        zero_padding=1,
-        T=T)
-    fresnel_prop = AtmosphericFieldPropagation(atm, pupil, src;
-        model=LayeredFresnelAtmosphericPropagation(T=T),
-        zero_padding=1,
-        T=T)
+    run_optional_atmospheric_field_plan_checks(tel, pupil, src, backend)
     pyr_propagation = WavefrontSensors.pyramid_propagation_workspace(pyr)
     bio_propagation = WavefrontSensors.bi_o_edge_propagation_workspace(bio)
     @test pyr_propagation.modulation_batch isa
@@ -3064,14 +3058,6 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
         WavefrontSensors.GroupedStackReduceStrategy
     @test AdaptiveOpticsSim.Detectors.detector_execution_strategy(typeof(AdaptiveOpticsSim.Backends.execution_style(det.products.frame)), typeof(det)) isa AdaptiveOpticsSim.Detectors.DetectorDirectStrategy
     @test AdaptiveOpticsSim.Backends.reduction_execution_strategy(pyr_propagation.intensity) isa AdaptiveOpticsSim.Backends.DirectReductionStrategy
-    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
-        AdaptiveOpticsSim.Backends.execution_style(first(geom_prop.state.slices).field.values),
-        geom_prop.params.model,
-    ) isa AdaptiveOpticsSim.Atmospheres.GeometricFieldAsyncStrategy
-    @test AdaptiveOpticsSim.Atmospheres.atmospheric_field_execution_strategy(
-        AdaptiveOpticsSim.Backends.execution_style(first(fresnel_prop.state.slices).field.values),
-        fresnel_prop.params.model,
-    ) isa AdaptiveOpticsSim.Atmospheres.LayeredFresnelFieldAsyncStrategy
     cpu_tel = Telescope(resolution=16, diameter=8.0f0,
         central_obstruction=0.0f0, T=T, backend=CPUBackend())
     gpu_tel = Telescope(resolution=16, diameter=8.0f0,
@@ -3118,123 +3104,7 @@ function run_optional_backend_plan_checks(::Type{AdaptiveOpticsSim.Backends.CUDA
     @test isapprox(Array(gpu_observation.storage), cpu_observation.storage;
         rtol=1f-5, atol=1f-4)
 
-    correction_models = (
-        ReferencePixelCommonModeCorrection(1, 1),
-        ReferenceRowCommonModeCorrection(1),
-        ReferenceColumnCommonModeCorrection(1),
-        ReferenceOutputCommonModeCorrection(2; edge_rows=1, edge_cols=1),
-        CompositeFrameReadoutCorrection((
-            ReferenceRowCommonModeCorrection(1),
-            ReferenceColumnCommonModeCorrection(1),
-        )),
-    )
-    corr_input = reshape(T.(1:96), 2, 6, 8)
-    cpu_quant_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
-        response_model=NullFrameResponse(), T=T, backend=CPUBackend())
-    gpu_quant_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), sensor=CMOSSensor(T=T),
-        response_model=NullFrameResponse(), T=T, backend=backend)
-    quant_input = reshape(T.(1:48), 6, 8) .* T(3)
-    cpu_quant_frame = capture!(cpu_quant_det, copy(quant_input); rng=MersenneTwister(13))
-    gpu_quant_frame = capture!(gpu_quant_det, array_backend(copy(quant_input)); rng=MersenneTwister(13))
-    @test gpu_quant_frame isa array_backend
-    @test isapprox(Array(gpu_quant_frame), cpu_quant_frame; rtol=1f-5, atol=1f-4)
-
-    for correction_model in correction_models
-        cpu_frame_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
-            sensor=HgCdTeSensor(T=T),
-            response_model=NullFrameResponse(),
-            correction_model=correction_model,
-            T=T,
-            backend=CPUBackend())
-        gpu_frame_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
-            sensor=HgCdTeSensor(T=T),
-            response_model=NullFrameResponse(),
-            correction_model=correction_model,
-            T=T,
-            backend=backend)
-        frame_input = reshape(T.(1:48), 6, 8)
-        cpu_frame = capture!(cpu_frame_det, frame_input; rng=MersenneTwister(12))
-        gpu_frame = capture!(gpu_frame_det, array_backend(copy(frame_input)); rng=MersenneTwister(12))
-        @test gpu_frame isa array_backend
-        @test isapprox(Array(gpu_frame), cpu_frame; rtol=1f-5, atol=1f-4)
-
-        cpu_corr_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
-            sensor=HgCdTeSensor(T=T),
-            response_model=NullFrameResponse(),
-            correction_model=correction_model,
-            T=T,
-            backend=CPUBackend())
-        gpu_corr_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
-            sensor=HgCdTeSensor(T=T),
-            response_model=NullFrameResponse(),
-            correction_model=correction_model,
-            T=T,
-            backend=backend)
-        cpu_corr_cube = copy(corr_input)
-        gpu_corr_cube = array_backend(copy(corr_input))
-        cpu_corr_scratch = similar(cpu_corr_cube)
-        gpu_corr_scratch = similar(gpu_corr_cube)
-        AdaptiveOpticsSim.Detectors.capture_stack!(cpu_corr_det, cpu_corr_cube, cpu_corr_scratch; rng=MersenneTwister(11))
-        AdaptiveOpticsSim.Detectors.capture_stack!(gpu_corr_det, gpu_corr_cube, gpu_corr_scratch; rng=MersenneTwister(11))
-        @test gpu_corr_cube isa array_backend
-        @test isapprox(Array(gpu_corr_cube), cpu_corr_cube; rtol=1f-5, atol=1f-4)
-    end
-
-    generalized_correction = CompositeFrameReadoutCorrection((
-        ReferenceRowCommonModeCorrection(1),
-        ReferenceColumnCommonModeCorrection(1),
-    ))
-    cpu_gen_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
-        sensor=HgCdTeSensor(T=T),
-        response_model=NullFrameResponse(),
-        correction_model=generalized_correction,
-        T=T,
-        backend=CPUBackend())
-    gpu_gen_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0),
-        bits=8, full_well=T(100), readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:5, 3:7), output_type=UInt16,
-        sensor=HgCdTeSensor(T=T),
-        response_model=NullFrameResponse(),
-        correction_model=generalized_correction,
-        T=T,
-        backend=backend)
-    cpu_gen_input = copy(corr_input)
-    gpu_gen_input = array_backend(copy(corr_input))
-    cpu_gen_out = Array{UInt16}(undef, 2, 4, 5)
-    gpu_gen_out = array_backend{UInt16}(undef, 2, 4, 5)
-    AdaptiveOpticsSim.Detectors.capture_stack!(cpu_gen_det, cpu_gen_out, cpu_gen_input; rng=MersenneTwister(14))
-    AdaptiveOpticsSim.Detectors.capture_stack!(gpu_gen_det, gpu_gen_out, gpu_gen_input; rng=MersenneTwister(14))
-    @test gpu_gen_out isa array_backend
-    @test Array(gpu_gen_out) == cpu_gen_out
-
-    cpu_windowed_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0), binning=1,
-        gain=T(1.0),
-        sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
-        response_model=NullFrameResponse(),
-        readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3),
-        T=T,
-        backend=CPUBackend())
-    gpu_windowed_det = Detector(noise=NoiseNone(), exposure_duration=T(1.0), qe=T(1.0), binning=1,
-        gain=T(1.0),
-        sensor=HgCdTeSensor(T=T, sampling_mode=CorrelatedDoubleSampling()),
-        response_model=NullFrameResponse(),
-        readout_window=AdaptiveOpticsSim.Detectors.FrameWindow(2:3, 2:3),
-        T=T,
-        backend=backend)
-    windowed_input = fill(T(10), 4, 4)
-    cpu_windowed_frame = capture!(cpu_windowed_det, windowed_input; rng=MersenneTwister(15))
-    gpu_windowed_frame = capture!(gpu_windowed_det, array_backend(copy(windowed_input)); rng=MersenneTwister(15))
-    @test isapprox(Array(gpu_windowed_frame), cpu_windowed_frame; rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_reference_frame(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_reference_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_signal_frame(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_signal_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_combined_frame(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_combined_frame(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_reference_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_reference_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_signal_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_signal_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test isapprox(Array(AdaptiveOpticsSim.Detectors.detector_read_cube(gpu_windowed_det)), AdaptiveOpticsSim.Detectors.detector_read_cube(cpu_windowed_det); rtol=1f-5, atol=1f-4)
-    @test AdaptiveOpticsSim.Detectors.detector_read_offsets_s(gpu_windowed_det) == AdaptiveOpticsSim.Detectors.detector_read_offsets_s(cpu_windowed_det)
-
+    run_optional_detector_readout_parity_checks(array_backend, backend)
     return nothing
 end
 

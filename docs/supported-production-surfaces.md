@@ -49,7 +49,10 @@ The CPU qualification environment (`test/cpu`) and CPU benchmark environment
 [AOC source revision](https://github.com/DarrylGamroth/AdaptiveOpticsCalibration.jl/commit/55392d16aff769d1678c2940e253f68a09846dd1).
 KA CPU kernels and algorithm graphs are checked on Julia 1.13.2. This version
 selection also applies to ordinary CPU execution without changing its dispatch
-to KA kernels. Run the focused checks from the repository root with:
+to KA kernels. KA CPU is a test fallback for exercising kernel implementations
+when GPU hardware is unavailable; it is not the normal simulator execution path
+and does not qualify GPU runtime, device-residency, or graph-capture behavior.
+Run the focused checks from the repository root with:
 
 ```sh
 OPENBLAS_NUM_THREADS=1 julia --startup-file=no --threads=1 --project=test/cpu \
