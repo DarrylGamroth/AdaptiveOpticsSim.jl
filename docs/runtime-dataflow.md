@@ -457,7 +457,7 @@ The version 1 mappings and sequences are:
 | Mapping or sequence | Required fields | Meaning |
 |---|---|---|
 | root | `schema_version`, `name`, `nodes` | Schema and graph identity |
-| `nodes` | `name`, `type`, `config` | One node in declaration order; preparation derives execution order; `props` is optional; `type: detector` also requires a `detector` selector |
+| `nodes` | `name`, `type`, `config` | One node in declaration order; preparation derives execution order; `props` is optional; `type: detector` also requires a `detector` selector; optional `bindings` maps construction roles to external array names |
 | `inputs` | `name`, `destination`, `binding` | Caller-owned frame input |
 | `outputs` | `name`, `source` | Caller-visible allocated graph output |
 | `links` | `source`, `destination` | Same-step direct link |
@@ -563,16 +563,35 @@ The coefficients specify no elapsed-time constant or calibrated trap model.
 These non-null models use ordinary stream execution under the existing native
 admission rules.
 
-`type: pixel_mtf` declares the separate deterministic spatial response. Its
-required config is:
+`type: pixel_mtf` declares the separate deterministic spatial response:
 
 ```yaml
-input_shape: [3, 5]
-padding: 2
-input_schema: instrument.photon-rate/1
-output_schema: instrument.photon-rate/1
-transfer: calibrated_transfer
+- name: response
+  type: pixel_mtf
+  config:
+    input_shape: [3, 5]
+    padding: 2
+    input_schema: instrument.photon-rate/1
+    output_schema: instrument.photon-rate/1
+  bindings:
+    transfer: calibrated_transfer
 ```
+
+The node's `bindings` mapping declares calibration dependencies independently
+of scientific-package loading, so application exporters can include them in
+artifact identity and deployment seals. Binding roles must not also occur in
+`config`. `AlgorithmGraphs.graph_node_configuration(factory, config, binding_names)`
+validates and merges those roles for factory construction. It rejects omitted
+or extra dependencies against the requirements declared by
+`AlgorithmGraphs.graph_node_bindings(factory, config)`. That interface returns
+a tuple of binding-name symbols and defaults to `()` for factories requiring no
+such arrays. A calibration-bearing factory specializes that method; the pixel
+MTF factory requires the external name mapped to `bindings.transfer` (the
+merged factory configuration contains that name as `config.transfer`).
+Discovery does no I/O and is independent of graph execution. Deployers can load just those named
+arrays through their existing artifact interface, and pass them to the cold
+factory without loading unused profile calibrations. Native construction remains
+authoritative for element type, shape and scientific calibration constraints.
 
 The application supplies `bindings=(; calibrated_transfer, ...)`, where the
 real finite matrix has shape `(rows + 2padding, columns + 2padding)`, unit DC at

@@ -8,6 +8,7 @@ nodes:
       padding: 2
       input_schema: test.ingaas.photon-rate/1
       output_schema: test.ingaas.photon-rate/1
+    bindings:
       transfer: calibrated_transfer
   - name: camera
     type: detector

@@ -1377,6 +1377,47 @@ _file_matrix(value::AbstractMatrix, context::AbstractString) = value
 _file_matrix(value, context::AbstractString) =
     throw(_file_error(context, "external binding must be a matrix"))
 
+"""
+    graph_node_bindings(factory, config::NamedTuple)
+
+Return the tuple of external binding names (`Symbol`s) required by a cold node
+factory's construction configuration. The default is `()`. A factory requiring
+calibration arrays must specialize this method so applications can load only
+those arrays before invoking `(name, config, props, bindings)`.
+
+This declaration performs no I/O and owns no arrays. It does not describe frame
+inputs, delayed initial values or sparse parameters; those have explicit graph
+entries. The native constructor still validates and snapshots the calibration.
+"""
+graph_node_bindings(factory, config::NamedTuple) = ()
+
+"""
+    graph_node_configuration(factory, config::NamedTuple, binding_names::NamedTuple=NamedTuple())
+
+Validate a node's explicit `bindings` mapping and return the factory configuration
+with each binding role mapped to its external name. The names must match
+[`graph_node_bindings`](@ref). Configuration keys and binding roles must not
+collide. This cold operation loads no arrays and performs no I/O.
+"""
+function graph_node_configuration(factory, config::NamedTuple,
+    binding_names::NamedTuple=NamedTuple())
+    declared = map(keys(binding_names)) do role
+        _file_identifier(String(role), "node binding role")
+        hasproperty(config, role) && throw(_file_error(
+            "node binding '$role'", "binding role also appears in config"))
+        _file_identifier(getproperty(binding_names, role), "node binding '$role'")
+    end
+    merged = merge(config, binding_names)
+    required = _file_binding_names(graph_node_bindings(factory, merged))
+    Set(declared) == Set(required) || throw(AlgorithmGraphError(
+        "node bindings must declare exactly the construction calibration names required by the factory"))
+    return merged
+end
+
+_file_binding_names(names::Tuple{Vararg{Symbol}}) = names
+_file_binding_names(names) = throw(AlgorithmGraphError(
+    "graph_node_bindings must return a tuple of binding-name Symbols"))
+
 function _pixel_mtf_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -1398,6 +1439,13 @@ function _pixel_mtf_f32_node(
         input_schema=_file_string(config.input_schema, "$context.input_schema"),
         output_schema=_file_string(config.output_schema, "$context.output_schema"),
         transfer, T=Float32)
+end
+
+function graph_node_bindings(::typeof(_pixel_mtf_f32_node), config::NamedTuple)
+    context = "pixel MTF config"
+    fields = (:input_shape, :padding, :input_schema, :output_schema, :transfer)
+    _require_named_fields(config, fields, fields, context)
+    return (_file_identifier(config.transfer, "$context.transfer"),)
 end
 
 function _detector_node(
@@ -1464,7 +1512,7 @@ function _parse_file_node(
     context = "nodes[$index]"
     _require_table_keys(
         entry,
-        ("name", "type", "detector", "config", "props"),
+        ("name", "type", "detector", "config", "props", "bindings"),
         ("name", "type", "config"),
         context,
     )
@@ -1489,6 +1537,8 @@ function _parse_file_node(
         _table_or_empty(entry, "props", context),
     )
     factory = getproperty(node_types, node_type)
+    config = graph_node_configuration(factory, config,
+        _normalize_graph_value(_table_or_empty(entry, "bindings", context)))
     definition = if node_type === :detector
         detector = _file_identifier(entry["detector"], "$context.detector")
         factory(name, config, props; detector)
@@ -1588,6 +1638,8 @@ as one decoded by an application-owned interchange layer.
 factories accept `(name, config, props; detector)`. Other factories accept
 `(name, config, props)` or `(name, config, props, bindings)`; the latter is
 selected when applicable and can resolve explicit calibration binding names.
+[`graph_node_bindings`](@ref) declares the construction calibrations required
+by such a factory without loading them.
 `bindings` supplies caller-owned frame inputs, delayed-link initial values,
 sparse parameters, and cold node calibrations by name; the graph dictionary
 never embeds or implicitly loads calibration arrays.

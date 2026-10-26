@@ -2115,12 +2115,51 @@ end
             bindings=(; photons, calibrated_transfer=transfer))
     end
     for (field, invalid) in (("input_shape", [5, 3]), ("input_shape", [3]),
-            ("padding", -1), ("transfer", [[1, 1], [1, 1]]),
-            ("transfer", "missing"), ("file", "calibration.fits"))
+            ("padding", -1), ("transfer", "calibrated_transfer"),
+            ("file", "calibration.fits"))
         invalid_document = deepcopy(document)
         invalid_document["nodes"][1]["config"][field] = invalid
         @test_throws AlgorithmGraphError load_algorithm_graph(invalid_document; bindings=valid_bindings)
     end
+    for invalid in ("missing", [[1, 1], [1, 1]], "bad.name")
+        invalid_document = deepcopy(document)
+        invalid_document["nodes"][1]["bindings"]["transfer"] = invalid
+        @test_throws AlgorithmGraphError load_algorithm_graph(invalid_document; bindings=valid_bindings)
+    end
+    invalid_document = deepcopy(document)
+    delete!(invalid_document["nodes"][1], "bindings")
+    @test_throws AlgorithmGraphError load_algorithm_graph(invalid_document; bindings=valid_bindings)
+end
+
+@testset "cold node factories declare configuration binding names" begin
+    factories = builtin_graph_node_types()
+    config = (input_shape=(3, 5), padding=2,
+        input_schema="test.photon-rate/1", output_schema="test.photon-rate/1",
+        transfer="calibrated_transfer")
+    @test AOG.graph_node_bindings(factories.pixel_mtf, config) == (:calibrated_transfer,)
+    renamed = merge(config, (; transfer="measured_response"))
+    @test AOG.graph_node_bindings(factories.pixel_mtf, renamed) == (:measured_response,)
+    @test AOG.graph_node_bindings(factories.detector, (;)) == ()
+    custom(name, config, props) = nothing
+    @test AOG.graph_node_bindings(custom, (;)) == ()
+    unbound = Base.structdiff(config, NamedTuple{(:transfer,)})
+    @test AOG.graph_node_configuration(factories.pixel_mtf, unbound,
+        (; transfer="calibrated_transfer")) == config
+    @test AOG.graph_node_configuration(factories.detector, (;)) == (;)
+    @test_throws AlgorithmGraphError AOG.graph_node_configuration(factories.pixel_mtf, config)
+    @test_throws AlgorithmGraphError AOG.graph_node_configuration(factories.pixel_mtf, config,
+        (; transfer="calibrated_transfer"))
+    @test_throws AlgorithmGraphError AOG.graph_node_configuration(factories.pixel_mtf, unbound,
+        (; transfer="calibrated_transfer", extra="unused"))
+    @test_throws AlgorithmGraphError AOG.graph_node_configuration(factories.detector, (;), (; extra="unused"))
+    for invalid in (1, "invalid.name", (1, 2))
+        @test_throws AlgorithmGraphError AOG.graph_node_bindings(
+            factories.pixel_mtf, merge(config, (; transfer=invalid)))
+    end
+    @test_throws AlgorithmGraphError AOG.graph_node_bindings(
+        factories.pixel_mtf, Base.structdiff(config, NamedTuple{(:transfer,)}))
+    @test_throws AlgorithmGraphError AOG.graph_node_bindings(
+        factories.pixel_mtf, merge(config, (; unknown=true)))
 end
 
 @testset "YAML graph files compile to native graph definitions" begin
