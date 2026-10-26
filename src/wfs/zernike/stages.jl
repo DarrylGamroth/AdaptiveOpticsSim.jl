@@ -36,23 +36,10 @@ end
     (input.amplitude, input.opd, input.support)
 @inline _zernike_input_storages(input::ElectricField) = (input.values,)
 
-@inline _zernike_mightalias_any(value, ::Tuple{}) = false
-@inline function _zernike_mightalias_any(value, values::Tuple)
-    return _wfs_storage_mightalias(value, first(values)) ||
-        _zernike_mightalias_any(value, Base.tail(values))
-end
-
-@inline _zernike_any_alias(::Tuple{}) = false
-@inline function _zernike_any_alias(values::Tuple)
-    remaining = Base.tail(values)
-    return _zernike_mightalias_any(first(values), remaining) ||
-        _zernike_any_alias(remaining)
-end
-
 function _require_zernike_optics_aliases(input, output, workspace)
     storages = (_zernike_input_storages(input)..., output.values,
         _zernike_propagation_workspace_binding(workspace)...)
-    _zernike_any_alias(storages) && throw(WFSPreparationError(
+    _wfs_any_alias(storages) && throw(WFSPreparationError(
         :wfs_optics, :aliasing,
         "Zernike input, rate product, and propagation workspace must not alias"))
     return nothing

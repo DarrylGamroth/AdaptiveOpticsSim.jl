@@ -536,21 +536,14 @@ function _require_lift_forward_workspace(plan::LiFTForwardPlan,
     return workspace
 end
 
-@inline _lift_mightalias_any(::AbstractArray, ::Tuple{}) = false
-@inline function _lift_mightalias_any(value::AbstractArray, values::Tuple)
-    return _wfs_storage_mightalias(value, first(values)) ||
-        _lift_mightalias_any(value, Base.tail(values))
-end
-@inline _lift_mightalias_any(::Any, ::Tuple) = false
-
 @inline function _lift_mightalias_forward_workspace(
     value::AbstractArray,
     workspace::LiFTForwardWorkspace,
 )
-    return _lift_mightalias_any(
+    return _wfs_mightalias_any(
         value,
         _lift_propagation_workspace_arrays(workspace),
-    ) || _lift_mightalias_any(value, _lift_forward_workspace_arrays(workspace))
+    ) || _wfs_mightalias_any(value, _lift_forward_workspace_arrays(workspace))
 end
 
 function _require_lift_forward_owner(forward::PreparedLiFTForward)
@@ -581,9 +574,9 @@ function _require_lift_forward_owner(forward::PreparedLiFTForward)
         _lift_forward_workspace_arrays(forward.workspace)...)
     propagation_storages =
         _lift_propagation_workspace_arrays(forward.workspace)
-    (_lift_any_alias(storages) ||
-        _lift_any_alias(propagation_storages) ||
-        _lift_any_cross_alias(propagation_storages, storages)) && throw(
+    (_wfs_any_alias(storages) ||
+        _wfs_any_alias(propagation_storages) ||
+        _wfs_any_cross_alias(propagation_storages, storages)) && throw(
         InvalidConfiguration(
             "LiFT forward plan, input, output, and workspace must not alias"))
     return forward
@@ -747,17 +740,4 @@ LiFTObservation(forward::PreparedLiFTForward,
     return (plan.pupil_mask, plan.pupil_amplitude, plan.basis,
         plan.diversity_opd, _lift_object_plan_arrays(plan.object_kernel)...,
         _lift_mapping_plan_arrays(plan.mapping)...)
-end
-
-@inline _lift_any_alias(::Tuple{}) = false
-@inline function _lift_any_alias(values::Tuple)
-    remaining = Base.tail(values)
-    return _lift_mightalias_any(first(values), remaining) ||
-        _lift_any_alias(remaining)
-end
-
-@inline _lift_any_cross_alias(::Tuple{}, ::Tuple) = false
-@inline function _lift_any_cross_alias(values::Tuple, other_values::Tuple)
-    return _lift_mightalias_any(first(values), other_values) ||
-        _lift_any_cross_alias(Base.tail(values), other_values)
 end

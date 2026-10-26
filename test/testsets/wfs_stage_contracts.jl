@@ -1761,6 +1761,47 @@ end
     @test all(isfinite, asterism_rate.values)
 end
 
+@testset "Shack-Hartmann input and output alias policy" begin
+    T = Float64
+    tel = Telescope(resolution=16, diameter=T(8),
+        central_obstruction=zero(T), T=T)
+    src = Source(band=:custom, wavelength=T(0.75e-6),
+        photon_irradiance=T(10), T=T)
+    pupil = PupilFunction(tel; T=T)
+    pupil.opd .= reshape(T.(1:256), 16, 16) .* T(1e-10)
+    sensor = ShackHartmannWFS(tel; n_lenslets=4, n_pix_subap=4, T=T)
+    optics = shack_hartmann_optics(sensor, src)
+    # SH reads its inputs; amplitude and OPD may share storage. The output
+    # must still be independent, including when overlap comes through a view.
+    shared_values = copy(pupil.opd)
+    shared_before = copy(shared_values)
+    shared_pupil = typeof(pupil)(pupil.metadata, pupil.support,
+        shared_values, shared_values, aperture_revision(pupil))
+    shared_rate = shack_hartmann_rate_map(optics, shared_pupil)
+    shared_plan = prepare_wfs_optics(optics, shared_pupil, shared_rate)
+    @test form_wfs_optical_products!(shared_rate, shared_pupil,
+        shared_plan) === shared_rate
+    independent_pupil = PupilFunction(shared_pupil)
+    independent_rate = shack_hartmann_rate_map(optics, independent_pupil)
+    independent_plan = prepare_wfs_optics(optics, independent_pupil,
+        independent_rate)
+    form_wfs_optical_products!(independent_rate, independent_pupil,
+        independent_plan)
+    @test any(>(zero(T)), shared_rate.values)
+    @test shared_rate.values == independent_rate.values
+    @test shared_values == shared_before
+    aliased_rate = IntensityMap(shared_rate.metadata,
+        @view(shared_values[:, :]))
+    alias_error = contract_captured_error() do
+        prepare_wfs_optics(optics, shared_pupil, aliased_rate)
+    end
+    @test alias_error isa WFSPreparationError
+    @test alias_error.stage === :wfs_optics
+    @test alias_error.reason === :aliasing
+    @test shared_values == shared_before
+
+end
+
 @testset "Prepared Pyramid and Bi-O-edge stages" begin
     T = Float64
     coverage_enabled = coverage_instrumented()

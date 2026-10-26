@@ -563,6 +563,26 @@ end
 
 @inline _wfs_storage_mightalias(first, second) = false
 
+# Only array storage participates; each sensor selects which sets to compare.
+@inline _wfs_mightalias_any(value, ::Tuple{}) = false
+@inline function _wfs_mightalias_any(value, values::Tuple)
+    return _wfs_storage_mightalias(value, first(values)) ||
+        _wfs_mightalias_any(value, Base.tail(values))
+end
+
+@inline _wfs_any_alias(::Tuple{}) = false
+@inline function _wfs_any_alias(values::Tuple)
+    remaining = Base.tail(values)
+    return _wfs_mightalias_any(first(values), remaining) ||
+        _wfs_any_alias(remaining)
+end
+
+@inline _wfs_any_cross_alias(::Tuple{}, ::Tuple) = false
+@inline function _wfs_any_cross_alias(values::Tuple, other_values::Tuple)
+    return _wfs_mightalias_any(first(values), other_values) ||
+        _wfs_any_cross_alias(Base.tail(values), other_values)
+end
+
 function _require_wfs_detector_observation_ownership(
     detector::Detector, optical_product::IntensityMap,
     observation::WFSObservation)

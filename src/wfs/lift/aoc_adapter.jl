@@ -116,7 +116,7 @@ end
     workspace::LiFTForwardModelWorkspace)
     _require_lift_forward_workspace(model.plan, workspace.forward)
     _require_lift_forward_input(model.plan, workspace.opd)
-    (_lift_mightalias_any(workspace.opd,
+    (_wfs_mightalias_any(workspace.opd,
         _lift_forward_plan_arrays(model.plan)) ||
         _lift_mightalias_forward_workspace(workspace.opd,
             workspace.forward)) && throw(
@@ -130,7 +130,7 @@ end
     length(coefficients) == PhaseRetrieval.coefficient_count(model) || throw(
         DimensionMismatchError("AdaptiveOpticsCalibration LiFT coefficients must cover the complete AOS modal basis"))
     plan_arrays = _lift_forward_plan_arrays(model.plan)
-    _lift_mightalias_any(coefficients, plan_arrays) && throw(
+    _wfs_mightalias_any(coefficients, plan_arrays) && throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT coefficients must not alias physical-plan storage"))
     (Base.mightalias(coefficients, workspace.opd) ||
         _lift_mightalias_forward_workspace(coefficients,
@@ -157,7 +157,7 @@ end
     (Base.mightalias(out, workspace.opd) ||
         _lift_mightalias_forward_workspace(out, workspace.forward)) && throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT photon-rate output must not alias model scratch"))
-    _lift_mightalias_any(out, _lift_forward_plan_arrays(model.plan)) && throw(
+    _wfs_mightalias_any(out, _lift_forward_plan_arrays(model.plan)) && throw(
         InvalidConfiguration("AdaptiveOpticsCalibration LiFT photon-rate output must not alias physical-plan storage"))
     Base.mightalias(out, coefficients) && throw(InvalidConfiguration(
         "AdaptiveOpticsCalibration LiFT photon-rate output must not alias coefficients"))
@@ -193,7 +193,7 @@ function PhaseRetrieval.analytic_photon_rate_jacobian!(jacobian::AbstractMatrix{
         throw(InvalidConfiguration(
             "AdaptiveOpticsCalibration LiFT Jacobian must occupy the AOS forward compute device"))
     plan_arrays = _lift_forward_plan_arrays(model.plan)
-    _lift_mightalias_any(jacobian, plan_arrays) && throw(InvalidConfiguration(
+    _wfs_mightalias_any(jacobian, plan_arrays) && throw(InvalidConfiguration(
         "AdaptiveOpticsCalibration LiFT Jacobian must not alias physical-plan storage"))
     (Base.mightalias(jacobian, workspace.opd) ||
         _lift_mightalias_forward_workspace(jacobian,

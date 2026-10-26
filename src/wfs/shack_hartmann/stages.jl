@@ -184,26 +184,14 @@ end
     (input.amplitude, input.opd)
 @inline _sh_input_storages(input::ElectricField) = (input.values,)
 
-@inline _sh_mightalias_any(::AbstractArray, ::Tuple{}) = false
-@inline function _sh_mightalias_any(value::AbstractArray, values::Tuple)
-    return _wfs_storage_mightalias(value, first(values)) ||
-        _sh_mightalias_any(value, Base.tail(values))
-end
-
-@inline _sh_any_alias(::Tuple{}, ::Tuple) = false
-@inline function _sh_any_alias(values::Tuple, resources::Tuple)
-    return _sh_mightalias_any(first(values), resources) ||
-        _sh_any_alias(Base.tail(values), resources)
-end
-
 @inline function _require_sh_optics_aliases(input, output::IntensityMap,
     workspace, layout::SubapertureLayout)
     input_storages = _sh_input_storages(input)
     resources = (_sh_microlens_workspace_binding(workspace)...,
         layout.valid_mask, layout.valid_mask_host)
-    (_sh_mightalias_any(output.values, input_storages) ||
-        _sh_mightalias_any(output.values, resources) ||
-        _sh_any_alias(input_storages, resources)) &&
+    (_wfs_mightalias_any(output.values, input_storages) ||
+        _wfs_mightalias_any(output.values, resources) ||
+        _wfs_any_cross_alias(input_storages, resources)) &&
         throw(WFSPreparationError(:wfs_optics, :aliasing,
             "Shack-Hartmann input, rate product, layout, and workspace storage must not alias"))
     return nothing

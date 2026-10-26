@@ -53,24 +53,11 @@ end
     (input.amplitude, input.opd, input.support)
 @inline _curvature_input_storages(input::ElectricField) = (input.values,)
 
-@inline _curvature_mightalias_any(value, ::Tuple{}) = false
-@inline function _curvature_mightalias_any(value, values::Tuple)
-    return _wfs_storage_mightalias(value, first(values)) ||
-        _curvature_mightalias_any(value, Base.tail(values))
-end
-
-@inline _curvature_any_alias(::Tuple{}) = false
-@inline function _curvature_any_alias(values::Tuple)
-    remaining = Base.tail(values)
-    return _curvature_mightalias_any(first(values), remaining) ||
-        _curvature_any_alias(remaining)
-end
-
 function _require_curvature_optics_aliases(input, output, workspace)
     storages = (_curvature_input_storages(input)...,
         output[1].values, output[2].values,
         _curvature_propagation_workspace_binding(workspace)...)
-    _curvature_any_alias(storages) && throw(WFSPreparationError(
+    _wfs_any_alias(storages) && throw(WFSPreparationError(
         :wfs_optics, :aliasing,
         "Curvature input, branch products, and propagation workspace must not alias"))
     return nothing
