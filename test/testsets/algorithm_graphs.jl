@@ -432,6 +432,158 @@ end
 
 AOG.reset_graph_node!(::GraphTestFailureOwner) = nothing
 
+@testset "algorithm graph dependency-derived execution order" begin
+    schema = "test.graph.signal.f32/1"
+    source = algorithm_node(:source, GraphTestSourceDeclaration,
+        GraphTestSourceConfiguration(2, 2.0f0))
+    add = algorithm_node(:add, GraphTestAddDeclaration,
+        GraphTestAddConfiguration(2, schema, 1.0f0))
+    response = second_order_response_node(:response; natural_frequency_hz=40,
+        damping_ratio=1, sample_period_s=0.001, count=2, schema)
+    sink = algorithm_node(:sink, GraphTestSinkDeclaration, GraphTestSinkConfiguration(2))
+    other = algorithm_node(:other, GraphTestSourceDeclaration,
+        GraphTestSourceConfiguration(2, 7.0f0))
+    isolated = algorithm_node(:isolated, GraphTestSourceDeclaration,
+        GraphTestSourceConfiguration(2, 9.0f0))
+    definition = algorithm_graph((sink, response, other, add, source, isolated);
+        outputs=(graph_output(:position, :response => :output),
+            graph_output(:isolated, :isolated => :output)),
+        links=(link(:response => :output, :sink => :input),
+            link(:add => :output, :response => :input),
+            link(:source => :output, :add => :input)))
+    graph = prepare_algorithm_graph(definition)
+    @test AOG._node_names(definition.nodes) == (:sink, :response, :other, :add, :source, :isolated)
+    # Select the earliest declared ready node again after every dependency release.
+    @test keys(graph.nodes) == (:other, :source, :add, :response, :sink, :isolated)
+    source_owner = prepared_graph_node(graph, :source)
+    add_owner = prepared_graph_node(graph, :add)
+    response_owner = prepared_graph_node(graph, :response)
+    sink_owner = prepared_graph_node(graph, :sink)
+    @test add_owner.input === source_owner.output
+    @test response_owner.prepared.input === add_owner.output
+    @test sink_owner.input === response_owner.prepared.output
+    position = graph_output(graph, :position)
+    @test response_owner.prepared.output === position
+    step_graph!(graph)
+    omega_dt = 2π * 40 * 0.001
+    expected = 3 * (1 - exp(-omega_dt) * (1 + omega_dt))
+    @test position ≈ fill(expected, 2) rtol=5e-6
+    @test sink_owner.sum ≈ 2expected rtol=5e-6
+    @test graph_output(graph, :isolated) == fill(9.0f0, 2)
+    first_position = copy(position)
+    @test warmed_graph_step_allocation_bytes(graph) == 0
+    @test @inferred(step_graph!(graph)) === graph
+    reset_graph!(graph)
+    @test prepared_graph_node(graph, :response) === response_owner
+    @test graph_output(graph, :position) === position
+    step_graph!(graph)
+    @test position == first_position
+
+    disconnected = prepare_algorithm_graph(algorithm_graph((other, source, isolated)))
+    @test keys(disconnected.nodes) == (:other, :source, :isolated)
+
+    # The explicit grouped policy retains its declaration-order admission rule.
+    @test_throws AlgorithmGraphError prepare_algorithm_graph(definition;
+        execution=GroupedStreamGraphExecution((:other, :source), (:add,),
+            (:response,), (:sink, :isolated)))
+    @test_throws AlgorithmGraphError prepare_algorithm_graph(definition;
+        execution=GroupedStreamGraphExecution((:sink,), (:response, :other),
+            (:add,), (:source, :isolated)))
+end
+
+@testset "algorithm graph direct cycles and delayed feedback" begin
+    configuration = GraphTestAddConfiguration(2, "test.graph.signal.f32/1", 1.0f0)
+    first = algorithm_node(:first, GraphTestAddDeclaration, configuration)
+    second = algorithm_node(:second, GraphTestAddDeclaration, configuration)
+    for definition in (
+        algorithm_graph((first,); links=(link(:first => :output, :first => :input),)),
+        algorithm_graph((first, second); links=(
+            link(:first => :output, :second => :input),
+            link(:second => :output, :first => :input))),
+    )
+        error = try
+            prepare_algorithm_graph(definition)
+            nothing
+        catch exception
+            exception
+        end
+        @test error isa AlgorithmGraphError
+        @test occursin("cycle", sprint(showerror, error))
+        @test occursin("first", sprint(showerror, error))
+        @test occursin("delayed_link", sprint(showerror, error))
+    end
+
+    graph = prepare_algorithm_graph(algorithm_graph((second, first);
+        outputs=(graph_output(:result, :second => :output),),
+        links=(link(:first => :output, :second => :input),),
+        delayed_links=(delayed_link(:second => :output, :first => :input,
+            zeros(Float32, 2)),)))
+    @test keys(graph.nodes) == (:first, :second)
+    initial = copy(graph.state.delayed_values[1])
+    ticket = step_graph_async!(graph)
+    @test graph_step_sequence(graph) == UInt64(0)
+    @test graph_step_pending(graph)
+    wait_graph_step!(ticket)
+    @test graph_output(graph, :result) == Float32[2, 2]
+    @test graph_step_sequence(graph) == UInt64(1)
+    step_graph!(graph)
+    @test graph_output(graph, :result) == Float32[4, 4]
+    reset_graph!(graph)
+    @test graph.state.delayed_values[1] == initial
+    step_graph!(graph)
+    @test graph_output(graph, :result) == Float32[2, 2]
+
+    input = Float32[-3, -3]
+    failing = prepare_algorithm_graph(algorithm_graph((
+        algorithm_node(:checked, GraphTestFailureDeclaration, 2),
+        algorithm_node(:feedback, GraphTestAddDeclaration, configuration),
+        algorithm_node(:add, GraphTestAddDeclaration, configuration),
+        algorithm_node(:source, GraphTestExactBindingDeclaration, 2));
+        inputs=(graph_input(:input, :source => :input, input),),
+        links=(link(:source => :output, :add => :input),
+            link(:add => :output, :checked => :input)),
+        delayed_links=(delayed_link(:checked => :output, :feedback => :input,
+            fill(5.0f0, 2)),)))
+    @test keys(failing.nodes) == (:feedback, :source, :add, :checked)
+    @test_throws DomainError step_graph!(failing)
+    @test graph_failed(failing)
+    @test graph_step_sequence(failing) == UInt64(0)
+    @test failing.state.delayed_values[1] == fill(5.0f0, 2)
+    @test_throws AlgorithmGraphError step_graph!(failing)
+    fill!(input, 3.0f0)
+    reset_graph!(failing)
+    step_graph!(failing)
+    @test !graph_failed(failing)
+    @test graph_step_sequence(failing) == UInt64(1)
+    @test failing.state.delayed_values[1] == fill(4.0f0, 2)
+    @test prepared_graph_node(failing, :feedback).output == fill(6.0f0, 2)
+end
+
+@testset "graph files preserve identities with dependency ordering" begin
+    document = Dict("schema_version" => 1, "name" => "scrambled",
+        "nodes" => [Dict("name" => "sink", "type" => "test_sink", "config" => Dict()),
+            Dict("name" => "response", "type" => "second_order_response_f32",
+                "config" => Dict("natural_frequency_hz" => 40, "damping_ratio" => 1,
+                    "sample_period_s" => 0.001, "count" => 2,
+                    "schema" => "test.graph.signal.f32/1")),
+            Dict("name" => "source", "type" => "test_source", "config" => Dict())],
+        "links" => [Dict("source" => "source.output", "destination" => "response.input"),
+            Dict("source" => "response.output", "destination" => "sink.input")],
+        "outputs" => [Dict("name" => "position", "source" => "response.output")])
+    node_types = merge(builtin_graph_node_types(), (
+        test_source=(name, config, props) -> algorithm_node(name, GraphTestSourceDeclaration,
+            GraphTestSourceConfiguration(2, 2.0f0)),
+        test_sink=(name, config, props) -> algorithm_node(name, GraphTestSinkDeclaration,
+            GraphTestSinkConfiguration(2)),))
+    definition = load_algorithm_graph(document; node_types)
+    graph = prepare_algorithm_graph(definition)
+    @test AOG._node_names(definition.nodes) == (:sink, :response, :source)
+    @test keys(graph.nodes) == (:source, :response, :sink)
+    step_graph!(graph)
+    @test prepared_graph_node(graph, :sink).sum ≈ sum(graph_output(graph, :position))
+    @test all(>(0), graph_output(graph, :position))
+end
+
 @testset "portable algorithm graph direct links and sparse parameters" begin
     input = Float32[1, 2, 3]
     definition = algorithm_graph(
@@ -2100,7 +2252,10 @@ end
             zeros(Float32, 2),
         ),),
     )
-    @test_throws AlgorithmGraphError prepare_algorithm_graph(backward)
+    reordered = prepare_algorithm_graph(backward)
+    @test keys(reordered.nodes) == (:second, :first)
+    step_graph!(reordered)
+    @test prepared_graph_node(reordered, :first).output == Float32[2, 2]
 
     mismatched = GraphTestAddConfiguration(
         2,

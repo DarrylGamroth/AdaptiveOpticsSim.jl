@@ -211,7 +211,8 @@ for calibration, reconstruction, control, controller-to-VDM, VDM-to-PDM, and
 PDM conditioning.
 
 Use a delayed link when a plant graph needs an explicit previous-frame value.
-Direct links must follow node order and cannot form a cycle. RTC feedback
+Preparation orders nodes by their direct dependencies, choosing the earliest
+declared ready node at each step. Direct links cannot form a cycle. RTC feedback
 composition is maintained by FGA/JFG in the linked integration fixture.
 
 For a GPU-resident application that has independent CPU work before it needs

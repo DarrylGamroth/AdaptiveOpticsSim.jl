@@ -149,8 +149,9 @@ end
 
 Declare one named graph node backed by an AOS graph-node adapter. `config`
 fixes construction and graph-rebuild values. `props` supplies scalar initial
-values without changing the node's port contract. Node order in
-[`algorithm_graph`](@ref) is direct-link execution order.
+values without changing the node's port contract. Preparation derives direct-link
+execution order from the graph dependencies, using declaration order to choose
+among ready nodes.
 """
 function algorithm_node(
     name::Symbol,
@@ -172,7 +173,8 @@ end
     link(source, destination)
 
 Connect an output to an input in the same graph step. Both references use
-`:node => :port`. The source node must precede the destination node.
+`:node => :port`. Preparation orders the source before the destination; direct
+links must not form a cycle.
 """
 function link(source, destination)
     prepared_source = _port_reference(source)
@@ -335,8 +337,10 @@ end
     algorithm_graph(nodes; name=:anonymous, inputs=(), outputs=(), links=(),
                     delayed_links=(), parameters=())
 
-Construct a cold graph definition from concrete tuples. Direct-link execution
-order is the order of `nodes`; feedback must use an explicit delayed link.
+Construct a cold graph definition from concrete tuples. Preparation derives a
+fixed topological execution order from direct links, choosing the earliest
+declared ready node at each step. Feedback must use an explicit delayed link.
+Explicit grouped execution retains its declaration-order admission rule.
 """
 function algorithm_graph(
     nodes::Tuple;

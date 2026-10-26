@@ -88,7 +88,7 @@ end
 """
     step_graph_async!(graph) -> GraphStepTicket
 
-Submit one complete graph frame in declaration order without synchronizing the
+Submit one complete graph frame in prepared dependency order without synchronizing the
 prepared device context at the graph boundary. Submission has bounded capacity
 one because the frame owns the graph's outputs, delayed-link storage, node
 state/workspaces, and RNG state until its ticket is consumed.
@@ -168,7 +168,7 @@ end
 """
     step_graph!(graph)
 
-Invoke every prepared node once in declaration order. Delayed links and the
+Invoke every prepared node once in prepared dependency order. Delayed links and the
 step sequence publish only after the execution context reports completion. A
 thrown node or device error stops the graph until [`reset_graph!`](@ref). This
 synchronous

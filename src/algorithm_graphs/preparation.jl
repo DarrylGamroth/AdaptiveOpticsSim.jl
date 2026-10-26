@@ -515,6 +515,38 @@ function _node_ordinal(names::Tuple, sought::Symbol, ordinal::Int=1)
     return _node_ordinal(Base.tail(names), sought, ordinal + 1)
 end
 
+function _ordered_graph_nodes(nodes::NamedTuple, links::Tuple)
+    names = keys(nodes)
+    predecessors = zeros(Int, length(names))
+    successors = [Int[] for _ in names]
+    for direct in links
+        source = _node_ordinal(names, _node_name(direct.source))
+        destination = _node_ordinal(names, _node_name(direct.destination))
+        push!(successors[source], destination)
+        predecessors[destination] += 1
+    end
+
+    order = Int[]
+    sizehint!(order, length(names))
+    for _ in names
+        # Always select the earliest declared ready node, including nodes
+        # released by the preceding selection. Delayed links are not edges in
+        # this same-frame dependency graph.
+        ordinal = findfirst(iszero, predecessors)
+        isnothing(ordinal) && throw(AlgorithmGraphError(
+            "algorithm graph direct-link cycle blocks nodes " *
+            "$(names[findall(>(0), predecessors)]); use delayed_link for feedback",
+        ))
+        push!(order, ordinal)
+        predecessors[ordinal] = -1
+        for destination in successors[ordinal]
+            predecessors[destination] -= 1
+        end
+    end
+    ordered_names = Tuple(names[index] for index in order)
+    return NamedTuple{ordered_names}(map(name -> getproperty(nodes, name), ordered_names))
+end
+
 @inline _validate_direct_links!(
     nodes,
     node_outputs,
@@ -540,12 +572,6 @@ end
         destination_contract.format,
         context,
     )
-    names = keys(nodes)
-    source_ordinal = _node_ordinal(names, _node_name(direct.source))
-    destination_ordinal = _node_ordinal(names, _node_name(direct.destination))
-    source_ordinal < destination_ordinal || throw(AlgorithmGraphError(
-        "$context must point from an earlier node to a later node; use delayed_link for feedback",
-    ))
     source_values = _endpoint_output(node_outputs, direct.source)
     _validate_graph_buffer(
         target,
@@ -1072,7 +1098,9 @@ end
 Admit every node's fixed ports, validate all exact formats and connections,
 allocate intermediate and delayed storage, then prepare every node against its
 exact frame-data buffers and startup sparse parameters in one concrete
-single-writer graph owner. Every graph buffer must be native packed storage on
+single-writer graph owner. Direct dependencies determine a fixed topological
+order, with declaration order breaking ties among ready nodes; direct cycles
+are rejected and delayed links do not constrain same-frame order. Every graph buffer must be native packed storage on
 the exact `target`; preparation never inserts an implicit host/device transfer.
 `CapturedGraphExecution()` records the complete node and delayed-link sequence
 as one native device graph. Every node owner must explicitly satisfy the
@@ -1097,6 +1125,7 @@ function _prepare_algorithm_graph(
         definition.links,
         target,
     )
+    ordered_nodes = _ordered_graph_nodes(admitted_nodes, definition.links)
     prepared_delays, delayed_values = _prepare_delayed_links(
         definition.delayed_links,
         admitted_nodes,
@@ -1112,6 +1141,9 @@ function _prepare_algorithm_graph(
     _require_unique_destinations(bindings)
     execution_preparation = _prepare_graph_execution_preparation(
         execution,
+        # Explicit groups are still admitted against declaration order. Valid
+        # groups already satisfy every direct dependency, so their flattened
+        # order is unchanged by the stable topological sort.
         values(admitted_nodes),
         definition.links,
         target,
@@ -1120,14 +1152,14 @@ function _prepare_algorithm_graph(
 
     try
         node_values = _prepare_exact_nodes(
-            values(admitted_nodes),
-            values(node_outputs),
+            values(ordered_nodes),
+            map(name -> getproperty(node_outputs, name), keys(ordered_nodes)),
             bindings,
             definition.parameters,
             target,
             execution_preparation.node_contexts,
         )
-        nodes = NamedTuple{keys(admitted_nodes)}(node_values)
+        nodes = NamedTuple{keys(ordered_nodes)}(node_values)
         outputs = _prepare_graph_outputs(
             definition.outputs,
             admitted_nodes,

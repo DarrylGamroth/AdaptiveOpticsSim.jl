@@ -55,8 +55,9 @@ preparation proceeds in three stages:
 
 1. Call `graph_node_ports(Node, config)` for each node and admit its fixed port
    type, shape, scientific schema, role, and layout.
-2. Admit the complete topology and startup sparse parameters, retain graph
-   inputs, and allocate node outputs and delayed-link storage.
+2. Admit the complete topology and startup sparse parameters, derive a fixed
+   topological order from direct links, retain graph inputs, and allocate node
+   outputs and delayed-link storage.
 3. Call `prepare_graph_node` so each adapter constructs one exact execution
    owner from its config, initial props, admitted inputs, outputs, parameters,
    and compute target.
@@ -70,13 +71,20 @@ and are composed in the maintained
 [`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/).
 No binding or allocation occurs in `step_graph!`.
 
-One graph step invokes every node once under a schedule that preserves validated
-declaration order. A direct link exposes an earlier node's ordered output to a
-later node in the same step. The default uses one retained accelerator stream,
+One graph step invokes every node once in the prepared topological order.
+Preparation repeatedly selects the earliest declared node whose direct-link
+predecessors have been ordered. Disconnected and simultaneously ready nodes
+therefore retain declaration order. Direct cycles, including self-links, are
+rejected; delayed links do not constrain same-frame order. Node names and exact
+port bindings retain their identities when preparation changes execution order.
+A direct link exposes its producer's ordered output to its consumer in the same
+step. The default uses one retained accelerator stream,
 so that dependency is device execution order and requires no host barrier. The
 explicit grouped-stream policy may overlap independent nodes, but it admits
 only groups whose flattened names equal declaration order and requires every
-direct link to cross a group boundary. A delayed link exposes only the value
+direct link to cross from an earlier group to a later group. Preparation
+validates explicit groups against the original declaration and does not reorder
+or repartition them. A delayed link exposes only the value
 committed after the preceding successful step. Delayed-link state and the graph
 sequence publish only when the current frame's completion is observed. A node
 or device failure makes the run fail-stop until an explicit reset; the graph
