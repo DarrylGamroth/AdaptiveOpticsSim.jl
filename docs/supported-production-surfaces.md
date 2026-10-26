@@ -44,6 +44,18 @@ The Julia 1.12 CPU baseline includes:
 Warmed allocation claims apply only to the concrete paths with allocation tests.
 They are not a promise for arbitrary user callbacks or every optional library.
 
+The CPU qualification environment (`test/cpu`) and CPU benchmark environment
+(`benchmarks`) pin KernelAbstractions 0.10.1 and the compatible
+[AOC source revision](https://github.com/DarrylGamroth/AdaptiveOpticsCalibration.jl/commit/1559aa60c61c6131be3368f19ffc1ec89c41e0a8).
+KA CPU kernels and algorithm graphs are checked on Julia 1.13.2. This version
+selection also applies to ordinary CPU execution without changing its dispatch
+to KA kernels. Run the focused checks from the repository root with:
+
+```sh
+OPENBLAS_NUM_THREADS=1 julia --startup-file=no --threads=1 --project=test/cpu \
+  -e 'using Pkg; Pkg.instantiate(); Pkg.test("AdaptiveOpticsSim"; allow_reresolve=false, test_args=["ka-cpu", "algorithm-graphs"])'
+```
+
 ## Downstream Instrument Packages
 
 AOS supports the reusable algorithms, graph adapters, static YAML schema, and
