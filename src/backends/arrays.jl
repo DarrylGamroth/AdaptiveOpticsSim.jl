@@ -648,6 +648,30 @@ This private seam adds no completion boundary or device-context selection.
     return mul!(C, A, B, coefficients.alpha, coefficients.beta)
 end
 
+@static if VERSION >= v"1.13"
+    # Julia 1.13's five-argument Float16 matrix fallback boxes its coefficients
+    # and reconstructed transpose wrappers. Its public seven-argument method
+    # accepts the existing wrappers directly and preserves prepared submission.
+    function _enqueue_mul!(
+        C::Matrix{Float16},
+        A::Matrix{Float16},
+        B::Union{
+            Matrix{Float16},
+            SubArray{Float16,2,<:Matrix{Float16}},
+            Transpose{Float16,<:Matrix{Float16}},
+            Adjoint{Float16,<:Matrix{Float16}},
+        },
+        coefficients,
+    )
+        # Retain LinearAlgebra's specialized small-matrix reduction order.
+        if size(C) == size(A) == size(B) == (2, 2) ||
+                size(C) == size(A) == size(B) == (3, 3)
+            return mul!(C, A, B, coefficients.alpha, coefficients.beta)
+        end
+        return mul!(C, 'N', 'N', A, B, coefficients.alpha, coefficients.beta)
+    end
+end
+
 backend_matmul(A::AbstractMatrix, B::AbstractMatrix) = A * B
 backend_matmul_transpose_right(A::AbstractMatrix, B::AbstractMatrix) = A * transpose(B)
 

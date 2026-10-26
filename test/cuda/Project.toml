@@ -11,12 +11,11 @@ Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [sources]
-AdaptiveOpticsCalibration = {url = "https://github.com/DarrylGamroth/AdaptiveOpticsCalibration.jl.git", rev = "55392d16aff769d1678c2940e253f68a09846dd1"}
 AdaptiveOpticsSim = {path = "../.."}
 
 [compat]
-AdaptiveOpticsCalibration = "0.17"
-AdaptiveOpticsSim = "0.2"
+AdaptiveOpticsCalibration = "=0.17.1"
+AdaptiveOpticsSim = "0.3"
 CUDA = "=6.4.2"
 FixedSizeArrays = "1.3"
 KernelAbstractions = "=0.9.45"

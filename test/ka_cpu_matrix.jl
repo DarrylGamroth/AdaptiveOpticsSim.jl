@@ -927,6 +927,40 @@ end
 
     end
 
+    @testset "Second-order response kernel" begin
+        for T in (Float32, Float64), damping in (0.2, 1.0, 2.0)
+            input = T[1, -2, 0, 0.5, -0.25, 3, -4]
+            plan = Optics.SecondOrderResponsePlan(; natural_frequency_hz=40,
+                damping_ratio=damping, sample_period_s=0.001, T)
+            scalar = prepare_second_order_response(copy(input), plan)
+            copyto!(scalar.state.position, T(0.1) .* input)
+            copyto!(scalar.state.velocity, reverse(input))
+            ka_position = Vector{T}(scalar.state.position)
+            ka_velocity = Vector{T}(scalar.state.velocity)
+            ka_input = copy(input)
+            ka_output = similar(input)
+            for step in 1:4
+                scalar.input .= T(step / 4) .* input
+                copyto!(ka_input, scalar.input)
+                fill!(ka_output, T(NaN))
+                expected_input = copy(scalar.input)
+                Optics._advance_response!(SCALAR_CPU_STYLE, scalar)
+                Backends.launch_kernel!(KA_CPU_STYLE,
+                    Optics._second_order_response_kernel!, ka_position,
+                    ka_velocity, ka_output, ka_input, plan.coefficients;
+                    ndrange=length(ka_input))
+                @test ka_cpu_close(ka_output, scalar.output;
+                    atol=32eps(T), rtol=32eps(T))
+                @test ka_cpu_close(ka_position, scalar.state.position;
+                    atol=32eps(T), rtol=32eps(T))
+                @test ka_cpu_close(ka_velocity, scalar.state.velocity;
+                    atol=32eps(T), rtol=32eps(T))
+                @test ka_input == scalar.input == expected_input
+            end
+        end
+        mark_ka_cpu_kernel!(:_second_order_response_kernel!)
+    end
+
     @testset "Detector kernels" begin
         frame = reshape(collect(1.0:25.0), 5, 5)
         scratch = similar(frame)

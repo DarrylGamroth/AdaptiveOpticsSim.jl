@@ -1,6 +1,6 @@
 name = "AdaptiveOpticsSim"
 uuid = "002fb5eb-ad68-44a0-adbe-b299bfc2febc"
-version = "0.2.3"
+version = "0.3.0"
 authors = ["AdaptiveOpticsSim.jl Contributors"]
 
 [deps]
@@ -36,7 +36,7 @@ AdaptiveOpticsSimYAMLExt = "YAML"
 [compat]
 AMDGPU = "2.9.2"
 AbstractFFTs = "1.5"
-AdaptiveOpticsCalibration = "0.17"
+AdaptiveOpticsCalibration = "0.17.1"
 AppleAccelerate = "0.7"
 Aqua = "0.8"
 CUDA = "6.4.2"
@@ -51,7 +51,7 @@ LinearAlgebra = "1.9"
 Logging = "1.9"
 Metal = "1"
 Random = "1.9"
-SHA = "0.7"
+SHA = "0.7, 1"
 SparseArrays = "1.9"
 SpecialFunctions = "2.8"
 Statistics = "1.9"

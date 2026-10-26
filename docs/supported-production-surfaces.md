@@ -45,8 +45,7 @@ Warmed allocation claims apply only to the concrete paths with allocation tests.
 They are not a promise for arbitrary user callbacks or every optional library.
 
 The CPU qualification environment (`test/cpu`) and CPU benchmark environment
-(`benchmarks`) pin KernelAbstractions 0.10.1 and the compatible
-[AOC source revision](https://github.com/DarrylGamroth/AdaptiveOpticsCalibration.jl/commit/55392d16aff769d1678c2940e253f68a09846dd1).
+(`benchmarks`) pin KernelAbstractions 0.10.1 and registered AOC 0.17.1.
 KA CPU kernels and algorithm graphs are checked on Julia 1.13.2. This version
 selection also applies to ordinary CPU execution without changing its dispatch
 to KA kernels. KA CPU is a test fallback for exercising kernel implementations
@@ -78,21 +77,21 @@ The AMDGPU test and benchmark environments pin AMDGPU 2.9.2 and
 KernelAbstractions 0.10.1. This includes the upstream
 [Julia 1.13 precompilation fix](https://github.com/JuliaGPU/AMDGPU.jl/commit/d276a5cd42bf52a869f8f414873526ee3cc999bd)
 for checked integer division, transpose matrix-vector multiplication, and
-cropped array copies. These environments pin the compatible
-[AOC source revision](https://github.com/DarrylGamroth/AdaptiveOpticsCalibration.jl/commit/55392d16aff769d1678c2940e253f68a09846dd1);
-registered AOC 0.17 only permits KA 0.9.
+cropped array copies. These environments pin registered AOC 0.17.1, which
+supports both qualified KA versions.
 The separate CUDA test and benchmark environments pin CUDA 6.4.2 and
 KernelAbstractions 0.9.45 to retain the qualified allocation behavior. AOS allows
 both KA versions; each environment selects one version for its process.
 These exact constraints protect the selected backend versions. Full dependency
 reproduction also requires retaining the resolved manifest with validation or
 benchmark results. Dependency upgrades require renewed correctness and
-allocation checks. All backend test and benchmark projects pin this AOC
-revision. It keeps cold `KernelExecution` construction out of line to prevent
-partially initialized specification boxes on Julia 1.13.2
+allocation checks. All backend test and benchmark projects pin AOC
+0.17.1. This release keeps cold `KernelExecution` construction out of line to
+prevent partially initialized specification boxes on Julia 1.13.2
 ([Julia compiler defect](https://github.com/JuliaLang/julia/issues/62524)).
 This protects the validated preparation path; it does not repair the general
-Julia compiler defect. These validation claims require the pinned AOC revision.
+Julia compiler defect. These validation claims require AOC 0.17.1 or a
+separately qualified successor.
 
 CUDA.jl 6.4.2 or newer is required. CUDA is the primary GPU performance-optimization target. AMDGPU is the
 secondary portability and qualification target and remains the automated

@@ -21,7 +21,7 @@ change.
    run.
 
 Bootstrap General and the project registry before resolving any candidate
-environment. The project registry supplies AdaptiveOpticsCalibration 0.17:
+environment. The project registry supplies AdaptiveOpticsCalibration 0.17.1:
 
 ~~~bash
 julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git"))'

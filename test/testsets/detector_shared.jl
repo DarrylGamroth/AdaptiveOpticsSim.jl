@@ -325,7 +325,7 @@
                 sampling_mode=CorrelatedDoubleSampling()),
             readout_window=FrameWindow(2:3, 2:3))),
     )
-    for (label, builder) in prepared_readout_builders
+    @testset "$label" for (label, builder) in prepared_readout_builders
         prepared_detector = builder()
         prepared_plan = prepare_detector_acquisition(prepared_detector,
             prepared_readout_rate)
