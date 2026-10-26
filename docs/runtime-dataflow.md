@@ -506,9 +506,11 @@ composition; this selector does not implement those temporal models.
 
 The declarative subset does not expose every native Julia graph feature:
 
-- The current atmosphere factory renders an on-axis, infinite-distance source.
-  WFS source-separation settings do not select a different atmospheric line of
-  sight. Source-dependent atmosphere renderers exist in Julia composition.
+- The atmosphere factory renders one infinite-distance source. Its
+  `source_separation_arcsec` and `source_position_angle_deg` must describe the
+  same source as the WFS consuming that atmospheric OPD. They default to on axis.
+  Multiple directions sharing one evolving atmosphere and finite-height sources
+  still require explicit Julia composition.
 - InGaAs acquisition and calibrated pixel MTF have native graph constructors,
   but do not yet have built-in YAML factories. Their calibration bindings need
   an explicit declaration before these features can be selected from YAML.

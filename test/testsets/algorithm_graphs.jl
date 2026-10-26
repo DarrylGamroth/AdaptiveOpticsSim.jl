@@ -1423,6 +1423,67 @@ end
     )
 end
 
+@testset "atmosphere YAML follows the declared source direction" begin
+    config = Dict{String,Any}(
+        "resolution" => 16, "telescope_diameter_m" => 1.22,
+        "r0" => 0.15, "reference_wavelength_m" => 500e-9,
+        "fractional_cn2" => [0.5, 0.5], "wind_speed" => [5.0, 9.0],
+        "wind_direction_deg" => [0.0, 90.0], "altitude" => [0.0, 5000.0],
+        "layer_ids" => ["ground", "high"], "atmosphere_step" => 0.001,
+        "rng_seed" => 17, "atmosphere_opd_schema" => "test.atmosphere/1",
+    )
+    document = Dict("schema_version" => 1, "name" => "directional_atmosphere",
+        "nodes" => [Dict("name" => "atmosphere",
+            "type" => "multilayer_atmosphere_opd_f32", "config" => config)],
+        "outputs" => [Dict("name" => "opd", "source" => "atmosphere.atmosphere_opd")])
+    for angle in (0.0, 90.0)
+        config["source_separation_arcsec"] = 10.0
+        config["source_position_angle_deg"] = angle
+        graph = prepare_algorithm_graph(load_algorithm_graph(document))
+        owner = prepared_graph_node(graph, Val(:atmosphere))
+        source = Source(; separation_arcsec=10, position_angle_deg=angle, T=Float32)
+        renderer = prepare_atmosphere_renderer(owner.atmosphere, owner.telescope, source)
+        onaxis = prepare_atmosphere_renderer(owner.atmosphere, owner.telescope)
+        reference = PupilFunction(owner.telescope)
+        unshifted = PupilFunction(owner.telescope)
+        @test renderer.shift_x[1] == 0
+        @test renderer.shift_y[1] == 0
+        displacement = Float32(10 * pi / (180 * 3600) * 5000 / (1.22 / 16))
+        @test renderer.shift_x[2] ≈ displacement * cosd(Float32(angle)) atol=1e-6
+        @test renderer.shift_y[2] ≈ displacement * sind(Float32(angle)) atol=1e-6
+        first_frame = zeros(Float32, 16, 16)
+        for frame in 1:2
+            step_graph!(graph)
+            epoch = current_epoch(owner.atmosphere)
+            render_atmosphere!(reference, renderer, owner.atmosphere, epoch)
+            render_atmosphere!(unshifted, onaxis, owner.atmosphere, epoch)
+            @test graph_output(graph, Val(:opd)) == reference.opd
+            @test graph_output(graph, Val(:opd)) != unshifted.opd
+            frame == 1 && copyto!(first_frame, reference.opd)
+        end
+        @test warmed_graph_step_allocation_bytes(graph) == 0
+        reset_graph!(graph)
+        step_graph!(graph)
+        @test graph_output(graph, Val(:opd)) == first_frame
+    end
+    delete!(config, "source_separation_arcsec")
+    delete!(config, "source_position_angle_deg")
+    graph = prepare_algorithm_graph(load_algorithm_graph(document))
+    owner = prepared_graph_node(graph, Val(:atmosphere))
+    onaxis = prepare_atmosphere_renderer(owner.atmosphere, owner.telescope)
+    reference = PupilFunction(owner.telescope)
+    step_graph!(graph)
+    render_atmosphere!(reference, onaxis, owner.atmosphere, current_epoch(owner.atmosphere))
+    @test graph_output(graph, Val(:opd)) == reference.opd
+    for field in ("source_separation_arcsec", "source_position_angle_deg")
+        for invalid in (Inf, NaN, true, "invalid")
+            config[field] = invalid
+            @test_throws AlgorithmGraphError load_algorithm_graph(document)
+        end
+        delete!(config, field)
+    end
+end
+
 @testset "additive pupil-OPD composition graph node" begin
     uncompensated_opd = Float32[1 2; 3 4]
     surface_opd = Float32[-0.25 0.5; 0.75 -1]

@@ -191,9 +191,10 @@ end
 struct MultiLayerAtmosphereOPDNode{T<:AbstractFloat} end
 
 """Construction values for one finite multilayer atmosphere OPD node."""
-struct MultiLayerAtmosphereOPDNodeConfig{TD,AD,T<:AbstractFloat}
+struct MultiLayerAtmosphereOPDNodeConfig{TD,AD,S,T<:AbstractFloat}
     telescope::TD
     atmosphere::AD
+    source::S
     atmosphere_step::T
     rng_seed::UInt64
     atmosphere_opd_schema::String
@@ -217,6 +218,8 @@ function _multilayer_atmosphere_opd_config(
     atmosphere_step::Real,
     rng_seed::Integer,
     atmosphere_opd_schema::AbstractString,
+    source_separation_arcsec::Real,
+    source_position_angle_deg::Real,
 ) where {T<:AbstractFloat}
     atmosphere_step isa Bool && throw(AlgorithmGraphError(
         "atmosphere_step must be a real duration, not Bool",
@@ -238,7 +241,7 @@ function _multilayer_atmosphere_opd_config(
         "multilayer atmosphere OPD schema must not be empty",
     ))
 
-    telescope, atmosphere = try
+    telescope, atmosphere, source = try
         telescope = TelescopeDefinition(
             resolution=resolution,
             diameter=telescope_diameter_m,
@@ -258,7 +261,11 @@ function _multilayer_atmosphere_opd_config(
             layer_ids=layer_ids,
             T=T,
         )
-        (telescope, atmosphere)
+        # Only angular geometry is consumed by the atmosphere renderer. Optical
+        # radiometry and sensing wavelength remain with their own graph nodes.
+        source = Source(; separation_arcsec=source_separation_arcsec,
+            position_angle_deg=source_position_angle_deg, T=T)
+        (telescope, atmosphere, source)
     catch error
         error isa AdaptiveOpticsSimError || rethrow()
         throw(AlgorithmGraphError(sprint(showerror, error)))
@@ -266,6 +273,7 @@ function _multilayer_atmosphere_opd_config(
     return MultiLayerAtmosphereOPDNodeConfig(
         telescope,
         atmosphere,
+        source,
         step,
         UInt64(rng_seed),
         String(atmosphere_opd_schema),
@@ -279,9 +287,11 @@ end
         rng_seed, atmosphere_opd_schema, ...)
 
 Declare one finite moving-screen multilayer-atmosphere operation. Preparation
-creates the stochastic phase screens and one on-axis infinite-source direction
-renderer on the graph's exact compute device. Each invocation advances the
-single atmosphere writer by `atmosphere_step` seconds and publishes one
+creates the stochastic phase screens and one infinite-source direction renderer
+on the graph's exact compute device. `source_separation_arcsec` and
+`source_position_angle_deg` select the atmospheric line of sight, using the same
+polar convention as the optical source (default: on axis). Each invocation
+advances the single atmosphere writer by `atmosphere_step` seconds and publishes one
 complete pupil-plane atmospheric OPD map in metres.
 
 The node owns its evolving atmosphere and RNG state. It does not infer cadence
@@ -306,6 +316,8 @@ function multilayer_atmosphere_opd_node(
     central_obstruction_ratio::Real=0,
     pupil_reflectivity::Real=1,
     aperture_revision::Integer=0,
+    source_separation_arcsec::Real=0,
+    source_position_angle_deg::Real=0,
     T::Type{<:AbstractFloat}=Float32,
 )
     config = _multilayer_atmosphere_opd_config(
@@ -326,6 +338,8 @@ function multilayer_atmosphere_opd_node(
         atmosphere_step,
         rng_seed,
         atmosphere_opd_schema,
+        source_separation_arcsec,
+        source_position_angle_deg,
     )
     return algorithm_node(
         name,
@@ -391,7 +405,7 @@ function prepare_graph_node(
         telescope,
         target,
     )
-    renderer = prepare_atmosphere_renderer(atmosphere, telescope)
+    renderer = prepare_atmosphere_renderer(atmosphere, telescope, config.source)
     pupil = PupilFunction(telescope, outputs.atmosphere_opd)
     rng = _prepare_graph_rng(target, config.rng_seed)
     advance_by!(atmosphere, zero(T), rng)

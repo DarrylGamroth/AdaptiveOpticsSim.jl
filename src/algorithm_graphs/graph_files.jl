@@ -338,6 +338,8 @@ function _multilayer_atmosphere_opd_f32_node(
         :reference_wavelength_m,
         :resolution,
         :rng_seed,
+        :source_separation_arcsec,
+        :source_position_angle_deg,
         :telescope_diameter_m,
         :wind_direction_deg,
         :wind_speed,
@@ -390,6 +392,10 @@ function _multilayer_atmosphere_opd_f32_node(
             "$context.reference_wavelength_m",
         ),
         L0,
+        source_separation_arcsec=hasproperty(config, :source_separation_arcsec) ?
+            _file_real(config.source_separation_arcsec, "$context.source_separation_arcsec") : 0.0,
+        source_position_angle_deg=hasproperty(config, :source_position_angle_deg) ?
+            _file_real(config.source_position_angle_deg, "$context.source_position_angle_deg") : 0.0,
         fractional_cn2=_file_real_tuple(
             config.fractional_cn2,
             "$context.fractional_cn2",
