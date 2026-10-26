@@ -22,13 +22,11 @@ import ..AdaptiveOpticsSim:
     DimensionMismatchError,
     InvalidConfiguration,
     UnsupportedAlgorithm,
-    Workspace,
     bin2d!,
     bin2d_kernel!,
     bin2d_abs2!,
     bin2d_abs2_kernel!,
     center_resize2d!,
-    ensure_psf_buffers!,
     fftshift2d!,
     runtime_rng
 

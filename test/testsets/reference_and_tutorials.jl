@@ -1,34 +1,4 @@
-@testset "Telemetry and config" begin
-    telemetry = AdaptiveOpticsSim.Telemetry()
-    AdaptiveOpticsSim.record!(telemetry, 1, 0.0; wfe_rms=1.0, strehl=0.5, loop_gain=0.2)
-    @test length(telemetry) == 1
-    row = telemetry[1]
-    @test row.iter == 1
-    @test row.strehl ≈ 0.5
-
-    @test Tables.istable(AdaptiveOpticsSim.Telemetry)
-    @test Tables.rowaccess(AdaptiveOpticsSim.Telemetry)
-    rows = collect(Tables.rows(telemetry))
-    @test length(rows) == 1
-    @test rows[1].loop_gain ≈ 0.2
-
-    closed_loop = AdaptiveOpticsSim.ClosedLoopTrace(Float32[
-        100 80 0.50 3 4
-        120 90 0.45 5 6
-    ]; dt=0.002f0, t0=0.1f0)
-    @test length(closed_loop) == 2
-    @test eltype(typeof(closed_loop)) == AdaptiveOpticsSim.ClosedLoopTraceRow{Float32}
-    @test closed_loop[2].iter == 2
-    @test closed_loop[2].t ≈ 0.102f0
-    @test closed_loop[2].residual_rms_nm ≈ 90.0f0
-    @test Tables.istable(typeof(closed_loop))
-    @test Tables.rowaccess(typeof(closed_loop))
-    closed_rows = collect(Tables.rows(closed_loop))
-    @test length(closed_rows) == 2
-    @test closed_rows[1].command_norm ≈ 4.0f0
-
-    @test_throws DimensionMismatchError AdaptiveOpticsSim.ClosedLoopTrace(zeros(2, 4))
-
+@testset "Config" begin
     tel = Telescope(resolution=8, diameter=8.0, central_obstruction=0.0)
     src = Source(band=:I, magnitude=0.0)
     cfg = mktempdir() do root

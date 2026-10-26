@@ -326,7 +326,6 @@ function focal_field_from_opd!(dest::AbstractMatrix{Complex{T}},
     n_pad = lift_pad_size(n, model.zero_padding)
     image_size = model.focal_resolution * oversampling
     ws = workspace.propagation
-    ensure_psf_buffers!(ws, n_pad)
     if size(dest) != (image_size, image_size)
         throw(DimensionMismatchError("LiFT focal field buffer size must match oversampled image size"))
     end

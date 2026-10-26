@@ -926,16 +926,6 @@ end
     @test default_subharmonic_mode(ScientificProfile()) isa FidelitySubharmonics
     @test default_subharmonic_mode(FastProfile()) isa FastSubharmonics
 
-    mixed = ProfileBundle(ScientificProfile(); lift=FastProfile(), tomography=FastProfile())
-    @test atmosphere_profile(mixed) isa ScientificProfile
-    @test calibration_profile(mixed) isa ScientificProfile
-    @test detector_profile(mixed) isa ScientificProfile
-    @test lift_profile(mixed) isa FastProfile
-    @test tomography_profile(mixed) isa FastProfile
-    @test default_subharmonic_mode(mixed) isa FidelitySubharmonics
-    fast_cal = ProfileBundle(ScientificProfile(); calibration=FastProfile())
-    @test calibration_profile(fast_cal) isa FastProfile
-
     tel = Telescope(resolution=16, diameter=8.0, central_obstruction=0.0)
     atm = KolmogorovAtmosphere(tel;
         r0=0.15,

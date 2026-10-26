@@ -15,7 +15,6 @@ using LinearAlgebra
 using Random
 using SpecialFunctions
 using Statistics
-using Tables
 using TOML
 
 BLAS.set_num_threads(1)

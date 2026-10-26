@@ -24,7 +24,6 @@ import ..AdaptiveOpticsSim:
     UnsupportedAlgorithm,
     _fixed_size_union_vector,
     _scaled_kv56_scalar,
-    atmosphere_profile,
     default_fidelity_profile,
     fftfreq!,
     runtime_rng

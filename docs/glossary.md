@@ -276,6 +276,7 @@ forced into an area-frame API.
 | Plan | A run-immutable numerical or physical execution contract. Persistent scientific state, replaceable scratch, products, and exact external bindings are not plan data. |
 | State | Mutable values that affect later scientific results, such as atmosphere evolution, controller history, detector persistence, delayed graph values, or RNG state. State has one execution writer. |
 | Workspace | Replaceable mutable scratch and execution resources. Recreating a workspace must not change the intended scientific trajectory. |
+| LiFT propagation workspace | Fixed-grid pupil-field and FFT buffers with their FFT plan, owned by the prepared LiFT forward workspace. It contains no RNG or scientific state. |
 | Product | A caller-visible scientific result such as a pupil function, intensity map, WFS observation, WFS measurement, detector frame, or named graph output. Products are not scratch. |
 | Prepared execution owner | The concrete owner that binds one plan, state, workspace, products, exact arrays, backend/device/context, and single-writer execution contract. |
 | Algorithm graph | A finite static composition of prepared AOS-native nodes connected by validated named ports. Version 1 is single-rate and publishes complete frames. Built-in AOS plant graphs stop at detector frames; estimator and RTC composition belong to FilterGraphAlgorithms or another external RTC owner. |

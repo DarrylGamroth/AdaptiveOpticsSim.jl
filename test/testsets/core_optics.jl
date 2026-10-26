@@ -444,6 +444,14 @@ end
     @test !Base.isexported(AdaptiveOpticsSim, :MetalBackendTag)
     @test !Base.isexported(AdaptiveOpticsSim, :AMDGPUBackendTag)
     for removed_name in (
+        :ProfileBundle,
+        :Workspace,
+        :ensure_psf_buffers!,
+        :Telemetry,
+        :TelemetryRow,
+        :ClosedLoopTrace,
+        :ClosedLoopTraceRow,
+        :write_telemetry_csv,
         :Ensembles,
         :AbstractExecutionPolicy,
         :SequentialExecution,

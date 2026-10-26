@@ -150,7 +150,22 @@ struct LiFTForwardPlan{T<:AbstractFloat,
     observation_contract::C
 end
 
-struct LiFTForwardWorkspace{W<:Workspace,B<:AbstractMatrix,
+"""FFT buffers and plan for one prepared LiFT propagation grid."""
+mutable struct LiFTPropagationWorkspace{A<:AbstractMatrix,P}
+    pupil_field::A
+    fft_buffer::A
+    fft_plan::P
+end
+
+function LiFTPropagationWorkspace(template::AbstractMatrix{T},
+    resolution::Int) where {T<:AbstractFloat}
+    pupil_field = similar(template, Complex{T}, resolution, resolution)
+    fft_buffer = similar(pupil_field)
+    fft_plan = plan_fft_backend!(fft_buffer)
+    return LiFTPropagationWorkspace(pupil_field, fft_buffer, fft_plan)
+end
+
+struct LiFTForwardWorkspace{W<:LiFTPropagationWorkspace,B<:AbstractMatrix,
     C<:AbstractMatrix,RB,SB,OB,CB}
     propagation::W
     optical_rate_buffer::B
@@ -329,8 +344,8 @@ function _allocate_lift_forward_workspace(template::AbstractMatrix{T},
     pupil_resolution::Int, focal_resolution::Int, zero_padding::Int,
     object_kernel, mapping::AbstractLiFTObservationMapping) where {T<:AbstractFloat}
     oversampling = lift_oversampling(zero_padding)
-    propagation = Workspace(template,
-        lift_pad_size(pupil_resolution, zero_padding); T=T)
+    propagation = LiFTPropagationWorkspace(template,
+        lift_pad_size(pupil_resolution, zero_padding))
     optical_rate = similar(template, T, focal_resolution, focal_resolution)
     pupil_amplitude = similar(template, T, pupil_resolution, pupil_resolution)
     focal_size = focal_resolution * oversampling
@@ -397,8 +412,7 @@ end
     workspace::LiFTForwardWorkspace,
 )
     propagation = workspace.propagation
-    return (propagation.pupil_field, propagation.fft_buffer,
-        propagation.psf_buffer)
+    return (propagation.pupil_field, propagation.fft_buffer)
 end
 
 @inline function _lift_forward_workspace_arrays(workspace::LiFTForwardWorkspace)
@@ -503,8 +517,6 @@ function _require_lift_forward_workspace(plan::LiFTForwardPlan,
         padded_dimensions, plan, "LiFT propagation pupil-field workspace")
     _require_lift_workspace_array(propagation.fft_buffer, Complex{T},
         padded_dimensions, plan, "LiFT propagation FFT workspace")
-    _require_lift_workspace_array(propagation.psf_buffer, T,
-        padded_dimensions, plan, "LiFT propagation intensity workspace")
     _require_lift_workspace_array(workspace.optical_rate_buffer, T,
         focal_dimensions, plan, "LiFT optical-rate workspace")
     _require_lift_workspace_array(workspace.amplitude_buffer, T,
