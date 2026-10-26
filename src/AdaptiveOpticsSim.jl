@@ -39,7 +39,6 @@ include("core/kv56.jl")
 include("core/workspace.jl")
 include("core/telemetry.jl")
 
-include("ensembles/ensembles.jl")
 include("atmosphere/atmospheres.jl")
 include("detectors/detectors.jl")
 include("wfs/wavefront_sensors.jl")

@@ -15,7 +15,6 @@ on:
           - windows-selector
           - linux-aarch64
           - grouped-cpu
-          - scheduler
           - appleaccelerate
           - metal
       selectors:
@@ -149,24 +148,6 @@ jobs:
         run: julia --project=. --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
       - name: Run grouped CPU tests
         run: julia --threads=4 --project=. --startup-file=no -e 'using Pkg; Pkg.test(test_args=["gate6"])'
-
-  scheduler:
-    name: Optional CPU scheduler extensions
-    if: inputs.gate == 'scheduler'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      JULIA_NUM_THREADS: "4"
-    steps:
-      - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v3
-        with:
-          version: "1.13"
-      - uses: julia-actions/cache@v3
-      - name: Instantiate scheduler environment
-        run: julia --project=test/schedulers --startup-file=no -e 'using Pkg; Pkg.Registry.add("General"); Pkg.Registry.add(Pkg.RegistrySpec(url="https://github.com/DarrylGamroth/PackageRegistry.git")); Pkg.instantiate()'
-      - name: Run scheduler extension tests
-        run: julia --threads=4 --project=test/schedulers --startup-file=no test/schedulers/runtests.jl
 
   appleaccelerate:
     name: Apple Silicon / AppleAccelerate

@@ -26,7 +26,7 @@ using AdaptiveOpticsSim
 The root exports:
 
 - canonical modules: `Backends`, `Optics`, `Atmospheres`, `Detectors`,
-  `WavefrontSensors`, `Calibration`, `Tomography`, `Ensembles`, and
+  `WavefrontSensors`, `Calibration`, `Tomography`, and
   `AlgorithmGraphs`
 - shared structured errors
 - `ScientificProfile`, `FastProfile`, and `default_fidelity_profile`
@@ -266,19 +266,6 @@ CPU fitting pseudoinverse also uses AdaptiveOpticsCalibration's compact-SVD
 inverse; AOS retains the physical `TomographyFitting` adapter and its legacy
 threshold convention. The GPU covariance build path retains its existing solve
 pending separate accelerator qualification.
-
-## Ensembles
-
-~~~julia
-using AdaptiveOpticsSim.Ensembles
-~~~
-
-`SimulationEnsemble` applies an explicit coarse-grained execution policy to
-independent model members. Policies include sequential, deterministic, threaded,
-backend-stream, AcceleratedKernels, and Dagger execution. This facility is for
-offline/coarse parallelism, not RTC deadline scheduling.
-Use `run_ensemble!` to execute and `ensemble_members` to inspect the retained
-members; scheduler hooks remain qualified-public extension seams.
 
 ## Algorithm Graphs
 

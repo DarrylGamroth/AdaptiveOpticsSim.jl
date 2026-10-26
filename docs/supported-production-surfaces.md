@@ -29,7 +29,6 @@ The Julia 1.12 CPU baseline includes:
   caller-owned typed `WFSMeasurement` and an explicitly composed measurement
   callback; maintained RTC reconstruction and controller execution is in
   FilterGraphAlgorithms/JuliaFilterGraph
-- deterministic and ordinary coarse-grained ensemble execution
 - static `AlgorithmGraphs` definitions in Julia and YAML
 - direct and explicit one-frame delayed graph links
 - exact model-time values and deterministic drivers

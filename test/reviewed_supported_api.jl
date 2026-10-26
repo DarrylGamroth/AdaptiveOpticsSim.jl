@@ -8,7 +8,7 @@ const REVIEWED_SUPPORTED_API = (
         exported_routine =
         (
             :AdaptiveOpticsSimError, :AlgorithmGraphs, :Atmospheres, :Backends, :Calibration,
-            :Detectors, :DimensionMismatchError, :Ensembles, :FastProfile, :FidelityProfile,
+            :Detectors, :DimensionMismatchError, :FastProfile, :FidelityProfile,
             :InvalidConfiguration, :NumericalConditionError, :Optics, :ScientificProfile,
             :SplitMix64RNG, :Tomography, :UnsupportedAlgorithm, :WavefrontSensors,
             :default_fidelity_profile, :deterministic_reference_rng, :runtime_rng,
@@ -289,24 +289,6 @@ const REVIEWED_SUPPORTED_API = (
         (),
         public_extension =
         (),
-    ),
-    Ensembles = (
-        exported_routine =
-        (
-            :AbstractExecutionPolicy, :AcceleratedKernelsExecution, :BackendStreamExecution,
-            :DaggerExecution, :DeterministicExecution, :SequentialExecution,
-            :SimulationEnsemble, :ThreadedExecution, :ensemble_members, :execution_policy,
-            :run_ensemble!,
-        ),
-        exported_integration =
-        (),
-        public_advanced =
-        (),
-        public_extension =
-        (
-            :ensemble_ownership_roots, :execute_ensemble!, :init_ensemble_scheduler,
-            :init_execution_state,
-        ),
     ),
     AlgorithmGraphs = (
         exported_routine =

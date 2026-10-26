@@ -16,13 +16,12 @@ mutable struct ValidationPlan
     accelerator_scope::AcceleratorScope
     run_aarch64::Bool
     run_grouped_cpu::Bool
-    run_scheduler::Bool
     manual_gates::Set{String}
 end
 
 ValidationPlan() = ValidationPlan(
     Set{String}(), false, false, false, NoAccelerator,
-    false, false, false, Set{String}())
+    false, false, Set{String}())
 
 const CLOSURE_SELECTORS = Tuple(first.(TEST_CI_SHARD_SPECS))
 const REGISTERED_SELECTORS = Set((test_suite_names()..., test_group_names()...))
@@ -127,7 +126,6 @@ function all_validation!(plan::ValidationPlan)
     request_accelerators!(plan, FullAccelerator)
     plan.run_aarch64 = true
     plan.run_grouped_cpu = true
-    plan.run_scheduler = true
     union!(plan.manual_gates, (
         "macos-selector", "windows-selector", "appleaccelerate",
         "metal", "coverage"))
@@ -189,10 +187,6 @@ function add_source_impacts!(plan::ValidationPlan, path::String)
         add_selectors!(plan, ("calibration",))
     elseif startswith(path, "src/tomography/")
         add_selectors!(plan, ("tomography",))
-    elseif startswith(path, "src/ensembles/")
-        add_selectors!(plan, ("ci-foundations",))
-        plan.run_grouped_cpu = true
-        plan.run_scheduler = true
     elseif startswith(path, "src/algorithm_graphs/")
         add_selectors!(plan, ("algorithm-graphs",))
     else
@@ -212,9 +206,6 @@ function add_extension_impacts!(plan::ValidationPlan, path::String)
         push!(plan.manual_gates, "appleaccelerate")
     elseif occursin("Metal", path)
         push!(plan.manual_gates, "metal")
-    elseif occursin("AcceleratedKernels", path) || occursin("Dagger", path)
-        plan.run_grouped_cpu = true
-        plan.run_scheduler = true
     end
     return true
 end
@@ -234,8 +225,6 @@ function add_test_impacts!(plan::ValidationPlan, path::String)
         push!(plan.manual_gates, "appleaccelerate")
     elseif startswith(path, "test/metal/")
         push!(plan.manual_gates, "metal")
-    elseif startswith(path, "test/schedulers/")
-        plan.run_scheduler = true
     else
         all_validation!(plan)
     end
@@ -293,8 +282,6 @@ function local_commands(plan::ValidationPlan)
         "julia --project=. --startup-file=no test/ci/run_selected_tests.jl $selectors")
     plan.run_grouped_cpu && push!(commands, "local grouped CPU" =>
         "julia --threads=4 --project=. --startup-file=no test/ci/run_selected_tests.jl backends")
-    plan.run_scheduler && push!(commands, "local scheduler extensions" =>
-        "julia --threads=4 --project=test/schedulers --startup-file=no test/schedulers/runtests.jl")
     accelerator_target = plan.accelerator_scope == DetectorAccelerator ?
         "runtests_amdgpu_detectors.jl" : "runtests_amdgpu.jl"
     plan.run_amdgpu && push!(commands, "local AMDGPU" =>
@@ -412,7 +399,7 @@ function validate_impact_policy(repository_root::AbstractString=pwd())
             plan = plan_validation((path,))
             (plan.run_cpu || plan.run_cuda || plan.run_amdgpu ||
                 plan.run_aarch64 || plan.run_grouped_cpu ||
-                plan.run_scheduler || !isempty(plan.manual_gates)) || error(
+                !isempty(plan.manual_gates)) || error(
                     "behavior-bearing path '$path' selects no validation target")
         end
     end

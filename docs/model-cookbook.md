@@ -358,11 +358,10 @@ occur.
 Use:
 
 - subsystem functions for optical, detector, calibration, or controller studies
-- an explicit Julia loop for generated, multi-rate, conditional, or sub-frame
-  models
+- an explicit Julia loop for independent sweeps or generated, multi-rate,
+  conditional, or sub-frame models
 - `AlgorithmGraphs` for a static single-rate complete-frame graph
 - `PreparedGraphHILBoundary` for external-RTC frame/command lockstep
-- `SimulationEnsemble` for coarse independent sweeps
 
 See [`runtime-dataflow.md`](runtime-dataflow.md) for graph ownership and
 execution order.

@@ -43,7 +43,6 @@ vocabulary plus the modules themselves:
 | `WavefrontSensors` | composed WFS optics, observations, Bi-O-edge, Zernike, and Curvature plant optics/acquisition, and LiFT physical prediction with analytic Jacobian callback |
 | `Calibration` | simulated response acquisition, physical calibration observables, bases, fitting and identification; reusable inverse methods and products come from AdaptiveOpticsCalibration |
 | `Tomography` | guide-star geometry, atmospheric reconstruction, fitting, DM projection |
-| `Ensembles` | coarse independent runs and optional offline scheduling |
 | `AlgorithmGraphs` | static complete-frame graph composition and lockstep HIL exchange |
 
 Dense domain APIs belong to their owner module. Root exports are deliberately

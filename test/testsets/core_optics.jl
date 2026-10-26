@@ -440,7 +440,11 @@ end
         @test Base.ispublic(Tomography, name)
         @test parentmodule(getfield(Tomography, name)) === Tomography
     end
-    for name in (
+    @test !Base.isexported(AdaptiveOpticsSim, :CUDABackendTag)
+    @test !Base.isexported(AdaptiveOpticsSim, :MetalBackendTag)
+    @test !Base.isexported(AdaptiveOpticsSim, :AMDGPUBackendTag)
+    for removed_name in (
+        :Ensembles,
         :AbstractExecutionPolicy,
         :SequentialExecution,
         :ThreadedExecution,
@@ -449,43 +453,13 @@ end
         :AcceleratedKernelsExecution,
         :DaggerExecution,
         :SimulationEnsemble,
-    )
-        @test !Base.isexported(AdaptiveOpticsSim, name)
-        @test !Base.ispublic(AdaptiveOpticsSim, name)
-        @test !isdefined(AdaptiveOpticsSim, name)
-        @test Base.isexported(Ensembles, name)
-        @test Base.ispublic(Ensembles, name)
-        @test parentmodule(getfield(Ensembles, name)) === Ensembles
-    end
-    for name in (
         :run_ensemble!,
         :ensemble_members,
         :execution_policy,
-    )
-        @test !Base.isexported(AdaptiveOpticsSim, name)
-        @test !Base.ispublic(AdaptiveOpticsSim, name)
-        @test !isdefined(AdaptiveOpticsSim, name)
-        @test Base.isexported(Ensembles, name)
-        @test Base.ispublic(Ensembles, name)
-        @test parentmodule(getfield(Ensembles, name)) === Ensembles
-    end
-    for name in (
         :ensemble_ownership_roots,
         :init_ensemble_scheduler,
         :execute_ensemble!,
         :init_execution_state,
-    )
-        @test !Base.isexported(AdaptiveOpticsSim, name)
-        @test !Base.ispublic(AdaptiveOpticsSim, name)
-        @test !isdefined(AdaptiveOpticsSim, name)
-        @test !Base.isexported(Ensembles, name)
-        @test Base.ispublic(Ensembles, name)
-        @test parentmodule(getfield(Ensembles, name)) === Ensembles
-    end
-    @test !Base.isexported(AdaptiveOpticsSim, :CUDABackendTag)
-    @test !Base.isexported(AdaptiveOpticsSim, :MetalBackendTag)
-    @test !Base.isexported(AdaptiveOpticsSim, :AMDGPUBackendTag)
-    for removed_name in (
         :Control,
         :RuntimeCommandLayout,
         :RuntimeCommandSegment,

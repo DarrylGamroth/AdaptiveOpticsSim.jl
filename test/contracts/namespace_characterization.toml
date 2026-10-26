@@ -7,7 +7,7 @@ source_revision = "64b7371c6bd35ddd34777baa7d273f1581202990"
 numerical = "reference cases retain their exact fixture, tolerance, and RNG policy across namespace-only moves"
 allocation = "the listed benchmark contracts retain their explicit warmed allocation budgets; coverage runs remain exempt only where the existing test policy says so"
 timing = "package load, first call, and warmed call use fresh processes; established service-time contracts retain their declared timer and boundary"
-extensions = "representative CPU, AMDGPU, CUDA, AppleAccelerate, AcceleratedKernels, and Dagger evidence remains discoverable"
+extensions = "representative CPU, AMDGPU, CUDA, and AppleAccelerate evidence remains discoverable"
 
 [[numerical_fixtures]]
 id = "oopao"
@@ -140,12 +140,6 @@ integration = "AppleAccelerate"
 kind = "test"
 path = "test/appleaccelerate/backend_neutral.jl"
 sha256 = "223dd95e5c80300d8b02a3c4f56c2e62651775f3e7c47d68955361bee42d6df7"
-
-[[extension_baselines]]
-integration = "AcceleratedKernels + Dagger"
-kind = "test"
-path = "test/schedulers/runtests.jl"
-sha256 = "593aad14578ba222c385b5e8800168dac30f7cc484873a705b018088213be608"
 
 [[extension_baselines]]
 integration = "CPU"

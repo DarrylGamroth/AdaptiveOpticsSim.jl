@@ -90,9 +90,6 @@ stable owner identity and explicit frame or event sequence.
 - Use fixed seeds and record them with the run.
 - Keep Julia, BLAS, and FFT-provider thread counts at one when strict replay
   matters.
-- Import `AdaptiveOpticsSim.Ensembles` and use `DeterministicExecution()` for
-  an ensemble. It rejects a multi-threaded Julia process and configures BLAS and
-  the FFT provider for one thread.
 - Disable detector noise for deterministic optical baselines unless noise is
   the subject of the test.
 - Record configuration, graph file, command inputs, package revision, Julia

@@ -10,7 +10,6 @@ using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Calibration
 using AdaptiveOpticsSim.Tomography
-using AdaptiveOpticsSim.Ensembles
 using AdaptiveOpticsSim.AlgorithmGraphs
 using FixedSizeArrays: FixedSizeVector
 using LinearAlgebra
@@ -61,11 +60,6 @@ include(normpath(joinpath(@__DIR__, "..", "scripts", "gpu_builder_contract.jl"))
 
 BLAS.set_num_threads(1)
 Backends.set_fft_provider_threads!(1)
-
-backend_target_branch_mode(::Type{Backends.CUDABackendTag}) =
-    BackendStreamExecution()
-backend_target_branch_mode(::Type{Backends.AMDGPUBackendTag}) =
-    SequentialExecution()
 
 graph_rng_device_resident(::Type{Backends.CUDABackendTag}) = true
 graph_rng_device_resident(::Type{Backends.AMDGPUBackendTag}) = true

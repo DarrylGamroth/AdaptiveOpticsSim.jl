@@ -73,7 +73,6 @@ include(joinpath(@__DIR__, "impact_planner.jl"))
     @test Set(CLOSURE_SELECTORS) == project.selectors
     @test project.run_aarch64
     @test project.run_grouped_cpu
-    @test project.run_scheduler
     @test project.accelerator_scope == FullAccelerator
     @test project.manual_gates == Set((
         "macos-selector", "windows-selector", "appleaccelerate",

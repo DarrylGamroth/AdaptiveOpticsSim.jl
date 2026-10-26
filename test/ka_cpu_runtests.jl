@@ -7,7 +7,6 @@ using AdaptiveOpticsSim.Detectors
 using AdaptiveOpticsSim.Atmospheres
 using AdaptiveOpticsSim.WavefrontSensors
 using AdaptiveOpticsSim.Tomography
-using AdaptiveOpticsSim.Ensembles
 using FFTW
 using LinearAlgebra
 using Random
@@ -73,14 +72,6 @@ for name in names(Tomography; all=true)
     if Base.isidentifier(s) && !startswith(s, "#") &&
             !isdefined(@__MODULE__, name)
         @eval const $(name) = getfield(Tomography, $(QuoteNode(name)))
-    end
-end
-
-for name in names(Ensembles; all=true)
-    s = String(name)
-    if Base.isidentifier(s) && !startswith(s, "#") &&
-            !isdefined(@__MODULE__, name)
-        @eval const $(name) = getfield(Ensembles, $(QuoteNode(name)))
     end
 end
 
