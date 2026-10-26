@@ -59,6 +59,23 @@ support status is governed by their own tests and documented assumptions.
 
 ## Accelerator Surfaces
 
+The AMDGPU test and benchmark environments pin AMDGPU 2.9.2 and
+KernelAbstractions 0.10.1. This includes the upstream
+[Julia 1.13 precompilation fix](https://github.com/JuliaGPU/AMDGPU.jl/commit/d276a5cd42bf52a869f8f414873526ee3cc999bd)
+for checked integer division, transpose matrix-vector multiplication, and
+cropped array copies. These environments pin the compatible
+[AOC source revision](https://github.com/DarrylGamroth/AdaptiveOpticsCalibration.jl/commit/1559aa60c61c6131be3368f19ffc1ec89c41e0a8);
+registered AOC 0.17 only permits KA 0.9.
+The separate CUDA test and benchmark environments pin CUDA 6.4.2 and
+KernelAbstractions 0.9.45 to retain the qualified allocation behavior. AOS allows
+both KA versions; each environment selects one version for its process.
+These exact constraints protect the selected backend versions. Full dependency
+reproduction also requires retaining the resolved manifest with validation or
+benchmark results. Dependency upgrades require renewed correctness and
+allocation checks. The full AMDGPU gate on Julia 1.13.2 remains blocked by a
+host GC crash; passing the compiler regressions does not establish full
+backend qualification.
+
 CUDA.jl 6.4.2 or newer is required. CUDA is the primary GPU performance-optimization target. AMDGPU is the
 secondary portability and qualification target and remains the automated
 release-gated accelerator because the maintained local ROCm target is

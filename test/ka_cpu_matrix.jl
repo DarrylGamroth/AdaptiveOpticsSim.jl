@@ -347,7 +347,7 @@ end
         mark_ka_cpu_kernel!(:spider_mask_kernel!)
         @test ka_spiders == scalar_spiders
 
-        scalar_roi = falses(8, 8)
+        scalar_roi = fill(false, 8, 8)
         ka_roi = similar(scalar_roi)
         roi = AdaptiveOpticsSim.Optics.RectangularROI(2:6, 3:7)
         AdaptiveOpticsSim.Optics._build_rectangular_roi!(SCALAR_CPU_STYLE, scalar_roi, roi, true, false)
@@ -357,7 +357,7 @@ end
     end
 
     @testset "Wavefront support kernels" begin
-        pupil = trues(8, 8)
+        pupil = fill(true, 8, 8)
         pupil[1:2, :] .= false
         threshold = 0.4
         scalar_valid = Matrix{Bool}(undef, 2, 2)
@@ -377,11 +377,11 @@ end
         AdaptiveOpticsSim.WavefrontSensors._geometric_slopes!(
             KA_CPU_STYLE, ka_slopes, opd, ka_valid, 4, 2, 4)
         mark_ka_cpu_kernel!(:cooperative_geometric_slopes_kernel!)
-        test_geometric_slopes_numerics(identity, KA_CPU_STYLE)
+        test_geometric_slopes_numerics(Array, KA_CPU_STYLE)
         mark_ka_cpu_kernel!(:geometric_slopes_kernel!)
         @test ka_slopes == scalar_slopes
 
-        edge_mask = falses(8, 8)
+        edge_mask = fill(false, 8, 8)
         edge_mask[:, 1] .= true
         edge_mask[:, end] .= true
         edge_mask[1, :] .= true
@@ -505,7 +505,7 @@ end
         oy = 1
         n_spots = n_sub * n_sub
         valid_mask = Bool[1 0; 1 1]
-        pupil = trues(n, n)
+        pupil = fill(true, n, n)
         opd = zeros(Float64, n, n)
         phasor = ones(ComplexF64, pad, pad)
         # The retained intensity and sampling stages consume a lenslet FFT
@@ -628,7 +628,7 @@ end
         batch_shift_x = [0.25 -0.5; 0.125 0.75]
         batch_shift_y = [-0.5 0.375; 0.25 -0.125]
         batch_scale = [1.0 0.8; 0.9 1.0]
-        batch_pupil = trues(4, 4)
+        batch_pupil = fill(true, 4, 4)
         batch_pupil[1, 1] = false
         batch_pupil[4, 3] = false
         batch_output = fill(-99.0, 4, 4, 2)
@@ -842,7 +842,7 @@ end
         mark_ka_cpu_kernel!(:fresnel_transfer_kernel!)
         @test ka_cpu_close(ka_transfer, scalar_transfer)
 
-        pupil = trues(4, 4)
+        pupil = fill(true, 4, 4)
         pupil[1, 2] = false
         basis = reshape(collect(range(0.0, 1.0; length=32)), 4, 4, 2)
         coeffs = [0.25, -0.5]
@@ -859,7 +859,7 @@ end
             KA_CPU_STYLE, ka_opd, basis, coeffs, pupil)
         Backends.synchronize_backend!(KA_CPU_STYLE)
         @test ka_cpu_close(ka_opd, scalar_opd)
-        @test AlgorithmGraphs._modal_opd_expansion_capture_capability(KA_CPU_STYLE) isa
+        @test AlgorithmGraphs._modal_opd_expansion_capture_capability(compute_device(ka_opd)) isa
             AlgorithmGraphs.GraphNodeCaptureUnsupported
         cancelling_basis = ones(Float64, 4, 4, 2)
         for coefficients in ([1.0, -1.0], [NaN, 0.0], [Inf, 0.0])

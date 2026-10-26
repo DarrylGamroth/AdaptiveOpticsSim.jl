@@ -156,13 +156,13 @@ end
     return nothing
 end
 
-@inline _modal_opd_expansion_capture_capability(style) = GraphNodeCaptureUnsupported()
+@inline _modal_opd_expansion_capture_capability(::AbstractComputeDevice) = GraphNodeCaptureUnsupported()
 @inline _modal_opd_expansion_capture_capability(
-    ::AcceleratorStyle{<:KernelAbstractions.GPU},
+    ::AcceleratorComputeDevice,
 ) = GraphNodeCaptureSafe()
 
 @inline graph_node_capture_capability(owner::_ModalOPDExpansionOwner) =
-    _modal_opd_expansion_capture_capability(execution_style(owner.opd))
+    _modal_opd_expansion_capture_capability(compute_device(owner.opd))
 
 @inline function _enqueue_modal_opd_expansion!(
     ::GraphNodeCaptureSafe,

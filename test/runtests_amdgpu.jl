@@ -2,5 +2,6 @@
 # Julia 1.12, loading AMDGPU after that package can leave extension methods at
 # an earlier world age during the optional smoke test.
 import AMDGPU
+include("amdgpu/compiler_regressions.jl")
 include("runtests_gpu_target_common.jl")
 run_gpu_backend_target(AdaptiveOpticsSim.Backends.AMDGPUBackendTag)
