@@ -212,6 +212,7 @@ struct CUDAPreparedDeviceExecutionContext{
     D<:Backends.AcceleratorComputeDevice{Backends.CUDABackend},
 } <: Backends._AbstractPreparedDeviceExecutionContext
     device::CUDA.CuDevice
+    context::CUDA.CuContext
     stream::CUDA.CuStream
     compute_device::D
 end
@@ -228,10 +229,11 @@ function Backends._prepare_device_execution_context(
 )
     device = CUDA.device(storage)
     stream = CUDA.device!(device) do
-        CUDA.CuStream()
+        CUDA.CuStream(; flags=CUDA.STREAM_NON_BLOCKING)
     end
     return CUDAPreparedDeviceExecutionContext(
         device,
+        CUDA.context(device),
         stream,
         Backends.compute_device(storage),
     )
@@ -242,10 +244,11 @@ function Backends._prepare_device_execution_context(
 )
     runtime_device = _require_cuda_device(device)
     stream = CUDA.device!(runtime_device) do
-        CUDA.CuStream()
+        CUDA.CuStream(; flags=CUDA.STREAM_NON_BLOCKING)
     end
     return CUDAPreparedDeviceExecutionContext(
         runtime_device,
+        CUDA.context(runtime_device),
         stream,
         device,
     )
@@ -259,22 +262,17 @@ end
     f::F,
     context::CUDAPreparedDeviceExecutionContext,
 ) where {F}
-    target_context = CUDA.context(context.device)
+    # Retain the exact context that owns the stream. Resolving it from the
+    # device again also enters CUDA's context cache on every execution.
+    target_context = context.context
     CUDA.CUDACore.isvalid(target_context) || throw(
         AdaptiveOpticsSim.InvalidConfiguration(
             "the prepared CUDA context is no longer valid",
         ),
     )
-    old_context = CUDA.context!(target_context)
-    old_stream = CUDA.stream()
-    CUDA.stream!(context.stream)
-    try
-        return f()
-    finally
-        CUDA.stream!(old_stream)
-        if old_context !== nothing && old_context != target_context &&
-                CUDA.CUDACore.isvalid(old_context)
-            CUDA.context!(old_context)
+    return CUDA.context!(target_context) do
+        CUDA.stream!(context.stream) do
+            f()
         end
     end
 end
@@ -306,9 +304,9 @@ end
 
 # The prepared captured stream has one submission owner and no host callbacks.
 # Observe completion cooperatively before the public synchronization call.
-# CUDA 6.4.2's cooperative wait allocates even for an already-complete stream;
-# its public blocking path skips that setup and retains driver and Julia kernel
-# error checks.
+# CUDA 6.4.2's cooperative wait allocates even for an already-complete stream.
+# CUDA 6.5 has a completed-stream fast path that avoids pre-wait GC/statistics
+# work. Both public paths retain resource bookkeeping and kernel error checks.
 # Other CUDA policies retain semantics but need allocation qualification.
 # Keep safepoints while waiting; ordinary Julia GC remains enabled.
 @inline function Backends._synchronize_prepared_device_execution_context_blocking!(
@@ -318,7 +316,11 @@ end
         GC.safepoint()
         yield()
     end
-    CUDA.synchronize(context.stream; blocking=true)
+    @static if Base.pkgversion(CUDA) >= v"6.5"
+        CUDA.synchronize(context.stream; blocking=false)
+    else
+        CUDA.synchronize(context.stream; blocking=true)
+    end
     return nothing
 end
 
@@ -404,7 +406,13 @@ function Backends._capture_prepared_device_graph(
         undef, CUDA.capability(context.device) >= v"9.0" ? 32 << 20 : 4 << 20,
     )
     graph = _with_prepared_cublas_workspace(context, workspace) do
-        CUDA.capture(f)
+        # CUDA 6.5 otherwise creates a separate capture stream. Keep capture
+        # on the stream whose cuBLAS handle owns the retained workspace.
+        @static if Base.pkgversion(CUDA) >= v"6.5"
+            CUDA.capture(f; stream=context.stream)
+        else
+            CUDA.capture(f)
+        end
     end
     _require_cuda_graph_fixed_storage(graph)
     executable = CUDA.instantiate(graph)

@@ -34,13 +34,18 @@ end
     nested_fixed = _cuda_storage_child_graph(_cuda_storage_child_graph(fixed_graph))
     @test extension._require_cuda_graph_fixed_storage(nested_fixed) === nested_fixed
 
-    stream = CUDA.CuStream()
+    stream = CUDA.CuStream(; flags=CUDA.STREAM_NON_BLOCKING)
     CUDA.stream!(stream) do
         # Capturing reserves a virtual address without executing an allocation.
         # Rejected graphs are never instantiated or launched.
         allocation = Ref{driver.CUdeviceptr}()
-        allocation_graph = CUDA.capture() do
-            driver.cuMemAllocAsync(allocation, 256, stream)
+        capture_allocation = () -> driver.cuMemAllocAsync(allocation, 256, stream)
+        # CUDA 6.5 otherwise captures on another stream, leaving this raw
+        # driver operation outside the graph under test.
+        allocation_graph = @static if Base.pkgversion(CUDA) >= v"6.5"
+            CUDA.capture(capture_allocation; stream)
+        else
+            CUDA.capture(capture_allocation)
         end
         @test_throws InvalidConfiguration extension._require_cuda_graph_fixed_storage(
             allocation_graph)

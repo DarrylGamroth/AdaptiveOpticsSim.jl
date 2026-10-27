@@ -224,6 +224,42 @@ completion and captured-execution gates. The
 retains the exact environments, reproducer, and observations. These are
 allocation and correctness checks on a shared GPU, not latency measurements.
 
+CUDA 6.5 retains captured memory through graph leases and defers finalizer
+cleanup to ordinary tasks, including synchronization. AOS uses that public
+capture/instantiate/launch path. The prepared AOS execution owner retains the
+exact CUDA context and a nonblocking stream; it enters public scoped
+context/stream helpers and captures on that stream explicitly on CUDA 6.5.
+Scientific state and exact input/output bindings remain AOS-owned. A complete
+frame still waits once at its publication boundary; splitting submission from
+completion does not remove the readiness and device-error checks.
+
+The retained context removes 64 bytes of repeated lookup allocation from the
+measured CUDA 6.5 frame. After the readiness poll, AOS uses CUDA 6.5's public
+completed-stream fast path, which retains epoch publication, output flushing,
+resource draining and kernel exception checks. This avoids pre-wait GC and
+memory-statistics work when the stream has already completed. CUDA 6.4 keeps its
+qualified blocking completion policy. With the default CUDA synchronization
+preference, these native adaptations reduce the measured complete captured
+graph step from 96 to 16 host bytes on unpatched CUDA 6.5.
+The remaining allocation occurs inside CUDA's resource-drain counter,
+independently of AOS ownership. A surrounding `let`
+repairs only the empty-drain fast path; concrete counter storage also avoids
+the shared binding box on the measured execution path.
+
+For explicit local qualification, this repository carries a four-line patch
+with exact pristine/patched source hashes under `deps/patches/`. Materialize it
+with `julia --startup-file=no scripts/prepare_cuda_dependency.jl`, then select
+the generated `deps/cudacore-6.5.0` in an isolated environment using
+`Pkg.develop(path=...)`. The setup checks UUID, version and complete source
+trees, preserves the vendor license, and refuses to overwrite changed source.
+It does not alter installed depot packages, replace methods during AOS loading,
+or select the patch for downstream applications. Default qualification pins
+remain unchanged. Actual resource destruction can allocate; zero-byte claims
+apply to the warmed, retained-resource paths with the corresponding tests.
+The [ownership qualification record](../benchmarks/results/platform/2026-10-27-cuda-resource-ownership.toml)
+retains the before/after measurements, exact source environments, release-count
+tests, bootstrap checks and full CUDA 6.4/6.5 results.
+
 Do not treat SSH success, `CUDA.functional()`, or compilation alone as model
 evidence. The test must execute the changed operation.
 

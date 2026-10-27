@@ -1,0 +1,22 @@
+--- a/src/resources/lifecycle.jl
++++ b/src/resources/lifecycle.jl
+@@ -288,3 +288,3 @@
+   end
+-  n = 0
++  n = Ref(0)
+   try
+@@ -300,3 +300,3 @@
+         end
+-        while n < limit
++        while n[] < limit
+           node = Base.@atomic :monotonic retired_backlog.head
+@@ -310,3 +310,3 @@
+           end
+-          n += 1
++          n[] += 1
+         end
+@@ -320,3 +320,3 @@
+   end
+-  return n
++  return n[]
+ end

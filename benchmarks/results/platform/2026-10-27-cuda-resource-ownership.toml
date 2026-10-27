@@ -1,0 +1,74 @@
+schema_version = 1
+kind = "CUDA ownership and allocation qualification"
+date = "2026-10-27"
+base_commit = "ad29f82fc6e3b96d728e073ac5e4420ac6b4e2ce"
+julia = "1.13.3"
+threads = 1
+blas_threads = 1
+omp_threads = 1
+device = "NVIDIA GeForce RTX 3080"
+driver = "615.71.10"
+shared_gpu = true
+latency_claim = false
+extension_sha256 = "07713339319f52486af862f638d508f79a18df1576b023c8ef062903c90f236b"
+scope = "Retain exact prepared context and nonblocking stream; use public scoped restoration, explicit CUDA 6.5 capture stream and completed-stream synchronization. Carry optional source patch without selecting it by default."
+default_pins_changed = false
+upstream_communication = false
+cuda_resource_change = "https://github.com/JuliaGPU/CUDA.jl/pull/3318"
+cuda_graph_ownership_change = "https://github.com/JuliaGPU/CUDA.jl/pull/3326"
+receipt_directory = "2026-10-27-cuda-resource-ownership/"
+
+[observations]
+original_cuda65_graph_step_bytes = 96
+repeated_context_lookup_bytes_each = 32
+context_entries_per_frame = 2
+retained_context_entry_exit_bytes = 0
+cuda65_step_after_context_fix_bytes = 32
+cuda65_unpatched_step_after_native_completion_bytes = 16
+cuda65_unpatched_graph_assertions_passed = 11
+cuda65_unpatched_graph_assertions_failed = 1
+cuda65_patched_steady_step_bytes = 0
+ordinary_resource_destruction_may_allocate = true
+measurement_boundary = "Completed graph frame includes prepared context entry/exit, native replay, readiness poll, public completion and publication. Setup, compilation, capture and oracle host copies excluded. GC and error/resource checks remain enabled."
+
+[quiet_interval]
+interval_seconds = 10.1
+forced_blocking_wait_bytes = 64
+following_wait_bytes = 0
+profile = "Four 16-byte RefValue{UInt64} allocations: two cuMemGetInfo output arguments and two memory-pool attribute output arguments in maybe_collect. This is separate from drain counter boxing."
+native_completion = "After readiness polling, public CUDA 6.5 synchronize(blocking=false) uses its completed-stream fast path; it still flushes output, drains resources, publishes completion epochs and checks Julia kernel exceptions. CUDA 6.4 retains its original blocking policy."
+synchronization_preference = "default nonblocking_synchronization=true; other policies require separate allocation qualification"
+
+[source_patch]
+package = "CUDACore"
+version = "6.5.0"
+pristine_tree = "9d504f23d39a56f827d1da4bfd1580990a28adbb"
+patched_tree = "f044e2795044ed9ed3d86fa529722346bff5d1a9"
+description = "Four-line mutable captured Int to concrete Ref{Int} counter repair; no changed locking, release count, recursion protection, callback Boolean semantics or error handling. Compiler eliminates cell in measured retained-resource execution."
+bootstrap_fresh_verified = true
+bootstrap_idempotence_verified = true
+bootstrap_modified_copy_refused_without_changes = true
+installed_depot_modified = false
+runtime_method_replacement = false
+release_counter_assertions_each_environment = 11
+release_counter_environments = ["pristine 6.5.0", "patched 6.5.0"]
+counter_cases = ["bounded drain", "capture excludes draining", "recursive drain", "exhaustive remainder", "empty drain", "release locks/state restored"]
+
+[validation]
+context_ownership_assertions_each_environment = 16
+context_environments = ["CUDA 6.4.2 / KA 0.9.45", "CUDA 6.5.0 / KA 0.10.3 pristine", "CUDA 6.5.0 / KA 0.10.3 patched"]
+cuda64_full_assertions_passed = 2089
+cuda64_full_assertions_failed = 0
+cuda65_final_status = "passed full CUDA target with optional counter source patch"
+cuda65_full_assertions_passed = 2089
+cuda65_full_assertions_failed = 0
+cuda65_quiet_interval_assertions_passed = 7
+cuda65_hil_assertions_passed = 48
+warnings = 0
+independent_review = "No blocking findings; native public completed-stream path preserves driver and Julia error checks, output flush, epochs, resource drain and exact caller restoration. Nonblocking streams use explicit managed-array/event dependencies; raw-pointer producers require their own ordering."
+investigative_failures = "Initial explicit-stream capture requires NON_BLOCKING. An old raw-driver test captured the wrong stream on 6.5; corrected without weakening alloc/free-node rejection. Forced-blocking quiet-window failure identified periodic memory-statistics output references; replaced with native checked completed-stream path."
+
+[reproduction]
+bootstrap = "julia --startup-file=no scripts/prepare_cuda_dependency.jl"
+environment = "Pkg-developed local AOS checkout; select deps/cudacore-6.5.0 only for patched CUDA 6.5 experiment. Retained Project/Manifest receipts identify all exact sources."
+full_target = "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 JULIA_PKG_PRECOMPILE_AUTO=0 julia --startup-file=no --threads=1 --project=ENV test/runtests_cuda.jl"
