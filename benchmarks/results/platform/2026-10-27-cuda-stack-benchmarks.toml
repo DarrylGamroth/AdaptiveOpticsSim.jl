@@ -1,0 +1,1282 @@
+schema_version = 1
+date = "2026-10-27"
+source_commit = "09c861d27eaafd517edc989d5b40a38ecbbb50af"
+source_worktree = "/home/dgamroth/workspaces/codex/worktrees/aos-cuda-stack-benchmarks-20261027"
+branch = "codex/cuda-stack-benchmarks-20261027"
+purpose = "Compare resolved CUDA 6.4.2 / KA 0.9.45 with CUDA 6.5.0 / KA 0.10.3 plus optional counter patch at unchanged AOS source"
+disposition = "Keep default pins: candidate fails unchanged process-wide zero-allocation gates on fine physical pyramid cases"
+notes = ["Initial histogram verifier subtracted mixed signed/unsigned values and underflowed. The corrected signed verifier passed all 48 histograms and 240000 samples; no histogram or timing data changed.", "Candidate fine optical timings were not emitted because the unchanged allocation assertion stops before the timed phase.", "Three initial instrument attempts used an unjustified exact cross-prepared Float32 rate oracle. The diagnostic measured 1.414e-7 relative L2, within the maintained 1e-3 criterion. Corrected harness, preserved initial failures, reran three jobs at end; no numerical kernel or allocation gate changed.", "Two initial metadata probes used a nonexistent private preference name; corrected metadata retries preserved separately. These are not benchmark failures.", "Three diagnostic pauses stopped only our Python scheduler after its active child finished. Wrapper elapsed_s for physical-copper_fine-baseline-1, physical-copper_default-baseline-2 and physical-gpi_default-baseline-2 includes waiting for diagnostics; inner sample timings remain the comparison.", "Exploratory profiles with immutable return boxes and collector compilation retained; final warmed concrete no-return diagnostic has neither artifact.", "Instrument data frozen from committed simulations source; unrelated uncommitted user changes excluded. Exact provenance and hashes retained."]
+
+[environment]
+julia = "1.13.3"
+gpu = "NVIDIA GeForce RTX 3080"
+driver = "615.71.10"
+compute_threads = 1
+gc_threads = 1
+blas_threads = 1
+fft_threads = 1
+affinity = "CPU2"
+gpu_competing_compute_clients = "None admitted by per-process guard"
+cpu_load = "Shared host; independent CPU validation and RTC processes remained active"
+clocks = "Default automatic GPU clocks; no power/clock/governor changes"
+source_dirty_before_runs = false
+
+[contract]
+repetitions = 3
+order = "Paired stacks alternated by repetition; workload order reversed in repetition 2"
+boundary = "Completed graph/device outputs; HIL adds host frame staging and same-sequence command adoption. No transport/RTC."
+load_model = "Unpaced single-outstanding serial service time"
+physical_samples_per_process = 128
+instrument_samples_per_process = 5000
+instrument_warmups = 100
+instrument_allocation_probes = 16
+physical_warmups = 32
+physical_allocation_probes = 16
+latency_interpretation = "Medians of independent process medians; per-process samples and dispersion preserved. Instrument p99 exploratory (50 expected exceedances); no p99.9 or fixed-arrival deadline claim."
+first_use = "Process-local first measured preparation/call after earlier calibration, not cold package startup"
+rate = "Instrumented closed-loop completion rate includes histogram and loop overhead"
+allocation_scope = "Process-wide GC byte counters include scheduled CUDA cleanup Timer; zero probes and net used device bytes do not establish absence of transient device allocations"
+
+[coverage]
+expected_benchmark_processes = 66
+benchmark_processes = 66
+passed_processes = 60
+failed_processes = 6
+rejected_harness_attempts = 3
+canonical_builders = ["model", "high_accuracy"]
+kernel_patterns = 14
+geometric_workflows = 5
+geometric_scaling_cases = 14
+physical_pyramids = ["gpi_default", "gpi_fine", "copper_default", "copper_fast", "copper_fine"]
+current_instruments = ["GPI2:240/grid_gaussian", "Classic:480/grid_gaussian"]
+unavailable = "Full legacy Copper application benchmark requires AOS 0.2.1; current AOS Copper optical cases are included, no full Copper application claim"
+
+[allocation_diagnosis]
+measured_bytes = 288
+profile_requested_bytes = 272
+clean_profile_records = 1
+clean_profile_steps = 64
+clean_profile_nonzero_steps = 1
+allocation_type = "Base Memory{Any} in uvhandles IdDict rehash"
+stack = "CUDACore one-second resource retirement Timer -> Base.Timer wait -> preserve_handle -> IdDict rehash"
+accounting = "272 B requested plus an 8 B GC tag rounds to the 288 B charged pool class"
+separate_observation = "First exploratory profile also found 16 B RefValue{Int64} in active resource-drain path; not the 288 B Timer event"
+clean_receipt = "large-capture-warmed-profile.log.gz"
+notes = "Existing allocation assertions preserved; no Timer suppression, GC disabling, runtime/source patch changes or production changes"
+
+[evidence]
+prior_software_correctness = "CUDA 6.4.2 and optionally patched CUDA 6.5.0 each passed 2089/2089 at the same AOS source; prior record 2026-10-27-cuda-resource-ownership.toml"
+physical_cross_stack_comparisons = 9
+physical_cross_stack_all_bitwise_equal = true
+instrument_cross_stack_comparisons = 6
+instrument_expected_comparisons = 6
+instrument_cross_stack_all_passed = true
+observed_zero_host_probes = 768
+histograms_verified = 48
+raw_completed_samples_verified = 240000
+extension_sha256 = "07713339319f52486af862f638d508f79a18df1576b023c8ef062903c90f236b"
+cudacore_tree = "f044e2795044ed9ed3d86fa529722346bff5d1a9"
+default_pins_changed = false
+independent_review = "Sol read-only methodology and allocation-source review; no timing-boundary blockers"
+receipt_directory = "2026-10-27-cuda-stack-benchmarks"
+compressed_receipts = 276
+receipt_bytes = 12944432
+
+[[measurement]]
+workload = "physical-gpi_default"
+metric = "completed_node_median"
+unit = "ms"
+baseline_runs = [3.3580065, 3.505288, 3.371527]
+candidate_runs = [3.2987555, 3.29024, 3.286959]
+baseline_median = 3.371527
+candidate_median = 3.29024
+percent_change = -2.4109846962518833
+paired_changes = [-1.7644694850948106, -6.134959524010586, -2.508299651760171]
+
+[[measurement]]
+workload = "physical-copper_default"
+metric = "completed_node_median"
+unit = "ms"
+baseline_runs = [4.992985, 7.9981615, 4.992705]
+candidate_runs = [4.9001315000000005, 4.898607999999999, 4.8980625]
+baseline_median = 4.992985
+candidate_median = 4.898607999999999
+percent_change = -1.8901919392908417
+paired_changes = [-1.859679129819125, -38.75332474844376, -1.8956157033111265]
+
+[[measurement]]
+workload = "physical-copper_fast"
+metric = "completed_node_median"
+unit = "ms"
+baseline_runs = [2.694128, 2.6854620000000002, 2.678153]
+candidate_runs = [2.557828, 2.555448, 2.606269]
+baseline_median = 2.6854620000000002
+candidate_median = 2.557828
+percent_change = -4.752776244832358
+paired_changes = [-5.05915086439842, -4.841401591234584, -2.6840886237642025]
+
+[[measurement]]
+workload = "builders"
+metric = "model"
+unit = "ms"
+baseline_runs = [11.9849415, 11.656321, 11.983243]
+candidate_runs = [12.003521, 4.1171345, 12.0022985]
+baseline_median = 11.983243
+candidate_median = 12.0022985
+percent_change = 0.15901788856322874
+paired_changes = [0.15502370203475113, -64.67895401988329, 0.15901788856322874]
+
+[[measurement]]
+workload = "builders"
+metric = "high_accuracy"
+unit = "ms"
+baseline_runs = [32.020092, 32.0017025, 32.0022985]
+candidate_runs = [31.9966475, 32.0132185, 34.207475]
+baseline_median = 32.0022985
+candidate_median = 32.0132185
+percent_change = 0.0341225490412711
+paired_changes = [-0.07321809069129603, 0.03598558545439001, 6.890681617759431]
+
+[[measurement]]
+workload = "geometric-workflow"
+metric = "N96.completed_median"
+unit = "us"
+baseline_runs = [26.4745, 26.67, 26.3595]
+candidate_runs = [26.099, 26.0985, 26.059]
+baseline_median = 26.4745
+candidate_median = 26.0985
+percent_change = -1.4202345653364423
+paired_changes = [-1.4183459555421218, -2.1428571428571463, -1.1400064492877338]
+
+[[measurement]]
+workload = "geometric-workflow"
+metric = "N128.completed_median"
+unit = "us"
+baseline_runs = [27.301, 27.341, 27.431]
+candidate_runs = [26.8555, 26.8755, 26.87]
+baseline_median = 27.341
+candidate_median = 26.87
+percent_change = -1.7226875388610563
+paired_changes = [-1.6318083586681742, -1.702571230020855, -2.045131420655466]
+
+[[measurement]]
+workload = "geometric-workflow"
+metric = "N160.completed_median"
+unit = "us"
+baseline_runs = [30.462, 30.287, 30.297]
+candidate_runs = [30.0515, 29.71, 29.726]
+baseline_median = 30.297
+candidate_median = 29.726
+percent_change = -1.8846750503350163
+paired_changes = [-1.3475805922132489, -1.9051078020272616, -1.8846750503350163]
+
+[[measurement]]
+workload = "geometric-workflow"
+metric = "N512.completed_median"
+unit = "us"
+baseline_runs = [50.3945, 49.738, 49.708]
+candidate_runs = [48.1705, 48.731, 48.7665]
+baseline_median = 49.738
+candidate_median = 48.731
+percent_change = -2.0246089509027287
+paired_changes = [-4.413180009723295, -2.0246089509027287, -1.894061318097684]
+
+[[measurement]]
+workload = "geometric-workflow"
+metric = "N1024.completed_median"
+unit = "us"
+baseline_runs = [142.462, 141.725, 141.776]
+candidate_runs = [134.036, 133.695, 133.7855]
+baseline_median = 141.776
+candidate_median = 133.7855
+percent_change = -5.636003272768308
+paired_changes = [-5.914559672052889, -5.6659022755336075, -5.636003272768308]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N40.L8.selected_event"
+unit = "us"
+baseline_runs = [4.351999905338744, 4.351999905338744, 4.351999905338744]
+candidate_runs = [4.223999894747976, 4.223999894747976, 4.351999905338744]
+baseline_median = 4.351999905338744
+candidate_median = 4.223999894747976
+percent_change = -2.94117677791641
+paired_changes = [-2.94117677791641, -2.94117677791641, 0.0]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N128.L8.selected_event"
+unit = "us"
+baseline_runs = [8.320000233652536, 8.320000233652536, 8.320000233652536]
+candidate_runs = [8.320000233652536, 8.320000233652536, 8.320000233652536]
+baseline_median = 8.320000233652536
+candidate_median = 8.320000233652536
+percent_change = 0.0
+paired_changes = [0.0, 0.0, 0.0]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N80.L16.selected_event"
+unit = "us"
+baseline_runs = [4.351999905338744, 4.351999905338744, 4.479999915929511]
+candidate_runs = [4.351999905338744, 4.351999905338744, 4.351999905338744]
+baseline_median = 4.351999905338744
+candidate_median = 4.351999905338744
+percent_change = 0.0
+paired_changes = [0.0, 0.0, -2.8571431471603015]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N256.L16.selected_event"
+unit = "us"
+baseline_runs = [8.447999789495952, 8.447999789495952, 8.447999789495952]
+candidate_runs = [8.447999789495952, 8.447999789495952, 8.384000011574244]
+baseline_median = 8.447999789495952
+candidate_median = 8.447999789495952
+percent_change = 0.0
+paired_changes = [0.0, 0.0, -0.75757314768502]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N160.L32.selected_event"
+unit = "us"
+baseline_runs = [4.991999958292581, 4.991999958292581, 4.991999958292581]
+candidate_runs = [4.991999958292581, 4.927999952997197, 4.927999952997197]
+baseline_median = 4.991999958292581
+candidate_median = 4.927999952997197
+percent_change = -1.282051398840034
+paired_changes = [0.0, -1.282051398840034, -1.282051398840034]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N512.L32.selected_event"
+unit = "us"
+baseline_runs = [10.495999958948232, 10.495999958948232, 10.495999958948232]
+candidate_runs = [10.495999958948232, 10.495999958948232, 10.495999958948232]
+baseline_median = 10.495999958948232
+candidate_median = 10.495999958948232
+percent_change = 0.0
+paired_changes = [0.0, 0.0, 0.0]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N320.L64.selected_event"
+unit = "us"
+baseline_runs = [5.632000011246419, 5.632000011246419, 5.632000011246419]
+candidate_runs = [4.479999915929511, 4.479999915929511, 4.479999915929511]
+baseline_median = 5.632000011246419
+candidate_median = 4.479999915929511
+percent_change = -20.454547106116895
+paired_changes = [-20.454547106116895, -20.454547106116895, -20.454547106116895]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N1024.L64.selected_event"
+unit = "us"
+baseline_runs = [64.38399577746168, 64.25599713111296, 64.25599713111296]
+candidate_runs = [54.783999075880274, 54.01599992183037, 54.01599992183037]
+baseline_median = 64.25599713111296
+candidate_median = 54.01599992183037
+percent_change = -15.936251348474295
+paired_changes = [-14.910532634170536, -15.936251348474295, -15.936251348474295]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N640.L128.selected_event"
+unit = "us"
+baseline_runs = [5.760000021837186, 5.760000021837186, 5.760000021837186]
+candidate_runs = [4.736000391858397, 4.736000391858397, 4.736000391858397]
+baseline_median = 5.760000021837186
+candidate_median = 4.736000391858397
+percent_change = -17.777771286399723
+paired_changes = [-17.777771286399723, -17.777771286399723, -17.777771286399723]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N2048.L128.selected_event"
+unit = "us"
+baseline_runs = [67.32800102327019, 67.4559996696189, 67.4559996696189]
+candidate_runs = [60.16000043018721, 59.77600085316226, 59.77600085316226]
+baseline_median = 67.4559996696189
+candidate_median = 59.77600085316226
+percent_change = -11.385197542207049
+paired_changes = [-10.646388551778841, -11.385197542207049, -11.385197542207049]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N1280.L256.selected_event"
+unit = "us"
+baseline_runs = [15.104000340215862, 15.104000340215862, 15.104000340215862]
+candidate_runs = [13.63199999104836, 13.568000213126652, 13.568000213126652]
+baseline_median = 15.104000340215862
+candidate_median = 13.568000213126652
+percent_change = -10.169492137784585
+paired_changes = [-9.745764804097345, -10.169492137784585, -10.169492137784585]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N4096.L256.selected_event"
+unit = "us"
+baseline_runs = [618.6239770613611, 617.28002037853, 502.4000129196793]
+candidate_runs = [314.30400849785656, 313.66400071419775, 289.02399935759604]
+baseline_median = 617.28002037853
+candidate_median = 313.66400071419775
+percent_change = -49.18610835292354
+paired_changes = [-49.19304453880214, -49.18610835292354, -42.47133918688743]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N1024.L32.selected_event"
+unit = "us"
+baseline_runs = [25.08799843781162, 24.704000679776073, 24.959999791462906]
+candidate_runs = [28.79999919969123, 28.096000278310385, 28.28799915732816]
+baseline_median = 24.959999791462906
+candidate_median = 28.28799915732816
+percent_change = 13.333330904127383
+paired_changes = [14.795922325493404, 13.730567945260663, 13.333330904127383]
+
+[[measurement]]
+workload = "geometric-scaling"
+metric = "N4096.L128.selected_event"
+unit = "us"
+baseline_runs = [433.9840088505298, 428.5440081730485, 421.9519905745983]
+candidate_runs = [401.53597365133464, 400.8960095234215, 395.5200081691146]
+baseline_median = 428.5440081730485
+candidate_median = 400.8960095234215
+percent_change = -6.451612465075596
+paired_changes = [-7.476781295499468, -6.451612465075596, -6.264215597013689]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "stream.graph.p50"
+unit = "ms"
+baseline_runs = [4.763447, 3.530175, 3.548778]
+candidate_runs = [3.608261, 3.46001, 3.45524]
+baseline_median = 3.548778
+candidate_median = 3.46001
+percent_change = -2.5013680765604396
+paired_changes = [-24.2510518118497, -1.9875785194784945, -2.6357805419217617]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "stream.graph.p95"
+unit = "ms"
+baseline_runs = [12.141780250000002, 3.554593, 3.6019425]
+candidate_runs = [3.7565965, 3.497011, 3.480655]
+baseline_median = 3.6019425
+candidate_median = 3.497011
+percent_change = -2.9131919790501892
+paired_changes = [-69.06057906953143, -1.619932296046267, -3.367280293896968]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "stream.graph.p99"
+unit = "ms"
+baseline_runs = [18.482477140000015, 3.5847681, 3.66142401]
+candidate_runs = [3.8280359, 3.5339312, 3.5115539300000003]
+baseline_median = 3.66142401
+candidate_median = 3.5339312
+percent_change = -3.4820553328921866
+paired_changes = [-79.28829630896544, -1.4181363642462586, -4.093218365059004]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "stream.graph.maximum"
+unit = "ms"
+baseline_runs = [31.370014, 3.68818, 7.669466]
+candidate_runs = [4.702048, 6.07392, 3.737449]
+baseline_median = 7.669466
+candidate_median = 4.702048
+percent_change = -38.69132479366883
+paired_changes = [-85.01101083346664, 64.68610534193017, -51.26845858629532]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "stream.hil_cycle.p50"
+unit = "ms"
+baseline_runs = [4.048369, 3.63418, 3.6580475]
+candidate_runs = [3.7741565, 3.543316, 3.545299]
+baseline_median = 3.6580475
+candidate_median = 3.545299
+percent_change = -3.082204372687891
+paired_changes = [-6.773406771961743, -2.5002614069748907, -3.082204372687891]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "stream.hil_cycle.p95"
+unit = "ms"
+baseline_runs = [7.98392455, 3.70353, 3.74061595]
+candidate_runs = [3.93283005, 3.5668309500000004, 3.5698955500000005]
+baseline_median = 3.74061595
+candidate_median = 3.5698955500000005
+percent_change = -4.563964926685394
+paired_changes = [-50.74064107983085, -3.6910474601258736, -4.563964926685394]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "stream.hil_cycle.p99"
+unit = "ms"
+baseline_runs = [8.055460340000002, 3.7636675100000003, 3.8081214900000004]
+candidate_runs = [4.094499000000003, 3.6122056, 3.595987]
+baseline_median = 3.8081214900000004
+candidate_median = 3.6122056
+percent_change = -5.144685917045166
+paired_changes = [-49.17113576155968, -4.024316962047491, -5.570580942783954]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "stream.hil_cycle.maximum"
+unit = "ms"
+baseline_runs = [58.545848, 48.930688, 4.76135]
+candidate_runs = [76.680637, 55.295534, 3.72243]
+baseline_median = 48.930688
+candidate_median = 55.295534
+percent_change = 13.007881679489163
+paired_changes = [30.975363103460385, 13.007881679489163, -21.819862013924617]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "captured.graph.p50"
+unit = "ms"
+baseline_runs = [3.4667355, 3.4608665, 3.459948]
+candidate_runs = [3.402601, 3.3824215, 3.3830665]
+baseline_median = 3.4608665
+candidate_median = 3.3830665
+percent_change = -2.24799194074663
+paired_changes = [-1.8499969207342093, -2.2666288919263367, -2.2220420653720763]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "captured.graph.p95"
+unit = "ms"
+baseline_runs = [3.5171085499999997, 3.4800425, 3.4783545]
+candidate_runs = [3.4258125, 3.40286405, 3.4036855499999996]
+baseline_median = 3.4800425
+candidate_median = 3.4036855499999996
+percent_change = -2.1941384336542025
+paired_changes = [-2.5957700395684236, -2.217744467201199, -2.1466745267050946]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "captured.graph.p99"
+unit = "ms"
+baseline_runs = [4.605580130000002, 3.48834731, 3.48562531]
+candidate_runs = [3.44190291, 3.4116311, 3.4131220100000004]
+baseline_median = 3.48834731
+candidate_median = 3.4131220100000004
+percent_change = -2.1564739205970795
+paired_changes = [-25.266680573419997, -2.199213644240028, -2.080065800302544]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "captured.graph.maximum"
+unit = "ms"
+baseline_runs = [25.973433, 6.471331, 3.501856]
+candidate_runs = [3.489139, 3.431187, 5.746927]
+baseline_median = 6.471331
+candidate_median = 3.489139
+percent_change = -46.083131893578
+paired_changes = [-86.56650817009826, -46.97865091431732, 64.11088862591723]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "captured.hil_cycle.p50"
+unit = "ms"
+baseline_runs = [3.563156, 3.5492025, 3.546961]
+candidate_runs = [3.518123, 3.474789, 3.4787905]
+baseline_median = 3.5492025
+candidate_median = 3.4787905
+percent_change = -1.9838822946845025
+paired_changes = [-1.2638514844705129, -2.0966259321636316, -1.9219410644774504]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "captured.hil_cycle.p95"
+unit = "ms"
+baseline_runs = [3.628292, 3.57096605, 3.567171]
+candidate_runs = [3.584512, 3.5005599499999995, 3.50367305]
+baseline_median = 3.57096605
+candidate_median = 3.50367305
+percent_change = -1.8844480473288128
+paired_changes = [-1.2066283529550526, -1.9716261374145616, -1.7800646506713536]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "captured.hil_cycle.p99"
+unit = "ms"
+baseline_runs = [4.43078712, 3.59516291, 3.5792741]
+candidate_runs = [3.6480542999999996, 3.5140320099999998, 3.5142931]
+baseline_median = 3.59516291
+candidate_median = 3.5142931
+percent_change = -2.249405994233511
+paired_changes = [-17.66577357027255, -2.256668252065386, -1.8154798482742596]
+
+[[measurement]]
+workload = "instrument-gpi2"
+metric = "captured.hil_cycle.maximum"
+unit = "ms"
+baseline_runs = [9.211173, 3.788319, 3.622101]
+candidate_runs = [6.222703, 6.755036, 3.541392]
+baseline_median = 3.788319
+candidate_median = 6.222703
+percent_change = 64.26026952851646
+paired_changes = [-32.44396777695957, 78.31222766614954, -2.228237147445633]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "stream.graph.p50"
+unit = "ms"
+baseline_runs = [0.5635795, 0.56829, 0.564355]
+candidate_runs = [0.519038, 0.5175355, 0.5162555]
+baseline_median = 0.564355
+candidate_median = 0.5175355
+percent_change = -8.296107946239516
+paired_changes = [-7.903321536713104, -8.93109152017455, -8.522915540750075]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "stream.graph.p95"
+unit = "ms"
+baseline_runs = [0.6028785, 0.584833, 0.5858496000000002]
+candidate_runs = [0.530011, 0.527063, 0.536005]
+baseline_median = 0.5858496000000002
+candidate_median = 0.530011
+percent_change = -9.531217568468108
+paired_changes = [-12.086597880004014, -9.87803355829785, -8.50808808267518]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "stream.graph.p99"
+unit = "ms"
+baseline_runs = [0.6066851, 0.6102110000000002, 0.60756671]
+candidate_runs = [0.5419405, 0.5429543, 0.54005]
+baseline_median = 0.60756671
+candidate_median = 0.5419405
+percent_change = -10.801482194440826
+paired_changes = [-10.671862552747701, -11.021876039599443, -11.112641441464088]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "stream.graph.maximum"
+unit = "ms"
+baseline_runs = [0.629949, 61.716333, 58.931157]
+candidate_runs = [59.570537, 55.804958, 59.446673]
+baseline_median = 58.931157
+candidate_median = 59.446673
+percent_change = 0.874776648284703
+paired_changes = [9356.406312257024, -9.57829915137699, 0.874776648284703]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "stream.hil_cycle.p50"
+unit = "ms"
+baseline_runs = [0.767321, 0.770247, 0.7677005]
+candidate_runs = [0.72393, 0.722959, 0.719877]
+baseline_median = 0.7677005
+candidate_median = 0.722959
+percent_change = -5.827988909737581
+paired_changes = [-5.654869344120661, -6.1393293320194715, -6.2294475514865555]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "stream.hil_cycle.p95"
+unit = "ms"
+baseline_runs = [0.779689, 0.784764, 0.77707305]
+candidate_runs = [0.736755, 0.73783005, 0.7327050000000002]
+baseline_median = 0.779689
+candidate_median = 0.736755
+percent_change = -5.506554536488251
+paired_changes = [-5.506554536488251, -5.980645136627061, -5.709636951120601]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "stream.hil_cycle.p99"
+unit = "ms"
+baseline_runs = [0.79201379, 0.80158591, 0.78632129]
+candidate_runs = [0.7490960999999999, 0.7534251, 0.7452689100000002]
+baseline_median = 0.79201379
+candidate_median = 0.7490960999999999
+percent_change = -5.418805902356838
+paired_changes = [-5.418805902356838, -6.008190687882731, -5.220815018247793]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "stream.hil_cycle.maximum"
+unit = "ms"
+baseline_runs = [0.886649, 0.929254, 0.819483]
+candidate_runs = [0.784813, 0.806885, 0.795808]
+baseline_median = 0.886649
+candidate_median = 0.795808
+percent_change = -10.24542970217076
+paired_changes = [-11.485492004164, -13.168520124745232, -2.889016611692985]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "captured.graph.p50"
+unit = "ms"
+baseline_runs = [0.476742, 0.480206, 0.478475]
+candidate_runs = [0.438738, 0.436995, 0.436576]
+baseline_median = 0.478475
+candidate_median = 0.436995
+percent_change = -8.669209467579275
+paired_changes = [-7.97160728444315, -8.998429840526779, -8.75677935106327]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "captured.graph.p95"
+unit = "ms"
+baseline_runs = [0.5116089500000001, 0.4843255, 0.4843565]
+candidate_runs = [0.4436375, 0.440812, 0.456914]
+baseline_median = 0.4843565
+candidate_median = 0.4436375
+percent_change = -8.4068243122576
+paired_changes = [-13.285821133504417, -8.984350400711927, -5.665764782758165]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "captured.graph.p99"
+unit = "ms"
+baseline_runs = [0.5169985, 0.5181872, 0.5169872]
+candidate_runs = [0.457583, 0.45881510000000003, 0.4591193]
+baseline_median = 0.5169985
+candidate_median = 0.45881510000000003
+percent_change = -11.254075205247204
+paired_changes = [-11.492393111392008, -11.45765468541098, -11.193294534178023]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "captured.graph.maximum"
+unit = "ms"
+baseline_runs = [0.524812, 0.542141, 0.520343]
+candidate_runs = [0.462963, 0.467883, 0.467164]
+baseline_median = 0.524812
+candidate_median = 0.467164
+percent_change = -10.984504927478778
+paired_changes = [-11.784982050715287, -13.69717472022961, -10.21998950692139]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "captured.hil_cycle.p50"
+unit = "ms"
+baseline_runs = [0.683239, 0.6849735, 0.686053]
+candidate_runs = [0.640915, 0.639784, 0.636541]
+baseline_median = 0.6849735
+candidate_median = 0.639784
+percent_change = -6.59726252183479
+paired_changes = [-6.194611256090477, -6.59726252183479, -7.21693513474907]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "captured.hil_cycle.p95"
+unit = "ms"
+baseline_runs = [0.6977285, 0.6974959500000001, 0.7019335]
+candidate_runs = [0.65609505, 0.6499020499999999, 0.6491040499999999]
+baseline_median = 0.6977285
+candidate_median = 0.6499020499999999
+percent_change = -6.854593154787292
+paired_changes = [-5.966998624823261, -6.823537828427561, -7.526275637222057]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "captured.hil_cycle.p99"
+unit = "ms"
+baseline_runs = [0.7035870000000001, 0.7095752900000001, 0.7085281000000001]
+candidate_runs = [0.6632581, 0.6601136, 0.6548750999999999]
+baseline_median = 0.7085281000000001
+candidate_median = 0.6601136
+percent_change = -6.833109371385571
+paired_changes = [-5.731899537654916, -6.970604909311328, -7.572459017504052]
+
+[[measurement]]
+workload = "instrument-classic"
+metric = "captured.hil_cycle.maximum"
+unit = "ms"
+baseline_runs = [0.820476, 0.761892, 0.756936]
+candidate_runs = [0.704283, 0.721525, 0.709908]
+baseline_median = 0.761892
+candidate_median = 0.709908
+percent_change = -6.823014285489282
+paired_changes = [-14.161657379374903, -5.298257495813063, -6.21294270585625]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "atmosphere_n512"
+unit = "us"
+baseline_runs = [10.847999874386005, 10.847999874386005, 10.847999874386005]
+candidate_runs = [10.623999514791649, 10.59199985320447, 10.527999620535411]
+baseline_median = 10.847999874386005
+candidate_median = 10.59199985320447
+percent_change = -2.3598822284833787
+paired_changes = [-2.064900093917399, -2.3598822284833787, -2.949854881600522]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "dm_left_n256_k32"
+unit = "us"
+baseline_runs = [4.351999905338744, 4.351999905338744, 4.351999905338744]
+candidate_runs = [3.8079999740148196, 3.7760000850539654, 3.7760000850539654]
+baseline_median = 4.351999905338744
+candidate_median = 3.7760000850539654
+percent_change = -13.23529027604481
+paired_changes = [-12.499998693855241, -13.23529027604481, -13.23529027604481]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "dm_right_n256_k32"
+unit = "us"
+baseline_runs = [6.399999620043673, 6.399999620043673, 6.399999620043673]
+candidate_runs = [5.888000032427954, 5.7279999055026565, 5.7279999055026565]
+baseline_median = 6.399999620043673
+candidate_median = 5.7279999055026565
+percent_change = -10.499996163069003
+paired_changes = [-7.999994031440661, -10.499996163069003, -10.499996163069003]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "dm_left_n512_k64"
+unit = "us"
+baseline_runs = [6.335999842121964, 6.335999842121964, 6.335999842121964]
+candidate_runs = [5.632000011246419, 5.56800023332471, 5.53599966224283]
+baseline_median = 6.335999842121964
+candidate_median = 5.56800023332471
+percent_change = -12.12120624895796
+paired_changes = [-11.111108718711272, -12.12120624895796, -12.626265779880598]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "dm_right_n512_k64"
+unit = "us"
+baseline_runs = [24.76800000295043, 24.704000679776073, 24.720000510569662]
+candidate_runs = [23.36000034119934, 23.20000021427404, 23.13599907211028]
+baseline_median = 24.720000510569662
+candidate_median = 23.20000021427404
+percent_change = -6.14886838552332
+paired_changes = [-5.684753155617594, -6.088084618348, -6.407772676954848]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "slopes_n512_sub32"
+unit = "us"
+baseline_runs = [74.8959937482141, 74.8799939174205, 74.8799939174205]
+candidate_runs = [63.26400034595281, 63.104002038016915, 63.104002038016915]
+baseline_median = 74.8799939174205
+candidate_median = 63.104002038016915
+percent_change = -15.726486159160814
+paired_changes = [-15.530861959540598, -15.726486159160814, -15.726486159160814]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "slopes_n1024_sub32"
+unit = "us"
+baseline_runs = [519.2319513298571, 522.9759844951332, 523.1680115684867]
+candidate_runs = [431.6160047892481, 431.51999125257134, 431.55200546607375]
+baseline_median = 522.9759844951332
+candidate_median = 431.55200546607375
+percent_change = -17.481487054767463
+paired_changes = [-16.874143880438595, -17.48760860039318, -17.511775199661596]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "detector_rows_n512_taps7"
+unit = "us"
+baseline_runs = [9.472000783716794, 9.503999535809271, 9.472000783716794]
+candidate_runs = [7.296000148926396, 7.168000138335628, 7.040000127744861]
+baseline_median = 9.472000783716794
+candidate_median = 7.168000138335628
+percent_change = -24.324329125288358
+paired_changes = [-22.97297777393701, -24.57911943989516, -25.675680476639705]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "detector_cols_n512_taps7"
+unit = "us"
+baseline_runs = [8.768000043346547, 8.703999810677487, 8.703999810677487]
+candidate_runs = [7.455999821104342, 7.392000043182634, 7.199999799922807]
+baseline_median = 8.703999810677487
+candidate_median = 7.392000043182634
+percent_change = -15.073527068387339
+paired_changes = [-14.963506110356306, -15.073527068387339, -17.279412264114168]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "detector_rows_n512_taps31"
+unit = "us"
+baseline_runs = [28.480000764830038, 28.35200029949192, 28.35200029949192]
+candidate_runs = [21.407999156508595, 21.28000051015988, 21.247999029583298]
+baseline_median = 28.35200029949192
+candidate_median = 21.28000051015988
+percent_change = -24.943565584890226
+paired_changes = [-24.83146565450469, -24.943565584890226, -25.056437622977622]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "detector_cols_n512_taps31"
+unit = "us"
+baseline_runs = [17.823998859967105, 17.66400055203121, 17.69600021361839]
+candidate_runs = [15.871999494265765, 15.74400084791705, 15.67999970575329]
+baseline_median = 17.69600021361839
+candidate_median = 15.74400084791705
+percent_change = -11.030737692911707
+paired_changes = [-10.95152317410406, -10.869563202619902, -11.392407795709891]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "pyramid_n256_batches8"
+unit = "us"
+baseline_runs = [5.375999990064884, 5.344000328477705, 5.311999757395824]
+candidate_runs = [5.216000317886937, 5.08800030729617, 5.055999736214289]
+baseline_median = 5.344000328477705
+candidate_median = 5.08800030729617
+percent_change = -4.790419263586743
+paired_changes = [-2.976184383810143, -4.790419263586743, -4.8192777272835885]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "pyramid_n256_batches32"
+unit = "us"
+baseline_runs = [26.976000299328007, 26.911999157164246, 26.927999897452537]
+candidate_runs = [26.720001187641174, 26.559999241726473, 26.59199890331365]
+baseline_median = 26.927999897452537
+candidate_median = 26.59199890331365
+percent_change = -1.2477755325997042
+paired_changes = [-0.9489883928167409, -1.307966433047647, -1.2477755325997042]
+
+[[measurement]]
+workload = "kernel-patterns"
+metric = "utility_masked_sum_n128"
+unit = "us"
+baseline_runs = [23.071999748935923, 23.008000425761566, 22.976000764174387]
+candidate_runs = [22.976000764174387, 22.78400097566191, 22.81600063724909]
+baseline_median = 23.008000425761566
+candidate_median = 22.81600063724909
+percent_change = -0.8344914158533223
+paired_changes = [-0.41608436982565333, -0.9735720008456128, -0.6963793593477763]
+
+[[physical_parity]]
+case = "gpi_default"
+repetition = 1
+relative_l2 = 0.0
+bitwise_equal = true
+passed = true
+
+[[physical_parity]]
+case = "gpi_default"
+repetition = 2
+relative_l2 = 0.0
+bitwise_equal = true
+passed = true
+
+[[physical_parity]]
+case = "gpi_default"
+repetition = 3
+relative_l2 = 0.0
+bitwise_equal = true
+passed = true
+
+[[physical_parity]]
+case = "copper_default"
+repetition = 1
+relative_l2 = 0.0
+bitwise_equal = true
+passed = true
+
+[[physical_parity]]
+case = "copper_default"
+repetition = 2
+relative_l2 = 0.0
+bitwise_equal = true
+passed = true
+
+[[physical_parity]]
+case = "copper_default"
+repetition = 3
+relative_l2 = 0.0
+bitwise_equal = true
+passed = true
+
+[[physical_parity]]
+case = "copper_fast"
+repetition = 1
+relative_l2 = 0.0
+bitwise_equal = true
+passed = true
+
+[[physical_parity]]
+case = "copper_fast"
+repetition = 2
+relative_l2 = 0.0
+bitwise_equal = true
+passed = true
+
+[[physical_parity]]
+case = "copper_fast"
+repetition = 3
+relative_l2 = 0.0
+bitwise_equal = true
+passed = true
+
+[[instrument_parity]]
+instrument = "gpi2"
+repetition = 1
+frame_bitwise_equal = true
+rate_bitwise_equal = true
+rate_relative_l2 = 0.0
+frame_relative_l2 = 0.0
+relative_l2_tolerance = 0.001
+passed = true
+
+[[instrument_parity]]
+instrument = "gpi2"
+repetition = 2
+frame_bitwise_equal = true
+rate_bitwise_equal = true
+rate_relative_l2 = 0.0
+frame_relative_l2 = 0.0
+relative_l2_tolerance = 0.001
+passed = true
+
+[[instrument_parity]]
+instrument = "gpi2"
+repetition = 3
+frame_bitwise_equal = true
+rate_bitwise_equal = true
+rate_relative_l2 = 0.0
+frame_relative_l2 = 0.0
+relative_l2_tolerance = 0.001
+passed = true
+
+[[instrument_parity]]
+instrument = "classic"
+repetition = 1
+frame_bitwise_equal = true
+rate_bitwise_equal = true
+rate_relative_l2 = 0.0
+frame_relative_l2 = 0.0
+relative_l2_tolerance = 0.001
+passed = true
+
+[[instrument_parity]]
+instrument = "classic"
+repetition = 2
+frame_bitwise_equal = true
+rate_bitwise_equal = true
+rate_relative_l2 = 0.0
+frame_relative_l2 = 0.0
+relative_l2_tolerance = 0.001
+passed = true
+
+[[instrument_parity]]
+instrument = "classic"
+repetition = 3
+frame_bitwise_equal = true
+rate_bitwise_equal = true
+rate_relative_l2 = 0.0
+frame_relative_l2 = 0.0
+relative_l2_tolerance = 0.001
+passed = true
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "candidate"
+repetition = 1
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.438738
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "candidate"
+repetition = 1
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.640915
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "candidate"
+repetition = 2
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.436995
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "candidate"
+repetition = 2
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.639784
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "baseline"
+repetition = 2
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.480206
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "baseline"
+repetition = 2
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.6849735
+
+[[instrument_interval]]
+workload = "instrument-gpi2"
+stack = "candidate"
+repetition = 2
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 288
+gc_collections = 0
+median_ms = 3.3824215
+
+[[instrument_interval]]
+workload = "instrument-gpi2"
+stack = "candidate"
+repetition = 2
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 288
+gc_collections = 0
+median_ms = 3.474789
+
+[[instrument_interval]]
+workload = "instrument-gpi2"
+stack = "baseline"
+repetition = 2
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 3.4608665
+
+[[instrument_interval]]
+workload = "instrument-gpi2"
+stack = "baseline"
+repetition = 2
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 3.5492025
+
+[[instrument_interval]]
+workload = "instrument-gpi2"
+stack = "baseline"
+repetition = 3
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 3.459948
+
+[[instrument_interval]]
+workload = "instrument-gpi2"
+stack = "baseline"
+repetition = 3
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 3.546961
+
+[[instrument_interval]]
+workload = "instrument-gpi2"
+stack = "candidate"
+repetition = 3
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 288
+gc_collections = 0
+median_ms = 3.3830665
+
+[[instrument_interval]]
+workload = "instrument-gpi2"
+stack = "candidate"
+repetition = 3
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 288
+gc_collections = 0
+median_ms = 3.4787905
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "baseline"
+repetition = 3
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.478475
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "baseline"
+repetition = 3
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.686053
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "candidate"
+repetition = 3
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.436576
+
+[[instrument_interval]]
+workload = "instrument-classic"
+stack = "candidate"
+repetition = 3
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.636541
+
+[[instrument_interval]]
+workload = "instrument-rerun-gpi2"
+stack = "baseline"
+repetition = 1
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 3.4667355
+
+[[instrument_interval]]
+workload = "instrument-rerun-gpi2"
+stack = "baseline"
+repetition = 1
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 3.563156
+
+[[instrument_interval]]
+workload = "instrument-rerun-gpi2"
+stack = "candidate"
+repetition = 1
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 288
+gc_collections = 0
+median_ms = 3.402601
+
+[[instrument_interval]]
+workload = "instrument-rerun-gpi2"
+stack = "candidate"
+repetition = 1
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 288
+gc_collections = 0
+median_ms = 3.518123
+
+[[instrument_interval]]
+workload = "instrument-rerun-classic"
+stack = "baseline"
+repetition = 1
+boundary = "graph"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.476742
+
+[[instrument_interval]]
+workload = "instrument-rerun-classic"
+stack = "baseline"
+repetition = 1
+boundary = "hil_cycle"
+samples = 5000
+probe_max_bytes = 0
+instrumented_loop_bytes = 0
+gc_collections = 0
+median_ms = 0.683239
+
+[[failed_benchmark]]
+workload = "physical-gpi_fine"
+stack = "candidate"
+repetition = 1
+error = "ERROR: LoadError: steady host allocation"
+receipt = "physical-gpi_fine-candidate-1.log.gz"
+
+[[failed_benchmark]]
+workload = "physical-copper_fine"
+stack = "candidate"
+repetition = 1
+error = "ERROR: LoadError: steady host allocation"
+receipt = "physical-copper_fine-candidate-1.log.gz"
+
+[[failed_benchmark]]
+workload = "physical-copper_fine"
+stack = "candidate"
+repetition = 2
+error = "ERROR: LoadError: steady host allocation"
+receipt = "physical-copper_fine-candidate-2.log.gz"
+
+[[failed_benchmark]]
+workload = "physical-gpi_fine"
+stack = "candidate"
+repetition = 2
+error = "ERROR: LoadError: steady host allocation"
+receipt = "physical-gpi_fine-candidate-2.log.gz"
+
+[[failed_benchmark]]
+workload = "physical-gpi_fine"
+stack = "candidate"
+repetition = 3
+error = "ERROR: LoadError: steady host allocation"
+receipt = "physical-gpi_fine-candidate-3.log.gz"
+
+[[failed_benchmark]]
+workload = "physical-copper_fine"
+stack = "candidate"
+repetition = 3
+error = "ERROR: LoadError: steady host allocation"
+receipt = "physical-copper_fine-candidate-3.log.gz"

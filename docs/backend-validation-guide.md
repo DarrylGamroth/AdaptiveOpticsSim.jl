@@ -260,6 +260,25 @@ The [ownership qualification record](../benchmarks/results/platform/2026-10-27-c
 retains the before/after measurements, exact source environments, release-count
 tests, bootstrap checks and full CUDA 6.4/6.5 results.
 
+The expanded [CUDA stack benchmark comparison](../benchmarks/results/platform/2026-10-27-cuda-stack-benchmarks.toml)
+keeps the default pins unchanged. Three independent process runs compare
+reconstruction preparation, kernel and geometry cases, physical pyramid nodes,
+and the current declarative GPI2 and Classic graph/HIL paths. The candidate's
+fine GPI and Copper cases fail the unchanged zero-byte assertion in all three
+runs. A clean 64-replay allocation trace identifies one 288-byte event in
+Julia's timer-handle dictionary, reached by CUDACore's periodic resource
+retirement task. This is separate from the active-drain counter allocation.
+Short zero-byte probes do not establish process-wide zero allocation across
+longer yielded waits, even when the optical owners retain their resources.
+
+All six matched GPI2/Classic captured frame and photon-rate snapshots are
+bitwise identical between the stacks. The benchmark retains raw samples,
+histograms, numerical checks, failed attempts, source hashes and environments.
+These are unpaced simulator/HIL service times on an exclusive compute GPU with
+shared host CPU load; they exclude RTC transport and processing. Copper
+coverage comprises the current optical-node cases: its legacy full-application
+benchmark still requires AOS 0.2.1.
+
 Do not treat SSH success, `CUDA.functional()`, or compilation alone as model
 evidence. The test must execute the changed operation.
 
