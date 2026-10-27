@@ -1,0 +1,90 @@
+schema_version = 1
+kind = "dependency allocation qualification"
+date = "2026-10-26"
+source_commit = "d442c46b057e7835a1d435bfa9ed8b67b3eafe19"
+julia = "1.13.3"
+threads = 1
+blas_threads = 1
+omp_threads = 1
+device = "NVIDIA GeForce RTX 3080"
+driver = "615.71.10"
+cuda_runtime = "13.4.0"
+shared_gpu = true
+latency_claim = false
+decision = "Do not upgrade: the registered CUDA 6.5.0 / KA 0.10.3 stack fails existing captured-mode zero-host-allocation gates. All existing dependency pins remain unchanged."
+measurement_boundary = "Warm exact concrete calls through a function barrier; compilation, capture, setup, output allocation, result collection, and numerical-oracle host copies excluded. Completed replay includes graph launch and prepared blocking completion."
+repetitions = 32
+scalar_indexing = false
+gc_enabled = true
+resources_retained = true
+independent_review = "Read-only review confirmed minimal-path attribution and exclusion of harness allocation; no justified AOS bypass or weakened budget."
+receipts = "2026-10-26-cuda65-ka0103/"
+
+[baseline]
+cuda = "6.4.2"
+ka = "0.9.45"
+aoc = "0.17.1"
+cuda_tree = "3da65a61794b3a5c01ef1eb1eb4879da4a594ac3"
+cudacore_tree = "0293a2d0776306cd21fddbf3f02e7bdeb417da5a"
+ka_tree = "e51d16f9dcff134c4ecf79e7cfa764c59d2d648e"
+completed_capture_bytes_each = 0
+blocking_wait_bytes_each = 0
+ordinary_enqueue_bytes_each = 384
+ordinary_completed_launch_bytes_each = 384
+cooperative_wait_bytes_each = 80
+existing_captured_graph_assertions_passed = 12
+existing_captured_graph_assertions_failed = 0
+existing_captured_graph_allocation_budget = 0
+
+[candidate]
+cuda = "6.5.0"
+ka = "0.10.3"
+aoc = "0.17.1"
+cuda_tree = "5ed16a3db0795a0180ac7160e08ab46173827902"
+cudacore_tree = "9d504f23d39a56f827d1da4bfd1580990a28adbb"
+ka_tree = "5b043fe21f471775ed2b40ef447d2d7dd45b2fe5"
+capture_launch_bytes_each = 0
+stream_query_bytes_each = 0
+completed_capture_bytes_each = 32
+blocking_wait_bytes_each = 32
+ordinary_enqueue_bytes_each = 576
+ordinary_completed_launch_bytes_each = 608
+cooperative_wait_bytes_each = 16
+existing_captured_graph_assertions_passed = 11
+existing_captured_graph_assertions_failed = 1
+existing_captured_graph_step_bytes = 96
+existing_captured_graph_allocation_budget = 0
+numerical_replay_checks_passed = true
+exact_buffer_addresses_preserved = true
+profile = "Two 16-byte Core.Box allocations per minimal completed replay, at CUDACore src/resources/lifecycle.jl:276 drain_retired, reached before and after the blocking wait from synchronize_object lines 53 and 72. Captured graph launch and stream query each measured zero. The complete production step's 96 bytes were not separately profiled."
+source_analysis = "drain_retired mutates its outer n binding inside releasing() do. A repair must preserve resource draining, locks, error checks, and releasing's existing return semantics. No dependency source patch was applied or qualified."
+isolated_resource_drain_bytes_each = 16
+isolated_resource_drain_repetitions = 8
+
+[cpu]
+ka = "0.10.3"
+selectors = ["ka-cpu", "algorithm-graphs", "quality"]
+assertions_passed = 2225
+assertions_failed = 0
+testsets = 53
+warnings = 0
+
+[amdgpu]
+runtime = "2.9.2"
+ka = "0.10.3"
+environment_resolved = true
+qualified = true
+compiler_regression_assertions_passed = 7
+hardware_target_assertions_passed = 1004
+assertions_failed = 0
+warnings = 0
+status = "Actual local AMDGPU hardware target passed. Device identity was not printed in this receipt; do not infer performance or qualification of other devices. Existing pins retained because the shared CUDA upgrade gate failed."
+
+[reproduction]
+environment = "Use the retained baseline/candidate Project.toml and Manifest.toml receipts with their local AOS source path bound to the recorded checkout. Instantiate through Pkg; do not edit manifest entries by hand."
+probe = "julia --startup-file=no --threads=1 --project=ENV allocation_probe.jl result.toml"
+attribution = "julia --startup-file=no --threads=1 --project=ENV split_probe.jl"
+isolated_resource_drain = "julia --startup-file=no --threads=1 --project=ENV -e 'using CUDA; drain_bytes()=@allocated CUDA.CUDACore.drain_retired(64); drain_bytes(); @show [drain_bytes() for _ in 1:8]'"
+existing_gate = "julia --startup-file=no --threads=1 --project=ENV -e 'import CUDA; include(\"test/runtests_gpu_target_common.jl\"); require_backend_target!(Backends.CUDABackendTag); @testset \"captured graph allocation gate\" run_captured_graph_execution_smoke(Backends.CUDABackendTag)'"
+cpu = "julia --startup-file=no --threads=1 --project=ENV -e 'using Pkg; Pkg.test(\"AdaptiveOpticsSim\";allow_reresolve=false,test_args=[\"ka-cpu\",\"algorithm-graphs\",\"quality\"])'"
+amdgpu = "julia --startup-file=no --threads=1 --project=ENV test/runtests_amdgpu.jl"

@@ -212,6 +212,18 @@ have different compatibility and allocation behavior. Record exact source
 trees and retain the numerical, zero-allocation, and fixed-storage capture
 gates before adopting a new stack.
 
+The registered CUDA 6.5.0 / KA 0.10.3 pair was checked on Julia 1.13.3 and the
+local RTX 3080. Captured launch alone allocated zero host bytes, but its prepared
+blocking completion allocated 32 bytes; the existing two-node captured graph
+step failed its zero-byte gate at 96 bytes. Allocation profiling attributed the
+minimal completion's two 16-byte boxes to CUDACore's `drain_retired` callback.
+The same completed replay and graph tests passed with CUDA 6.4.2 / KA 0.9.45.
+Keep the existing environment pins until the released stack passes the original
+completion and captured-execution gates. The
+[qualification record](../benchmarks/results/platform/2026-10-26-cuda65-ka0103.toml)
+retains the exact environments, reproducer, and observations. These are
+allocation and correctness checks on a shared GPU, not latency measurements.
+
 Do not treat SSH success, `CUDA.functional()`, or compilation alone as model
 evidence. The test must execute the changed operation.
 
