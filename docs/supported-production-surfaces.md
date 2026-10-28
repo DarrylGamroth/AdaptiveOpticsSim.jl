@@ -56,6 +56,14 @@ Julia 1.13.3 and CUDA 6.4.2, including changing pupil inputs, CPU/stream/replay
 agreement, conservative spectral resampling and reset. This does not qualify
 AMDGPU capture or an instrument's deadline performance.
 
+The streamed external-pupil owner also supports AMDGPU propagation, Float64
+exposure accumulation and post-exposure InGaAs response. The optional
+`test/amdgpu_external_pupil.jl` selector compares these against CPU outputs,
+including scalar/spectral trains and coverage/reset rejection, on Julia 1.13.3,
+AMDGPU 2.9.2 and KA 0.10.1 with scalar indexing disabled. This adds numerical
+backend coverage; it does not qualify capture, multiple-device hardware,
+physical instruments or acquisition rates.
+
 The CPU qualification environment (`test/cpu`) and CPU benchmark environment
 (`benchmarks`) pin KernelAbstractions 0.10.1 and registered AOC 0.17.1.
 KA CPU kernels and algorithm graphs are checked on Julia 1.13.2. This version

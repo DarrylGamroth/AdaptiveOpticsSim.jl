@@ -58,11 +58,11 @@ end
 """
     IntensityExposure
 
-Single-writer CPU storage for duration-weighted relative intensity over exactly
+Single-writer storage for duration-weighted relative intensity over exactly
 covered model intervals. `image` is borrowed output storage; copy an emitted
 image before retaining it across subsequent integrations.
 """
-mutable struct IntensityExposure{A<:Matrix{Float64}}
+mutable struct IntensityExposure{A<:AbstractMatrix{Float64}}
     duration_ns::Int64
     start_ns::Int64
     covered_ns::Int64
@@ -74,15 +74,22 @@ mutable struct IntensityExposure{A<:Matrix{Float64}}
 end
 
 """
-    IntensityExposure(shape, duration::ModelDuration)
+    IntensityExposure(shape, duration::ModelDuration; target=HostComputeDevice())
 
-Create a CPU reference exposure with positive matrix dimensions and a positive
-integer-nanosecond duration. Exposure boundaries align to model time zero.
+Create an exposure on the declared compute device with positive matrix dimensions
+and a positive integer-nanosecond duration. Accumulation uses Float64; exposure
+boundaries align to model time zero.
 """
-function IntensityExposure(shape::Tuple{Int,Int}, duration::ModelDuration)
+function IntensityExposure(shape::Tuple{Int,Int}, duration::ModelDuration;
+        target::AbstractComputeDevice=HostComputeDevice())
     ns=model_nanoseconds(duration)
     ns>0 && all(>(0),shape) || throw(AlgorithmGraphError("exposure duration and shape must be positive"))
-    return IntensityExposure(ns,0,0,0,zeros(Float64,shape),zeros(Float64,shape),UInt64(0),UInt64(0))
+    integrated=allocate_device_array(target,Float64,shape...)
+    image=allocate_device_array(target,Float64,shape...)
+    Backends._with_compute_device(target) do
+        fill!(integrated,0);fill!(image,0)
+    end
+    return IntensityExposure(ns,0,0,0,integrated,image,UInt64(0),UInt64(0))
 end
 
 """
@@ -96,7 +103,9 @@ function reset_intensity_exposure!(exposure::IntensityExposure,time::ModelTimest
     exposure.start_ns=fld(model_nanoseconds(time),exposure.duration_ns)*exposure.duration_ns
     exposure.covered_ns=0
     exposure.next_ns=model_nanoseconds(time)
-    fill!(exposure.integrated,0)
+    Backends._with_compute_device(compute_device(exposure.integrated)) do
+        fill!(exposure.integrated,0)
+    end
     return exposure
 end
 
@@ -106,6 +115,9 @@ function _validate_intensity(intensity)
     end || throw(AlgorithmGraphError("intensity must be real, finite, nonnegative and representable as Float64"))
     return nothing
 end
+
+_scaled_intensity_valid(::Type{T},intensity,scale) where {T} =
+    all(value -> isfinite(T(value*scale)),intensity)
 
 """
     integrate_intensity!(emit, exposure, intensity, timestamp, duration)
@@ -126,8 +138,16 @@ function integrate_intensity!(emit,exposure::IntensityExposure,intensity::Abstra
         timestamp::ModelTimestamp,duration::ModelDuration)
     size(intensity)==size(exposure.image) || throw(DimensionMismatch("intensity exposure shape"))
     Base.require_one_based_indexing(intensity)
+    compute_device(intensity)==compute_device(exposure.image) ||
+        throw(AlgorithmGraphError("intensity and exposure must use the same compute device"))
     (Base.mightalias(intensity,exposure.integrated) || Base.mightalias(intensity,exposure.image)) &&
         throw(AlgorithmGraphError("intensity input must not alias exposure storage"))
+    return Backends._with_compute_device(compute_device(exposure.image)) do
+        _integrate_intensity!(emit,exposure,intensity,timestamp,duration)
+    end
+end
+
+function _integrate_intensity!(emit,exposure,intensity,timestamp,duration)
     _validate_intensity(intensity)
     start=model_nanoseconds(timestamp);span=model_nanoseconds(duration)
     span>0 || throw(AlgorithmGraphError("input coverage must be positive"))
@@ -143,6 +163,9 @@ function integrate_intensity!(emit,exposure::IntensityExposure,intensity::Abstra
         if cursor==boundary
             if exposure.covered_ns==exposure.duration_ns
                 exposure.image .= exposure.integrated ./ exposure.duration_ns
+                # A consumer may copy the borrowed image to the host or submit
+                # a detector graph on another stream. Publish completed pixels.
+                Backends.synchronize_backend!(execution_style(exposure.image))
                 exposure.sequence+=1
                 emit(exposure.image,ModelTimestamp(exposure.start_ns),ModelDuration(exposure.duration_ns),exposure.sequence)
             else
@@ -165,7 +188,7 @@ mutable struct _ExternalPupilState
     rejected::UInt64
 end
 
-"""Prepared CPU graph observations driven by coherent external OPD/amplitude samples.
+"""Prepared graph observations driven by coherent host OPD/amplitude samples.
 
 The graphs use ordinary AOS preparation, stepping and reset. `observations` binds
 one intensity output and sampling node per graph; input names bind the two
@@ -193,14 +216,14 @@ function _validate_observation_response(response, graph, observation, duration)
         :pixel_sampling_m, :exposure_duration_s, :frame_schema), "exposure response")
     response.frame_schema isa AbstractString && !isempty(strip(response.frame_schema)) ||
         throw(AlgorithmGraphError("exposure response requires a nonempty frame_schema"))
-    compute_device(response.graph) == HostComputeDevice() ||
-        throw(AlgorithmGraphError("external pupil response requires a CPU graph"))
+    compute_device(response.graph) == compute_device(graph) ||
+        throw(AlgorithmGraphError("external pupil response must use the optical graph compute device"))
     input = graph_input(response.graph, response.input)
     output = graph_output(response.graph, response.output)
     intensity = graph_output(graph, observation.output)
-    input isa Matrix{<:Union{Float32,Float64}} && size(input) == size(intensity) ||
+    input isa AbstractMatrix{<:Union{Float32,Float64}} && size(input) == size(intensity) ||
         throw(AlgorithmGraphError("response photon-rate input must match the optical grid; no resampling is inferred"))
-    output isa Matrix{<:Union{Float32,Float64}} && size(output) == size(intensity) ||
+    output isa AbstractMatrix{<:Union{Float32,Float64}} && size(output) == size(intensity) ||
         throw(AlgorithmGraphError("response frame must match the optical grid"))
     Base.mightalias(input, output) && throw(AlgorithmGraphError("response input and output must not alias"))
     scale = response.normalized_to_photon_rate
@@ -228,10 +251,14 @@ end
     prepare_external_pupil(graphs; exposure_durations, observations,
         input_names=(opd=:pupil_opd,amplitude=:pupil_amplitude))
 
-Bind a nonempty named tuple of prepared CPU AOS graphs to independent intensity
+Bind a nonempty named tuple of prepared AOS graphs to independent intensity
 exposures. `exposure_durations` contains `ModelDuration` values. Each observation
 is `(output=:intensity,sampling_node=:optics)`, with caller-selected identifiers.
-Pupil ports must be equally shaped Float64 matrices. No detector sampling,
+All optical and response graphs must use the same compute device. Pupil ports
+must be equally shaped Float64 matrices. Validated external host samples are
+staged into each graph; propagation, integration and detector response remain
+on its compute device. Emitted images are borrowed arrays on that device.
+No detector sampling,
 photometry, resampling or pupil registration is inferred.
 
 An observation may additionally declare `response=(graph=..., input=:photon_rate,
@@ -251,8 +278,9 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
     keys(graphs)==keys(exposure_durations)==keys(observations) || throw(AlgorithmGraphError("optical observation names differ"))
     opd=graph_input(first(values(graphs)),input_names.opd)
     amplitude=graph_input(first(values(graphs)),input_names.amplitude)
-    opd isa Matrix{Float64} && amplitude isa Matrix{Float64} && size(opd)==size(amplitude) ||
-        throw(AlgorithmGraphError("CPU external pupil requires equally shaped Float64 OPD and amplitude matrices"))
+    target=compute_device(first(values(graphs)))
+    opd isa AbstractMatrix{Float64} && amplitude isa AbstractMatrix{Float64} && size(opd)==size(amplitude) ||
+        throw(AlgorithmGraphError("external pupil requires equally shaped Float64 OPD and amplitude matrices"))
     for opd_graph in values(graphs),amplitude_graph in values(graphs)
         Base.mightalias(graph_input(opd_graph,input_names.opd),graph_input(amplitude_graph,input_names.amplitude)) &&
             throw(AlgorithmGraphError("external pupil OPD and amplitude buffers must not alias"))
@@ -270,10 +298,10 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
         end
     end
     for (name,graph) in pairs(graphs)
-        compute_device(graph)==HostComputeDevice() || throw(AlgorithmGraphError("external pupil reference requires CPU graphs"))
+        compute_device(graph)==target || throw(AlgorithmGraphError("external pupil graphs must use the same compute device"))
         for input in values(input_names)
             input_buffer=graph_input(graph,input)
-            input_buffer isa Matrix{Float64} && size(input_buffer)==size(opd) || throw(AlgorithmGraphError("external pupil graph inputs differ"))
+            input_buffer isa AbstractMatrix{Float64} && size(input_buffer)==size(opd) || throw(AlgorithmGraphError("external pupil graph inputs differ"))
         end
         intensity=graph_output(graph,getproperty(observations,name).output)
         ndims(intensity)==2 || throw(AlgorithmGraphError("intensity observation must be a matrix"))
@@ -303,8 +331,13 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
     end
     exposures=NamedTuple{keys(graphs)}(map(keys(graphs)) do name
         IntensityExposure(size(graph_output(getproperty(graphs,name),getproperty(observations,name).output)),
-            getproperty(exposure_durations,name))
+            getproperty(exposure_durations,name);target)
     end)
+    # PipeWire packets are host-owned. Keep validation and sanitation outside
+    # accelerator scalar indexing, with one retained staging pair per owner.
+    if target!=HostComputeDevice()
+        opd=zeros(Float64,size(opd));amplitude=zeros(Float64,size(amplitude))
+    end
     return PreparedExternalPupil(graphs,exposures,opd,amplitude,observations,input_names,
         _ExternalPupilState(-1,0,0,nothing,0,0,0))
 end
@@ -313,7 +346,7 @@ end
     step_external_pupil!(emit, prepared, opd, amplitude, timestamp, duration;
         domain, generation, sequence, lost_samples=0)
 
-Validate/copy a coherent external pupil, propagate every ordinary AOS graph,
+Validate/copy a coherent external host pupil, propagate every ordinary AOS graph,
 then integrate intensity. The sample is piecewise constant over its declared
 model interval and cannot exceed the shortest exposure. Sequence/time/loss gaps
 or a newer generation invalidate partial exposures. Duplicate/overlapping and
@@ -326,6 +359,8 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
         domain::NTuple{16,UInt8},generation::UInt64,sequence::UInt64,lost_samples::UInt64=UInt64(0))
     size(opd)==size(amplitude)==size(prepared.pupil_opd) || throw(DimensionMismatch("pupil sample shape"))
     Base.require_one_based_indexing(opd,amplitude)
+    compute_device(opd)==compute_device(amplitude)==HostComputeDevice() ||
+        throw(AlgorithmGraphError("external pupil samples must be host matrices"))
     (Base.mightalias(opd,prepared.pupil_amplitude) || Base.mightalias(amplitude,prepared.pupil_opd)) &&
         throw(AlgorithmGraphError("external pupil samples must not alias the other bound quantity"))
     span=model_nanoseconds(duration);start=model_nanoseconds(timestamp)
@@ -360,16 +395,21 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
         prepared.pupil_opd[index]=a==0 ? 0 : opd[index]
     end
     for (name,graph) in pairs(prepared.graphs)
-        copyto!(graph_input(graph,prepared.input_names.opd),prepared.pupil_opd)
-        copyto!(graph_input(graph,prepared.input_names.amplitude),prepared.pupil_amplitude)
+        _with_prepared_device_execution_context(graph.context) do
+            copyto!(graph_input(graph,prepared.input_names.opd),prepared.pupil_opd)
+            copyto!(graph_input(graph,prepared.input_names.amplitude),prepared.pupil_amplitude)
+        end
         step_graph!(graph)
         intensity=graph_output(graph,getproperty(prepared.observations,name).output)
-        _validate_intensity(intensity)
-        response = _observation_response(getproperty(prepared.observations,name))
-        if response !== nothing
-            target_type = eltype(graph_input(response.graph, response.input))
-            all(value -> isfinite(target_type(value * response.normalized_to_photon_rate)), intensity) ||
-                throw(AlgorithmGraphError("scaled photon rate exceeds response input precision"))
+        _with_prepared_device_execution_context(graph.context) do
+            _validate_intensity(intensity)
+            response = _observation_response(getproperty(prepared.observations,name))
+            if response !== nothing
+                target_type = eltype(graph_input(response.graph, response.input))
+                scale = response.normalized_to_photon_rate
+                _scaled_intensity_valid(target_type,intensity,scale) ||
+                    throw(AlgorithmGraphError("scaled photon rate exceeds response input precision"))
+            end
         end
     end
     for (name,graph) in pairs(prepared.graphs)
@@ -383,7 +423,9 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
                 emit(name,image,metadata)
             else
                 input = graph_input(response.graph, response.input)
-                input .= image .* response.normalized_to_photon_rate
+                _with_prepared_device_execution_context(response.graph.context) do
+                    input .= image .* response.normalized_to_photon_rate
+                end
                 step_graph!(response.graph)
                 emit(name,graph_output(response.graph, response.output),
                     merge(metadata,(;quantity=:detector_frame,frame_schema=response.frame_schema)))
