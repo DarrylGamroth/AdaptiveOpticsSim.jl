@@ -426,6 +426,28 @@ function _multilayer_atmosphere_opd_f32_node(
     )
 end
 
+function _spatial_ao_residual_f32_node(name::Symbol, config::NamedTuple,
+        props::NamedTuple)
+    fields = (:control_cutoff_cycles_per_m, :residual_amplitude, :residual_opd_schema)
+    context = "node '$name' config"
+    for field in fields
+        hasproperty(config, field) || throw(_file_error(context, "missing field '$field'"))
+    end
+    hasproperty(config, :atmosphere_opd_schema) && throw(_file_error(context,
+        "spatial AO residual uses residual_opd_schema, not atmosphere_opd_schema"))
+    rejection = SpatialAORejection(
+        control_cutoff_cycles_per_m=_file_real(config.control_cutoff_cycles_per_m,
+            "$context.control_cutoff_cycles_per_m"),
+        residual_amplitude=_file_real(config.residual_amplitude, "$context.residual_amplitude"))
+    # Reuse the finite atmosphere's strict cold parser and defaults; only the
+    # rejection and scientific output name differ from the raw declaration.
+    atmosphere_config = merge(Base.structdiff(config, NamedTuple{fields}),
+        (atmosphere_opd_schema=config.residual_opd_schema,))
+    atmosphere = _multilayer_atmosphere_opd_f32_node(name, atmosphere_config, props)
+    return algorithm_node(name, SpatialAOResidualNode{Float32},
+        SpatialAOResidualNodeConfig(atmosphere.config, rejection); props)
+end
+
 function _gaussian_deformable_mirror_surface_f32_node(
     name::Symbol,
     config::NamedTuple,
@@ -1569,6 +1591,7 @@ function builtin_graph_node_types()
         second_order_response_f32=_second_order_response_f32_node,
         multilayer_atmosphere_opd_f32=
             _multilayer_atmosphere_opd_f32_node,
+        spatial_ao_residual_f32=_spatial_ao_residual_f32_node,
         pupil_opd_composition_f32=_pupil_opd_composition_f32_node,
         pyramid_rate_f32=_pyramid_rate_f32_node,
         ideal_pupil_relay_f32=_ideal_pupil_relay_f32_node,
