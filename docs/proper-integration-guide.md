@@ -334,10 +334,10 @@ idealized masks require instrument-specific optical validation.
 ## External pupil observations
 
 `AlgorithmGraphs.prepare_external_pupil` binds a named tuple of ordinary prepared
-CPU optical graphs to independent `IntensityExposure` products. This is a
+optical graphs on one compute device to independent `IntensityExposure` products. This is a
 transport-neutral scientific owner, not another graph executor. It uses the
 same `step_graph!` and `reset_graph!` methods as other AOS callers.
-`step_external_pupil!` accepts coherent OPD/amplitude arrays, `ModelTimestamp`
+`step_external_pupil!` accepts coherent host OPD/amplitude arrays, `ModelTimestamp`
 and `ModelDuration`, with an explicit source domain, generation and sequence.
 Adapters own packet formats and convert their receipts to these values.
 
@@ -345,8 +345,13 @@ Each sample declares piecewise-constant coverage. Propagation precedes intensity
 integration; a complete exposure mean is the duration-weighted sum over its
 covered model interval. Missing coverage, sample loss or a newer generation
 invalidates partial exposures; duplicates and overlaps are rejected. Exposure
-origins currently share model time zero. CPU reference input buffers are
-Float64, and no physical photometry or detector response is inferred.
+origins currently share model time zero. Optical graph input buffers are
+Float64. Retained host staging validates incoming samples before uploading to
+each device graph. Propagation, Float64 exposure accumulation and optional
+detector response use the selected device; emitted images are borrowed arrays
+on that device. Graph stepping and completed exposure publication synchronize
+before a consumer can use another stream or copy to the host. No physical
+photometry or detector response is inferred.
 Cross-quantity and input/output aliasing are rejected before execution.
 
 An observation can additionally bind a prepared response graph, with explicit
@@ -373,8 +378,17 @@ authored inputs outside `generated/`.
 gap before adding more data; overlaps and gaps never count as complete coverage.
 Input intensity must be real, finite, nonnegative, representable as Float64, and
 independent of the exposure's accumulation and output storage.
+Use `IntensityExposure(shape, duration; target=...)` for device accumulation;
+input intensity must use that same device. CPU remains the default.
 Its emitted image is borrowed until the next exposure update, so asynchronous
 consumers must copy it.
+
+The optional `test/amdgpu_external_pupil.jl` selector compares CPU and AMDGPU
+scalar/spectral propagation, independent exposure timing, gaps/resets and
+post-exposure detector response with scalar indexing disabled. This streamed
+external-pupil path does not require native graph capture or qualify acquisition
+deadlines. Keep AMDGPU/KA 0.10 validation separate from the existing CUDA/KA 0.9
+pins; see [backend validation](backend-validation-guide.md).
 
 ## Recommended Ownership
 

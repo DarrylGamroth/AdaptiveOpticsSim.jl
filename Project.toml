@@ -1,6 +1,6 @@
 name = "AdaptiveOpticsSim"
 uuid = "002fb5eb-ad68-44a0-adbe-b299bfc2febc"
-version = "0.3.7"
+version = "0.3.8"
 authors = ["AdaptiveOpticsSim.jl Contributors"]
 
 [deps]
@@ -53,7 +53,7 @@ KernelAbstractions = "0.9.42, 0.10"
 LinearAlgebra = "1.9"
 Logging = "1.9"
 Metal = "1"
-Proper = "0.4"
+Proper = "0.4.1"
 Random = "1.9"
 SHA = "0.7, 1"
 SparseArrays = "1.9"
