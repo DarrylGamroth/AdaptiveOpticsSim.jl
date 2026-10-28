@@ -45,6 +45,9 @@ import ..Calibration:
     combine_basis!
 import ..Atmospheres:
     MultiLayerAtmosphereDefinition,
+    SpatialAORejection,
+    _prepare_spatial_ao_rejection,
+    _apply_spatial_ao_rejection!,
     _enqueue_moving_screen_replay!,
     _preflight_atmosphere_replay_step,
     _prepare_moving_screen_replay,

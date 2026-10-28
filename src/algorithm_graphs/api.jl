@@ -15,7 +15,7 @@ export algorithm_node, algorithm_graph, graph_input, graph_output
 export link, delayed_link, sparse_parameter
 export modal_opd_expansion_node
 export second_order_response_node
-export multilayer_atmosphere_opd_node
+export multilayer_atmosphere_opd_node, spatial_ao_residual_node
 export deformable_mirror_surface_node
 export gaussian_deformable_mirror_surface_node
 export grid_gaussian_deformable_mirror_surface_node
@@ -59,6 +59,7 @@ public GraphNodeCaptureSafe, GraphNodeCaptureUnsupported
 public ModalOPDExpansionNode, ModalOPDExpansionNodeConfig
 public SecondOrderResponseNode, SecondOrderResponseNodeConfig
 public MultiLayerAtmosphereOPDNode, MultiLayerAtmosphereOPDNodeConfig
+public SpatialAOResidualNode, SpatialAOResidualNodeConfig
 public DeformableMirrorSurfaceNode, DeformableMirrorSurfaceNodeConfig
 public GaussianDeformableMirrorSurfaceNode
 public GaussianDeformableMirrorSurfaceNodeConfig

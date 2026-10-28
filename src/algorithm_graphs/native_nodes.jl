@@ -204,12 +204,12 @@ function _multilayer_atmosphere_opd_config(
     ::Type{T};
     resolution::Integer,
     telescope_diameter_m::Real,
-    central_obstruction_ratio::Real,
-    pupil_reflectivity::Real,
-    aperture_revision::Integer,
+    central_obstruction_ratio::Real=0,
+    pupil_reflectivity::Real=1,
+    aperture_revision::Integer=0,
     r0::Real,
     reference_wavelength_m::Real,
-    L0::Real,
+    L0::Real=25,
     fractional_cn2,
     wind_speed,
     wind_direction_deg,
@@ -218,8 +218,8 @@ function _multilayer_atmosphere_opd_config(
     atmosphere_step::Real,
     rng_seed::Integer,
     atmosphere_opd_schema::AbstractString,
-    source_separation_arcsec::Real,
-    source_position_angle_deg::Real,
+    source_separation_arcsec::Real=0,
+    source_position_angle_deg::Real=0,
 ) where {T<:AbstractFloat}
     atmosphere_step isa Bool && throw(AlgorithmGraphError(
         "atmosphere_step must be a real duration, not Bool",
@@ -376,6 +376,7 @@ mutable struct _MultiLayerAtmosphereOPDOwner{
     P,
     RNG,
     REPLAY,
+    REJECTION,
     T<:AbstractFloat,
 }
     definition::D
@@ -386,6 +387,7 @@ mutable struct _MultiLayerAtmosphereOPDOwner{
     pupil::P
     rng::RNG
     replay::REPLAY
+    rejection::REJECTION
     atmosphere_step::T
     rng_seed::UInt64
 end
@@ -399,6 +401,12 @@ function prepare_graph_node(
     ::NamedTuple{()},
     target,
 ) where {T}
+    return _prepare_multilayer_atmosphere_opd(config, outputs.atmosphere_opd, target, nothing)
+end
+
+function _prepare_multilayer_atmosphere_opd(config::MultiLayerAtmosphereOPDNodeConfig,
+        output, target, rejection)
+    T = eltype(output)
     telescope = prepare_telescope(config.telescope, target)
     atmosphere = prepare_timed_atmosphere(
         config.atmosphere,
@@ -406,9 +414,11 @@ function prepare_graph_node(
         target,
     )
     renderer = prepare_atmosphere_renderer(atmosphere, telescope, config.source)
-    pupil = PupilFunction(telescope, outputs.atmosphere_opd)
+    pupil = PupilFunction(telescope, output)
     rng = _prepare_graph_rng(target, config.rng_seed)
     advance_by!(atmosphere, zero(T), rng)
+    prepared_rejection = _prepare_spatial_ao_rejection(rejection, atmosphere)
+    _apply_spatial_ao_rejection!(prepared_rejection)
     replay = _prepare_moving_screen_replay(
         atmosphere,
         renderer,
@@ -423,6 +433,7 @@ function prepare_graph_node(
         pupil,
         rng,
         replay,
+        prepared_rejection,
         config.atmosphere_step,
         config.rng_seed,
     )
@@ -506,9 +517,58 @@ end
 function reset_graph_node!(owner::_MultiLayerAtmosphereOPDOwner)
     _reset_graph_rng!(owner.rng, owner.rng_seed)
     _reset_multilayer_atmosphere!(owner.atmosphere, owner.rng)
+    _apply_spatial_ao_rejection!(owner.rejection)
     _reset_moving_screen_replay!(owner.replay)
     fill!(owner.pupil.opd, zero(eltype(owner.pupil.opd)))
     return nothing
+end
+
+struct SpatialAOResidualNode{T<:AbstractFloat} end
+
+"""Cold finite-atmosphere definition and explicit idealized spatial rejection."""
+struct SpatialAOResidualNodeConfig{A,R}
+    atmosphere::A
+    rejection::R
+end
+
+"""
+    spatial_ao_residual_node(name; rejection::SpatialAORejection,
+        residual_opd_schema, T=Float32, atmosphere_keywords...)
+
+Declare an idealized facility-AO residual in metres, independent of any downstream
+DM. Atmosphere keywords are those of `multilayer_atmosphere_opd_node`, except
+`atmosphere_opd_schema`. The sole output is `residual_opd` on native [x,y] axes.
+
+Full periodic layer screens are filtered once after initialization and after
+reset, before pupil extraction. Each step advances by `atmosphere_step` using
+the existing atmosphere RNG/timeline and captured replay; it performs no FFT,
+additional random draw, or RMS normalization. This model supplies no facility
+calibration, WFS noise, temporal servo, or additional command compensation.
+"""
+function spatial_ao_residual_node(name::Symbol; rejection::SpatialAORejection,
+        residual_opd_schema::AbstractString, T::Type{<:AbstractFloat}=Float32,
+        atmosphere_keywords...)
+    haskey(atmosphere_keywords, :atmosphere_opd_schema) && throw(AlgorithmGraphError(
+        "spatial AO residual uses residual_opd_schema, not atmosphere_opd_schema"))
+    config = _multilayer_atmosphere_opd_config(T;
+        atmosphere_opd_schema=residual_opd_schema, atmosphere_keywords...)
+    return algorithm_node(name, SpatialAOResidualNode{T},
+        SpatialAOResidualNodeConfig(config, rejection); props=NamedTuple())
+end
+
+function graph_node_ports(::Type{SpatialAOResidualNode{T}},
+        config::SpatialAOResidualNodeConfig) where {T}
+    atmosphere = config.atmosphere
+    n = atmosphere.telescope.resolution
+    return (graph_port_contract(:residual_opd, :output, :data, T, (n, n),
+        atmosphere.atmosphere_opd_schema, :column_major),)
+end
+
+function prepare_graph_node(::Type{SpatialAOResidualNode{T}},
+        config::SpatialAOResidualNodeConfig, ::NamedTuple{()}, ::NamedTuple{()},
+        outputs::NamedTuple{(:residual_opd,)}, ::NamedTuple{()}, target) where {T}
+    return _prepare_multilayer_atmosphere_opd(config.atmosphere,
+        outputs.residual_opd, target, config.rejection)
 end
 
 struct DeformableMirrorSurfaceNode{T<:AbstractFloat} end

@@ -483,6 +483,7 @@ The built-in type map currently contains `detector`, `pixel_mtf`,
 `modal_opd_expansion_f32`,
 `second_order_response_f32`,
 `multilayer_atmosphere_opd_f32`,
+`spatial_ao_residual_f32`,
 `pupil_opd_composition_f32`,
 `pyramid_rate_f32`,
 and `shack_hartmann_rate_f32`.
@@ -495,6 +496,43 @@ caller-supplied named tuple used by inputs and sparse parameters. Cold factories
 must convert these bindings into the native node's configuration ownership;
 the binding tuple does not become execution state. Detector factories use
 `(name, config, props; detector)` with the scientific selector as a keyword.
+
+### Idealized spatial AO residual
+
+`spatial_ao_residual_node` declares an independent simplified facility-AO
+residual. It accepts the finite multilayer-atmosphere keywords plus an explicit
+`Atmospheres.SpatialAORejection` and `residual_opd_schema` instead of
+`atmosphere_opd_schema`. The sole output is `residual_opd` in metres on native
+`[x,y]` axes. A downstream physical DM remains a separate node and command path.
+
+The YAML type `spatial_ao_residual_f32` accepts the raw finite-atmosphere fields,
+replaces `atmosphere_opd_schema` with `residual_opd_schema`, and additionally
+requires `control_cutoff_cycles_per_m` and `residual_amplitude`. No rejection
+strength or facility calibration is inferred. Each full 3N×3N periodic layer
+screen is filtered before pupil extraction:
+
+```text
+φ_res = Re IFFT(H FFT(φ))
+H(0) = 0; H(f) = a for 0 < ‖f‖ ≤ f_c; H(f) = 1 above f_c.
+```
+
+The dimensionless amplitude fraction `a` lies in [0,1]; its PSD fraction is a².
+Physical frequencies use the full screen sampling Δ = telescope_diameter_m/N,
+not cycles per array element or per detector pixel. The cutoff must be positive
+and no greater than 1/(2Δ). This real-even filter is applied once during
+preparation and after each reset, using retained backend FFT workspace. It
+adds no per-step FFT or RNG consumption. Moving-screen wind, source direction,
+model-time cadence, captured replay and seeded reset retain their ordinary
+semantics: each invocation publishes the next `atmosphere_step` epoch.
+
+This is an instantaneous noiseless spatial model, not a facility fit or temporal
+closed loop. Hard-cutoff ringing, finite periodic-screen recurrence and existing
+bilinear interpolation remain explicit limitations. Full-screen piston removal
+does not remove the mean of each pupil crop. No per-frame RMS normalization is
+applied. Ordinary and captured execution require backend parity tests; seeded
+random realizations are reproducible on a backend, not promised bit-identical
+across backends. A sampled residual does not qualify an instrument's sensor
+observability, calibrated operating range, noisy-loop science or deadlines.
 
 Detector nodes use a short scientific selector rather than a Julia implementation
 name:
