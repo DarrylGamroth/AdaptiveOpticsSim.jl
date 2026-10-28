@@ -1,7 +1,9 @@
 """
 Geometry for one-sided infinite-screen boundary injection.
 
-The coordinate matrices are geometry coordinates, not Julia array indices.
+The coordinate matrices are `(x,y)` geometry coordinates. Native optical
+arrays are indexed `[x,y]`; the boundary names `column` and `row` describe
+geometric x-normal and y-normal boundaries, respectively.
 Interior stencil coordinates live on the positive side of the boundary and the
 boundary coordinates lie exactly one pixel outside the maintained screen.
 """

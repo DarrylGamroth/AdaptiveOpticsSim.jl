@@ -1,3 +1,8 @@
+@testset "Atmosphere physical axes" begin
+    atmosphere_axis_checks(CPUBackend(), Array, ScalarCPUStyle();
+        kernel_style=KA_CPU_STYLE)
+end
+
 function rendered_atmosphere_opd(atm::AbstractTimedAtmosphere,
     tel::Telescope,
     src::Union{AdaptiveOpticsSim.Optics.AbstractSource,Nothing}=nothing)
@@ -762,7 +767,7 @@ end
 
     function fill_x_ramp!(screen::AbstractMatrix)
         @inbounds for j in axes(screen, 2), i in axes(screen, 1)
-            screen[i, j] = j
+            screen[i, j] = i
         end
         return screen
     end
@@ -962,7 +967,7 @@ end
     render_atmosphere!(pupil, renderer, atm, current_epoch(atm))
     @test size(second) == (16, 16)
     @test sum(abs, pupil.opd) > 0
-    @test second[:, 2:end] ≈ first[:, 1:end-1]
+    @test second[2:end, :] ≈ first[1:end-1, :]
 
     stationary = MultiLayerAtmosphere(tel;
         r0=0.2,
@@ -992,8 +997,8 @@ end
     for _ in 1:4
         advance_by!(subpixel, TEST_ATMOSPHERE_STEP; rng=MersenneTwister(5))
     end
-    @test unmasked_atmosphere_opd(subpixel, tel)[:, 2:end] ≈
-        subpixel_first[:, 1:end-1]
+    @test unmasked_atmosphere_opd(subpixel, tel)[2:end, :] ≈
+        subpixel_first[1:end-1, :]
 
     function ensemble_std(fractions; nsamp::Int=16)
         acc = 0.0

@@ -37,7 +37,7 @@ const DETECTOR_TEST_SUITE_NAMES = (
 # `Pkg.test()` remains the deterministic composition gate.
 const TEST_SUITE_SPECS = (
     TestSuiteSpec("ka-cpu", "ka_cpu_matrix.jl";
-        fixtures=("ka_cpu_style_fixture.jl",)),
+        fixtures=("ka_cpu_style_fixture.jl", "atmosphere_axes.jl")),
     TestSuiteSpec("tomography", "tomography.jl"),
     TestSuiteSpec("quality", "testsets/quality.jl"),
     TestSuiteSpec(
@@ -69,7 +69,8 @@ const TEST_SUITE_SPECS = (
         "testsets/direct_imaging_batch.jl",
         fixtures=("wfs_stage_contract_fixtures.jl",),
     ),
-    TestSuiteSpec("atmosphere", "testsets/atmosphere.jl"),
+    TestSuiteSpec("atmosphere", "testsets/atmosphere.jl";
+        fixtures=("ka_cpu_style_fixture.jl", "atmosphere_axes.jl")),
     TestSuiteSpec(
         "atmosphere-direction-batch",
         "testsets/atmosphere_direction_batch.jl",

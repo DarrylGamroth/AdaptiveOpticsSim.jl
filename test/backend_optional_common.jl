@@ -2,6 +2,10 @@ if !isdefined(@__MODULE__, :assert_prepared_device_execution_context_conformance
     include(joinpath(@__DIR__, "backend_execution_context_conformance.jl"))
 end
 
+if !isdefined(@__MODULE__, :atmosphere_axis_checks)
+    include(joinpath(@__DIR__, "atmosphere_axes.jl"))
+end
+
 backend_package_name(::Type{AdaptiveOpticsSim.Backends.CUDABackendTag}) = "CUDA"
 backend_package_name(::Type{AdaptiveOpticsSim.Backends.AMDGPUBackendTag}) = "AMDGPU"
 
@@ -3384,6 +3388,10 @@ function run_optional_backend_smoke(::Type{B}) where {B<:AdaptiveOpticsSim.Backe
     AdaptiveOpticsSim.Backends.disable_scalar_backend!(B)
     backend = AdaptiveOpticsSim.Backends.gpu_backend_array_type(B)
     @test backend !== nothing
+    @testset "Atmosphere physical axes: $(backend_label(B))" begin
+        style = execution_style(backend(zeros(Float32, 1)))
+        atmosphere_axis_checks(backend_selector(B), backend, style; T=Float32)
+    end
     run_optional_exact_compute_device_checks(B, backend)
     run_optional_backend_selector_smoke(B, backend)
     run_optional_lgs_convolution_normalization(B)

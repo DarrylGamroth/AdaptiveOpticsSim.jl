@@ -735,24 +735,24 @@ end
             start_x = normalize_start_coordinate(start_x, m)
             start_y = normalize_start_coordinate(start_y, m)
 
-            y = start_y + scale * T(i - 1)
+            y = start_y + scale * T(j - 1)
             y0 = unsafe_trunc(Int, floor(y))
             fy = y - T(y0)
             wy0 = one(T) - fy
             iy0 = wrap_upper_index(y0, m)
             iy1 = wrap_upper_index(y0 + 1, m)
 
-            x = start_x + scale * T(j - 1)
+            x = start_x + scale * T(i - 1)
             x0 = unsafe_trunc(Int, floor(x))
             fx = x - T(x0)
             wx0 = one(T) - fx
             ix0 = wrap_upper_index(x0, m)
             ix1 = wrap_upper_index(x0 + 1, m)
 
-            v00 = screen[iy0, ix0]
-            v01 = screen[iy0, ix1]
-            v10 = screen[iy1, ix0]
-            v11 = screen[iy1, ix1]
+            v00 = screen[ix0, iy0]
+            v01 = screen[ix1, iy0]
+            v10 = screen[ix0, iy1]
+            v11 = screen[ix1, iy1]
             sample = opd_scale * (
                 wy0 * (wx0 * v00 + fx * v01) +
                 fy * (wx0 * v10 + fx * v11)

@@ -240,8 +240,8 @@ function layer_source_geometry(src::AbstractSource, layer_altitude::Real,
     x_arcsec, y_arcsec, height_m = source_geometry_signature(src, T)
     altitude_t = T(layer_altitude)
     arcsec_to_rad = T(pi / (180 * 3600))
-    shift_x = x_arcsec * arcsec_to_rad * altitude_t / T(sampling_m[2])
-    shift_y = y_arcsec * arcsec_to_rad * altitude_t / T(sampling_m[1])
+    shift_x = x_arcsec * arcsec_to_rad * altitude_t / T(sampling_m[1])
+    shift_y = y_arcsec * arcsec_to_rad * altitude_t / T(sampling_m[2])
 
     footprint_scale = one(T)
     if isfinite(height_m)
