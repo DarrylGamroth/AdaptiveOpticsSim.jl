@@ -492,6 +492,16 @@ data; otherwise reuse the frozen `generated/optics/glasses.yaml` snapshot for
 standalone recipes. Graph-bearing definitions with version-2 component recipes
 use their explicit hashed catalogs and preserve raw authored graph documents.
 Use `yamlfmt=nothing` to write ordered YAML without an external formatter.
+
+Standalone simulation definitions may add `preparation.variants`, a mapping of at most
+16 lower-case names (at most 64 bytes) to `(branch, settings)` mappings. Each
+branch must name an existing physical optical path. Settings strictly override
+declared simulation defaults, while conversion, spectral/filter routing and
+physical mask-port selection retain that base branch. Variants produce separate
+named graphs under `generated/` and are included in execution and provenance.
+They do not modify the conversion recipe or the base graphs. For example,
+`variants.scc_unfringed = {branch: scc, settings: {masks: {lyot: {circles: [...]}}}}`
+declares explicit static mask geometry; no reference aperture is inferred.
 """
 function prepare end
 
@@ -500,6 +510,8 @@ function prepare end
 
 Validate frozen Zemax preparation and replan optical graphs for selected cold
 settings in memory. Authored files and generated snapshots remain unchanged.
+Declared static variants reapply their authored overrides to those selected
+settings and remain bound to their base physical branch.
 Load YAML.jl to activate this preparation boundary.
 """
 function execution_graphs end
