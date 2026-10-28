@@ -7,5 +7,6 @@ include("../external_pupil_contract.jl")
         (resolution=8, diameter_m=0.01, wavelength_um=1.55, steps=()), (;))
 end
 include("../test_proper_optical_train.jl")
+include("runtime_opd.jl")
 include("external_pupil.jl")
 include("external_pupil_chopping.jl")

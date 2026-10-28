@@ -15,9 +15,10 @@ const BranchDocument = Dict{String,Union{Int,String,Vector{Int},Vector{String},V
 const SourceDocument = Dict{String,Union{Int,String}}
 const InspectionDocument = Dict{String,Union{Int,String,Vector{Int},SourceDocument,Vector{BranchDocument},Vector{String}}}
 const CircleDocument = Dict{String,Union{Int,Float64}}
-const StepDocument = Dict{String,Union{String,Float64,Vector{Float64},Vector{CircleDocument}}}
+const StepDocument = Dict{String,Union{Int,String,Float64,Vector{Int},Vector{Float64},Vector{CircleDocument}}}
 const ChannelDocument = Dict{String,Union{Float64,Vector{StepDocument}}}
-const TrainConfiguration = Dict{String,Union{Int,Float64,Vector{StepDocument},Vector{ChannelDocument}}}
+const GridDocument = Dict{String,Union{Vector{Int},Vector{Float64}}}
+const TrainConfiguration = Dict{String,Union{Int,Float64,Vector{StepDocument},Vector{ChannelDocument},GridDocument}}
 const PortDocument = Dict{String,String}
 const TrainNode = Dict{String,Union{String,TrainConfiguration,PortDocument}}
 const TrainDocument = Dict{String,Union{Int,String,Vector{TrainNode},Vector{PortDocument}}}
@@ -526,7 +527,8 @@ activate this optional document validation.
 function validate_provenance end
 
 """
-    prepare_component(root, recipe, branch; settings, diameter_m, frozen=false)
+    prepare_component(root, recipe, branch; settings, diameter_m, frozen=false,
+                      phase_screens=(), pupil_grid=nothing)
 
 Resolve a selected ZEMAX subsystem into native PROPER node configuration for
 composition inside an ordinary simulation graph. The version-2 recipe selects
@@ -535,6 +537,10 @@ catalog hashes are checked on every cold preparation; no files are written.
 With `frozen=true`, validate generated provenance and use its resolved ZMX and
 glass snapshots while recomputing the configuration for the selected settings
 and incident diameter. Missing or stale preparation raises an error.
+Optional `phase_screens` declare runtime OPD inputs by active surface ID, source
+`size`, `axes`, `diameter_m`, `schema` and `outside_opd_m`. Optional `pupil_grid`
+declares entrance `size`, `axes` and `diameter_m`. Both derive native physical
+sampling and fractional pixel centers; no sampled arrays enter this boundary.
 Load YAML.jl to activate this optional boundary.
 """
 function prepare_component end

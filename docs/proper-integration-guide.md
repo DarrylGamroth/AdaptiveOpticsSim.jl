@@ -80,6 +80,7 @@ always the square propagation grid. Each scalar operation optionally accepts
 | `multiply` | field `amplitude` in [0,1] |
 | `circular_mask` | `mode: transmit` or `reflect`; `circles` containing positive `radius_m`, `x_m`, `y_m` |
 | `sampled_mask` | Cold `amplitude` binding role, optional `phase` role in radians, `sampling_m: [dy,dx]`, `center_pixel: [row,column]`, `outside_amplitude`, and `outside_phase_rad` |
+| `add_opd` | Runtime `input` port name, `name`, `size`, `axes`, `sampling_m`, `center_pixel`, `schema`, and `outside_opd_m`; see below |
 
 Circle coordinates are in metres in the current optical plane: x increases
 with columns and y with rows; the origin is sample `fld(resolution,2)+1` on
@@ -96,6 +97,66 @@ Preparation performs bilinear interpolation of complex transmission at the
 actual plane sampling, with the explicit outside field contributing per neighbor.
 It does not interpolate phase angles or apply antialias filtering. Source
 arrays and files can be released after construction. Stepping performs no I/O.
+
+Runtime sampled OPD steps add changing real OPD maps in metres at explicit
+positions in a scalar train. They use graph inputs, with at most 64 distinct
+roles; each role is used by one step and cannot replace an existing train port.
+For example, a native AOS `[x,y]` input is declared as:
+
+```yaml
+- op: add_opd
+  name: tweeter OPD
+  input: tweeter_opd
+  size: [240, 240]
+  axes: [2, 1]
+  sampling_m: [0.00007333333333333333, 0.00007333333333333333]
+  center_pixel: [120.5, 120.5]
+  schema: example.dm-opd-metres/1
+  outside_opd_m: 0
+```
+
+`size` gives the original input dimensions. `axes` explicitly permutes them to
+Proper `(y,x)` order and must be `[1,2]` or `[2,1]`. Physical sample pitches
+`sampling_m: [dy,dx]` are finite and positive, and `center_pixel: [row,column]`
+locates the optical axis in that permuted grid. Each input sample at `(i,j)` is
+therefore at `((i-center_row)*dy,(j-center_column)*dx)` in metres. The schema is
+an explicit nonempty string; input precision follows the train.
+
+Cold preparation traces the train and freezes bilinear interpolation at each
+step's actual Proper sampling. Outside neighbors contribute the declared finite
+`outside_opd_m`. Execution interpolates OPD values, then applies
+`cis(2π·OPD/λ)` to the retained complex wavefront with no extra reflection factor
+or sign reversal. It performs no input snapshot or propagation restart. Input
+values may change between completed steps; their bindings and geometry remain
+fixed until preparation is repeated. Supplying a correction both at the entrance
+and through `add_opd` applies it twice.
+
+Runtime OPD steps currently require the host compute device and a scalar train
+without `channels` or `output_sampling_m`; other combinations are rejected during
+cold construction or preparation. Trains with runtime OPD steps or `pupil_grid`
+admit at most 256 total optical steps. They do not declare measured optical
+registration or a wavefront-sensor handoff.
+
+The optional `pupil_grid` configuration declares a sampled entrance pupil grid
+for both entrance OPD and field amplitude. This is useful when the source arrays
+use native AOS `[x,y]` axes or an optical axis between samples:
+
+```yaml
+pupil_grid:
+  size: [240, 240]
+  axes: [2, 1]
+  sampling_m: [0.00016666666666666666, 0.00016666666666666666]
+  center_pixel: [120.5, 120.5]
+```
+
+`size` must match the current square `pupil_resolution` entrance ports.
+`axes`, `sampling_m` and `center_pixel` have the same explicit physical meanings
+as runtime OPD steps. One cold bilinear mapping samples the real OPD and real
+field amplitude separately, with zero outside support, before Proper forms the
+complex entrance field. These declarations describe sampling at the existing
+entrance plane. Omitting `pupil_grid` preserves the direct padding convention.
+The option works with or without runtime OPD steps and currently requires a
+scalar host train without `channels` or `output_sampling_m`.
 
 The shared instrument loader supports physical `optical_masks.<name>.<port>`
 responses for `transmitted` and `reflected` ports. Each response declares

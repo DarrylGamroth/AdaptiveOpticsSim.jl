@@ -20,7 +20,7 @@ function component_aperture(s)
 end
 
 function component_train(branch, first_surface, last_surface, initial_direction,
-        powered_mirrors, settings, glasses, diameter_m)
+        powered_mirrors, settings, glasses, diameter_m; phase_screens=())
     all_surfaces = branch["active_surfaces"]
     ids = Int[s["id"] for s in all_surfaces]
     issorted(ids) && length(unique(ids)) == length(ids) ||
@@ -44,6 +44,8 @@ function component_train(branch, first_surface, last_surface, initial_direction,
             only(matches)["curvature_inv_m"] != 0 ||
             throw(ArgumentError("powered_mirrors entry $id must select an active curved mirror"))
     end
+    all(screen -> screen.surface in ids && first_surface <= screen.surface <= last_surface,
+        phase_screens) || throw(ArgumentError("phase screens must select active surfaces inside the component"))
     steps = StepDocument[]
     diagnostics = Dict{String,Matrix{Float64}}()
     matrix = Matrix{Float64}(I, 2, 2)
@@ -90,6 +92,13 @@ function component_train(branch, first_surface, last_surface, initial_direction,
             radius > 0 && push!(steps, step("circular_aperture", "$(label)_clear_aperture"; radius_m=radius))
         end
         diagnostics[string(id)] = copy(matrix)
+        for screen in phase_screens
+            screen.surface == id || continue
+            push!(steps, step("add_opd", "$(label)_$(screen.input)";
+                input=screen.input, size=collect(screen.size), axes=collect(screen.axes),
+                sampling_m=collect(screen.sampling_m), center_pixel=collect(screen.center_pixel),
+                schema=screen.schema, outside_opd_m=screen.outside_opd_m))
+        end
         id == last_surface && break
         distance = direction * s["thickness_m"] / n
         isfinite(distance) || throw(ArgumentError("nonfinite propagation distance at surface $id"))
