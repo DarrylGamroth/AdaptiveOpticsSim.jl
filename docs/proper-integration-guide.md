@@ -210,11 +210,15 @@ metadata and do not turn automatic surface footprints into apertures. Inspection
 does not run a ray trace. Configuration numbers belong to the authored recipe.
 
 For a subsystem inside a larger simulation, use
-`Optics.Zemax.prepare_component(root, recipe, branch; settings, diameter_m)`.
+`Optics.Zemax.prepare_component(root, recipe, branch; settings, diameter_m, frozen=false)`.
 It returns native PROPER `config`, reduced-angle `diagnostics` matrices at the
 selected surfaces, exact input `sources` hashes and explicit `assumptions`.
 It checks the instrument's original ZMX and the recipe's AGF inputs at every cold
 preparation. It writes no files and needs YAML, without requiring Proper or RTC.
+With `frozen=true`, it validates generated provenance and reads the resolved ZMX
+and glass snapshots. It still evaluates the original recipe for the selected
+resolution, pupil resolution, wavelength, temperature and incident diameter.
+Missing or stale generated data raises a regeneration error.
 The caller puts the configuration into an ordinary `proper_optical_train_f32` or
 `proper_optical_train_f64` node alongside its other components.
 
@@ -248,6 +252,23 @@ direction; reflection reverses `d`. Translation is `d Δz/n`. Manual circular
 apertures are retained; transverse tilts/decenters, conic aberrations and other
 aperture shapes are explicitly omitted. These are centered scalar reference
 models, requiring optical validation before scientific performance claims.
+
+A graph-bearing authored `simulation/definition.yaml` can declare these
+preparations inside its `components`. `Optics.Zemax.prepare(root)` then writes
+`generated/optics/{resolved,glasses,provenance}.yaml`, `generated/simulation.yaml`,
+and `generated/<mode>.yaml` for every authored mode. File graph paths are relative
+to the instrument root; inline graph mappings are also supported. Generated mode
+files contain the raw symbolic graph, including references that the runtime
+resolves from selected settings, profiles, responses and components. The generated
+execution definition preserves the source sections, changes graph paths to their
+generated copies, identifies `../simulation/definition.yaml` through
+`optical_model: {format: zemax, source: ../simulation/definition.yaml}`, and makes
+its instrument reference relative to the generated definition. Source files are
+never rewritten. Multiple imported components can use distinct recipes and
+branches from the same physical prescription. The resolved snapshot includes the
+union of selected configurations; the version-2 glass snapshot stores each
+recipe's ordered catalog selection independently. Explicit catalog hashes supply
+this mode's glass inputs, so `catalog_dir` is unnecessary.
 
 The following standalone workflow remains useful when the complete authored
 definition consists of optical paths rather than importing one subsystem.
@@ -318,12 +339,17 @@ port to that backend mode. The generated `generated/optics/provenance.yaml`
 receipt hashes the exact authored and frozen snapshot source set, selected graphs,
 and a distinct `execution: {path, sha256}` entry for `generated/simulation.yaml`.
 `Optics.Zemax.validate_provenance(root)` reads frozen artifacts and checks those
-hashes without regenerating files or invoking a formatter.
+hashes and compares parsed generated graph and execution content with their
+deterministic source-derived documents. Updating a receipt hash alone cannot
+admit changed generated topology or execution settings. Validation never
+regenerates files or invokes a formatter.
 
 Run the instrument's `tools/prepare-proper.jl <instrument>` wrapper; supply
 `--catalog-dir <extracted-catalogs>` when regenerating glass data. Standalone
-`yamlfmt` formats generated documents; do not edit them directly. `inspect` and
-`write_inspection` remain available for standalone inspection.
+`yamlfmt` formats generated documents; programmatic callers can use
+`yamlfmt=nothing` to write ordered YAML without an external formatter. Do not edit
+generated documents directly. `inspect` and `write_inspection` remain available
+for standalone inspection.
 
 Conversion is centered and paraxial: STANDARD refraction, flat TILTSURF surfaces,
 signed axial coordinate breaks, and explicitly selected input-lens and OAP
