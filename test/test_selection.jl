@@ -252,6 +252,7 @@ const TEST_CI_SHARD_SPECS = (
         "prepared-execution-interfaces",
         "execution-strategies",
         "algorithm-graphs",
+        "zemax",
         "second-order-response",
         "output-snapshot",
         "backend-prepared-multiplication",
