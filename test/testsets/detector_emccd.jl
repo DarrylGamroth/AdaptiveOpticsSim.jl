@@ -476,3 +476,77 @@ end
         efficiency * signal /
         sqrt(efficiency * (signal + dark + cic))
 end
+
+@testset "EMCCD mean output charge and Poisson truncation" begin
+    clipped = EMCCDSensor(excess_noise_factor=sqrt(2.0))
+    deterministic = EMCCDSensor()
+    gamma_sensor = EMCCDSensor(excess_noise_factor=1.4,
+        multiplication_model=ConditionalGammaMultiplication())
+    conventional = EMCCDSensor(output_path=ConventionalOutput(),
+        register_full_well=1.0)
+    @test emccd_mean(0, clipped) ==
+        (mean_electrons=0.0, truncation_bound_electrons=0.0)
+    @test emccd_mean(3, deterministic; dark_electrons=2, gain=10) ==
+        (mean_electrons=50.0, truncation_bound_electrons=0.0)
+    @test emccd_mean(1000, gamma_sensor; gain=20) ==
+        (mean_electrons=20000.0, truncation_bound_electrons=0.0)
+    @test emccd_mean(3, conventional; dark_electrons=2, gain=20) ==
+        (mean_electrons=5.0, truncation_bound_electrons=0.0)
+    @test emccd_mean(2, EMCCDSensor(clock_induced_charge_per_frame=1.0)) ==
+        emccd_mean(1, deterministic; dark_electrons=2)
+    @test emccd_mean(2, EMCCDSensor(clock_induced_charge_per_frame=1.0);
+        cic_electrons=0.5).mean_electrons == 2.5
+    @test AdaptiveOpticsSim.Detectors._emccd_clipping_bias(1, 1.0) ≈
+        0.0833154705876863 rtol=2e-14
+    @test AdaptiveOpticsSim.Detectors._emccd_clipping_bias(0, 1.0) == 0
+    # An independent high-precision full conditional-mean sum tests truncation
+    # both below and above the Poisson mode, including means far beyond cutoff.
+    for λ in (0.1, 1.0, 8.0, 64.0, 1000.0), cutoff in (1, 8, 64)
+        reference = setprecision(256) do
+            l = BigFloat(λ)
+            probability = exp(-l)
+            total = zero(l)
+            for k in 1:2048
+                probability *= l / k
+                z = sqrt(BigFloat(k))
+                conditional = k * erfc(-z / sqrt(BigFloat(2))) / 2 +
+                    z * exp(-BigFloat(k) / 2) / sqrt(2big(pi))
+                total += probability * conditional
+            end
+            total
+        end
+        result = emccd_mean(λ, clipped; poisson_cutoff=cutoff)
+        roundoff = 32eps(Float64) * max(λ, 1)
+        @test result.mean_electrons <= reference + roundoff
+        @test reference - result.mean_electrons <=
+            result.truncation_bound_electrons + roundoff
+        @test result.truncation_bound_electrons > 0
+    end
+    @test emccd_mean(1000, clipped).mean_electrons ≈ 1000
+    @test emccd_mean(8, clipped; poisson_cutoff=64).truncation_bound_electrons <
+        emccd_mean(8, clipped; poisson_cutoff=8).truncation_bound_electrons
+    for bad in (-1, NaN, Inf)
+        @test_throws InvalidConfiguration emccd_mean(bad, clipped)
+        @test_throws InvalidConfiguration emccd_mean(1, clipped; dark_electrons=bad)
+        @test_throws InvalidConfiguration emccd_mean(1, clipped; cic_electrons=bad)
+    end
+    @test_throws InvalidConfiguration emccd_mean(1, clipped; gain=0)
+    @test_throws InvalidConfiguration emccd_mean(1, clipped; poisson_cutoff=0)
+    @test_throws InvalidConfiguration emccd_mean(1,
+        EMCCDSensor(register_full_well=100.0))
+    @test_throws InvalidConfiguration emccd_mean(1,
+        EMCCDSensor(operating_mode=PhotonCountingEMMode(threshold=1.0)))
+    # Native CPU stochastic acquisition checks the same conditional model.
+    # UInt16 ADC/readout statistics are a downstream, separately bounded step.
+    for (index, λ) in enumerate((0.0, 0.1, 1.0, 3.0, 7.0))
+        sensor = EMCCDSensor(excess_noise_factor=sqrt(2f0),
+            clock_induced_charge_per_frame=0.000828f0, T=Float32)
+        detector = Detector(exposure_duration=1.0, qe=1.0,
+            noise=NoisePhoton(), gain=5000.0, sensor=sensor, T=Float32)
+        samples = capture!(detector, fill(Float32(λ), 512, 512);
+            rng=Xoshiro(7100 + index))
+        predicted = emccd_mean(λ, detector.params.sensor; gain=5000)
+        sem = std(Float64.(samples)) / sqrt(length(samples))
+        @test abs(mean(Float64.(samples)) - predicted.mean_electrons) <= 6sem
+    end
+end

@@ -11,6 +11,7 @@ using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
 using LinearAlgebra
 using Random
+using SpecialFunctions: erfc, loggamma
 using Statistics
 
 import ..AdaptiveOpticsSim:

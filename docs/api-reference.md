@@ -132,6 +132,15 @@ capture, and `prepare_detector_acquisition` for a prepared acquisition path.
 Shutter, sampling, response, defects, persistence, thermal, and readout models
 are explicit values.
 
+`emccd_mean(signal_electrons, sensor; dark_electrons=0,
+cic_electrons=sensor.clock_induced_charge_per_frame, gain=1,
+poisson_cutoff=64)` returns `mean_electrons` and
+`truncation_bound_electrons` for independent Poisson charge and the configured
+linear EMCCD multiplication model. It includes the clipped-Gaussian model's
+positive clipping bias; Gamma and conventional output means are exact. This
+scalar statistic excludes saturation, read noise and ADC. Its Poisson
+truncation bound is separate from floating-point and RNG approximation error.
+
 `pixel_mtf_transfer(shape; box_width_pixels, diffusion_variance_pixels2,
 ipc_per_neighbor, T)` builds an explicit corner-origin, unit-DC frequency
 response. `prepare_pixel_mtf(input, transfer; padding, output)` binds that

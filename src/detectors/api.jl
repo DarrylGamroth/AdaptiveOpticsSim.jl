@@ -4,7 +4,7 @@ export NoiseModel, NoiseNone, NoisePhoton, NoiseReadout, NoisePhotonReadout
 export AbstractSensor, CCDSensor, CMOSSensor, EMCCDSensor, InGaAsSensor
 export HgCdTeSensor
 export LinearEMMode, PhotonCountingEMMode, EMOutput, ConventionalOutput
-export emccd_snr
+export emccd_snr, emccd_mean
 export SequentialAcquisition, FrameTransferAcquisition
 export HgCdTeAvalancheArraySensor
 export SPADArraySensor, MKIDArraySensor, MKIDArrayCharacteristics
