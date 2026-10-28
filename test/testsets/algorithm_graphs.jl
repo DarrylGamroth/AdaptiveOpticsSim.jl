@@ -2250,6 +2250,8 @@ end
         :multilayer_atmosphere_opd_f32,
         :pupil_opd_composition_f32,
         :pyramid_rate_f32,
+        :ideal_pupil_relay_f32,
+        :ideal_pupil_relay_f64,
         :shack_hartmann_rate_f32,
     )
 
