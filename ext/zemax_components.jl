@@ -70,6 +70,14 @@ function component_catalogs(root, references)
     return glasses
 end
 
+# YAML sequences can decode as Vector{Any}, including mixed integer/float
+# coefficients. Restore the same bounded storage used by the AGF parser.
+function frozen_glass(document)
+    return GlassDocument(key => (key == "raw_records" ? String[item for item in value] :
+        key in ("CD", "TD", "LD") ? Float64[item for item in value] : value)
+        for (key, value) in document)
+end
+
 function component_settings(settings, diameter_m)
     model_fields(settings, ("resolution", "pupil_resolution", "wavelength_um", "temperature_c"), "component settings")
     resolution = model_integer(settings["resolution"], "resolution"; minimum=1)
@@ -90,26 +98,139 @@ function component_settings(settings, diameter_m)
         "temperature_c" => Float64(settings["temperature_c"]))
 end
 
-function Zemax.prepare_component(root::AbstractString, recipe::AbstractString, branch::AbstractString;
-        settings, diameter_m)
-    root = realpath(root)
-    selected_settings = component_settings(settings, diameter_m)
-    instrument_path = optical_path(root, "instrument.yaml"; generated=false)
-    instrument = read_zemax_yaml(instrument_path)
-    instrument isa AbstractDict || throw(ArgumentError("instrument must be a mapping"))
+function component_prescription(root, instrument)
     reference = get(instrument, "optical_prescription", nothing)
     reference isa AbstractDict && all(key -> key in ("format", "path", "sha256", "catalog_archive"), keys(reference)) &&
         all(key -> haskey(reference, key), ("format", "path", "sha256")) ||
         throw(ArgumentError("invalid optical_prescription reference"))
     reference["format"] == "zemax" || throw(ArgumentError("optical_prescription format must be zemax"))
+    physical_reference(root, reference)
+    if haskey(reference, "catalog_archive")
+        model_fields(reference["catalog_archive"], ("path", "sha256"), "catalog_archive")
+        physical_reference(root, reference["catalog_archive"])
+    end
+    return reference
+end
+
+# Authored graphs stay symbolic. RTC expands settings, profiles, responses and
+# component imports after loading these exact raw copies.
+function component_preparation_inputs(root, definition_path, instrument_path, definition, instrument;
+        catalog_dir=nothing, frozen=false)
+    catalog_dir === nothing || throw(ArgumentError("component recipes declare explicit hashed catalogs; catalog_dir is only for standalone preparation"))
+    reference = component_prescription(root, instrument)
+    source_path = physical_reference(root, reference)
+    components = get(definition, "components", nothing)
+    components isa AbstractDict && 1 <= length(components) <= 256 ||
+        throw(ArgumentError("component preparation requires 1 to 256 authored components"))
+    sources = Set([relpath(definition_path, root), relpath(instrument_path, root), relpath(source_path, root)])
+    haskey(reference, "catalog_archive") && push!(sources, reference["catalog_archive"]["path"])
+    ids = Int[]
+    catalogs = Dict{String,Dict{String,GlassDocument}}()
+    glass_path = optical_path(root, ZEMAX_GLASSES_PATH; generated=true)
+    resolved_path = optical_path(root, ZEMAX_RESOLVED_PATH; generated=true)
+    execution_path = optical_path(root, ZEMAX_EXECUTION_PATH; generated=true)
+    frozen_catalog = frozen ? read_zemax_yaml(glass_path) : nothing
+    if frozen
+        model_fields(frozen_catalog, ("schema_version", "recipes"), "component glass snapshot")
+        frozen_catalog["schema_version"] === 2 || throw(ArgumentError("unsupported component glass snapshot; regenerate the optical preparation"))
+    end
+    for name in sort!(collect(keys(components)))
+        component = components[name]
+        component isa AbstractDict || throw(ArgumentError("component $name must be a mapping"))
+        haskey(component, "preparation") || continue
+        preparation = component["preparation"]
+        model_fields(preparation, ("kind", "recipe", "branch"), "component preparation")
+        preparation["kind"] == "zemax" || throw(ArgumentError("unsupported component preparation kind"))
+        recipe = model_path(preparation["recipe"], "component recipe")
+        recipe_path = optical_path(root, recipe; generated=false)
+        branch = model_string(preparation["branch"], "component branch")
+        model = component_model(recipe_path)
+        haskey(model.branches, branch) || throw(ArgumentError("unknown component branch $branch"))
+        push!(ids, model.branches[branch].configuration_id)
+        push!(sources, relpath(recipe_path, root))
+        for catalog in model.catalogs
+            push!(sources, relpath(physical_reference(root, catalog), root))
+        end
+        if !haskey(catalogs, recipe)
+            catalogs[recipe] = frozen ? Dict{String,GlassDocument}(name => frozen_glass(glass)
+                for (name, glass) in frozen_catalog["recipes"][recipe]) : component_catalogs(root, model.catalogs)
+        end
+    end
+    isempty(ids) && throw(ArgumentError("authored graphs require at least one ZEMAX component preparation"))
+    frozen && Set(keys(frozen_catalog["recipes"])) != Set(keys(catalogs)) &&
+        throw(ArgumentError("component glass snapshot recipes changed; regenerate the optical preparation"))
+    selected_ids = sort!(unique(ids))
+    resolved = frozen ? read_zemax_yaml(resolved_path) : Zemax.inspect(source_path; configurations=selected_ids)
+    get(resolved, "schema_version", nothing) === 1 &&
+        get(resolved, "selected_configuration_ids", nothing) == selected_ids &&
+        resolved["source"]["basename"] == basename(source_path) &&
+        resolved["source"]["sha256"] == reference["sha256"] ||
+        throw(ArgumentError("component resolved snapshot does not match the source recipe; regenerate the optical preparation"))
+    # Verify selected branches exist before any generated files are replaced.
+    for id in selected_ids
+        count(branch -> branch["configuration_id"] == id, resolved["configurations"]) == 1 ||
+            throw(ArgumentError("missing selected component configuration; regenerate the optical preparation"))
+    end
+    declarations = definition["graphs"]
+    declarations isa AbstractDict && 1 <= length(declarations) <= 64 ||
+        throw(ArgumentError("authored graphs must contain 1 to 64 modes"))
+    graph_paths = Dict{String,String}()
+    graphs = map(Tuple(sort!(collect(keys(declarations))))) do name
+        model_string(name, "graph mode")
+        occursin(r"^[a-z][a-z0-9_-]*$", name) && name != "simulation" ||
+            throw(ArgumentError("graph modes must be lower-case filename stems distinct from simulation"))
+        authored = declarations[name]
+        graph = if authored isa AbstractString
+            path = optical_path(root, model_path(authored, "authored graph"); generated=false)
+            push!(sources, relpath(path, root))
+            read_zemax_yaml(path)
+        else
+            authored
+        end
+        graph isa AbstractDict || throw(ArgumentError("authored graph must be a mapping or root-relative YAML path"))
+        relative = "generated/$name.yaml"
+        graph_paths[name] = relative
+        (relative, ordered(graph), Dict{String,Matrix{Float64}}())
+    end
+    # Explicit file bindings are also immutable preparation inputs.
+    for binding in values(get(definition, "bindings", Dict()))
+        get(binding, "kind", nothing) == "fits" || continue
+        push!(sources, relpath(physical_reference(root, binding), root))
+    end
+    execution = deepcopy(definition)
+    execution["graphs"] = graph_paths
+    execution["optical_model"] = Dict("format" => "zemax", "source" => "../simulation/definition.yaml")
+    execution["instrument"] = relpath(instrument_path, dirname(execution_path))
+    push!(sources, ZEMAX_RESOLVED_PATH, ZEMAX_GLASSES_PATH)
+    sources = sort!(collect(sources))
+    outputs = vcat([first(graph) for graph in graphs],
+        [ZEMAX_RESOLVED_PATH, ZEMAX_GLASSES_PATH, ZEMAX_PROVENANCE_PATH, ZEMAX_EXECUTION_PATH])
+    validate_optical_outputs(root, sources, outputs; regenerated=[ZEMAX_RESOLVED_PATH, ZEMAX_GLASSES_PATH])
+    catalog = ordered(Dict("schema_version" => 2, "recipes" => catalogs))
+    return (; root, catalog, sources, graphs, glass_path, resolved_path, resolved=ordered(resolved),
+        execution_path, execution=ordered(execution), write_catalog=true)
+end
+
+function Zemax.prepare_component(root::AbstractString, recipe::AbstractString, branch::AbstractString;
+        settings, diameter_m, frozen=false)
+    root = realpath(root)
+    frozen && Zemax.validate_provenance(root)
+    selected_settings = component_settings(settings, diameter_m)
+    instrument_path = optical_path(root, "instrument.yaml"; generated=false)
+    instrument = read_zemax_yaml(instrument_path)
+    instrument isa AbstractDict || throw(ArgumentError("instrument must be a mapping"))
+    reference = component_prescription(root, instrument)
     source_path = physical_reference(root, reference)
     recipe_path = optical_path(root, recipe; generated=false)
     model = component_model(recipe_path)
     haskey(model.branches, branch) || throw(ArgumentError("unknown component branch $branch"))
     selection = model.branches[branch]
-    resolved = Zemax.inspect(source_path; configurations=[selection.configuration_id])
-    glasses = component_catalogs(root, model.catalogs)
-    prepared = Zemax.component_train(only(resolved["configurations"]), model.first_surface,
+    resolved = frozen ? read_zemax_yaml(optical_path(root, ZEMAX_RESOLVED_PATH; generated=true)) :
+        Zemax.inspect(source_path; configurations=[selection.configuration_id])
+    glasses = frozen ? read_zemax_yaml(optical_path(root, ZEMAX_GLASSES_PATH; generated=true))["recipes"][recipe] :
+        component_catalogs(root, model.catalogs)
+    selected = only(filter(b -> b["configuration_id"] == selection.configuration_id, resolved["configurations"]))
+    prepared = Zemax.component_train(selected, model.first_surface,
         selection.last_surface, model.initial_direction, model.powered_mirrors,
         selected_settings, glasses, Float64(diameter_m))
     sources = Dict{String,String}(relpath(path, root) => hashfile(path)
