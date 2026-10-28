@@ -487,7 +487,10 @@ definition at `generated/simulation.yaml`, and a provenance receipt from an
 instrument's authored simulation definition and selected conversion recipe.
 All derived outputs belong under `generated/`. Load YAML.jl to activate
 preparation. Supply extracted AGF catalogs through `catalog_dir` to generate glass
-data; otherwise reuse the frozen `generated/optics/glasses.yaml` snapshot.
+data; otherwise reuse the frozen `generated/optics/glasses.yaml` snapshot for
+standalone recipes. Graph-bearing definitions with version-2 component recipes
+use their explicit hashed catalogs and preserve raw authored graph documents.
+Use `yamlfmt=nothing` to write ordered YAML without an external formatter.
 """
 function prepare end
 
@@ -511,12 +514,15 @@ activate this optional document validation.
 function validate_provenance end
 
 """
-    prepare_component(root, recipe, branch; settings, diameter_m)
+    prepare_component(root, recipe, branch; settings, diameter_m, frozen=false)
 
 Resolve a selected ZEMAX subsystem into native PROPER node configuration for
 composition inside an ordinary simulation graph. The version-2 recipe selects
 surfaces, explicit catalog inputs and approximation assumptions. Source and
 catalog hashes are checked on every cold preparation; no files are written.
+With `frozen=true`, validate generated provenance and use its resolved ZMX and
+glass snapshots while recomputing the configuration for the selected settings
+and incident diameter. Missing or stale preparation raises an error.
 Load YAML.jl to activate this optional boundary.
 """
 function prepare_component end

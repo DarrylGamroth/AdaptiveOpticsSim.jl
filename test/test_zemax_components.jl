@@ -190,3 +190,161 @@ end
         @test_throws ArgumentError prepare()
     end
 end
+
+function authored_component_fixture(root; catalogs=Dict{String,String}[])
+    fixture = component_fixture(root, COMPONENT_RELAY; catalogs)
+    mkpath(joinpath(root, "simulation"))
+    imported = Dict("template" => "proper_optical_train_f32",
+        "preparation" => Dict("kind" => "zemax", "recipe" => "recipe.yaml", "branch" => "relay"),
+        "config" => Dict("resolution" => Dict("\$ref" => "/settings/resolution")))
+    graph = Dict("schema_version" => 1, "nodes" => [Dict("id" => "relay", "component" => "relay")],
+        "outputs" => Dict("image" => "relay.image"))
+    component_yaml(joinpath(root, "simulation", "production.yaml"), graph)
+    definition = Dict("schema_version" => 1, "instrument" => "../instrument.yaml",
+        "graphs" => Dict("production" => "simulation/production.yaml", "optical-reference" => graph),
+        "components" => Dict("relay" => imported, "relay_copy" => deepcopy(imported)),
+        "defaults" => COMPONENT_SETTINGS,
+        "profiles" => Dict("test" => Dict("template" => "test")),
+        "responses" => Dict("mirror" => Dict("kind" => "second_order")),
+        "bindings" => Dict("pupil" => Dict("kind" => "pupil_amplitude")),
+        "hil" => Dict("command" => ["mirror.command"], "frame" => "relay.image"))
+    component_yaml(joinpath(root, "simulation", "definition.yaml"), definition)
+    return (; fixture, definition, graph)
+end
+
+@testset "Authored component graphs generated preparation" begin
+    mktempdir() do root
+        (; definition, graph) = authored_component_fixture(root)
+        authored_paths = ["instrument.yaml", "source.ZMX", "recipe.yaml", "simulation/definition.yaml", "simulation/production.yaml"]
+        authored = Dict(path => read(joinpath(root, path)) for path in authored_paths)
+        in_memory = ZCOMP.prepare_component(root, "recipe.yaml", "relay";
+            settings=COMPONENT_SETTINGS, diameter_m=0.04)
+        @test !ispath(joinpath(root, "generated"))
+        @test_throws ArgumentError ZCOMP.prepare_component(root, "recipe.yaml", "relay";
+            settings=COMPONENT_SETTINGS, diameter_m=0.04, frozen=true)
+        ZCOMP.prepare(root; yamlfmt="true")
+        receipt = ZCOMP.validate_provenance(root)
+        @test all(read(joinpath(root, path)) == bytes for (path, bytes) in authored)
+        generated = ["generated/production.yaml", "generated/optical-reference.yaml", "generated/simulation.yaml",
+            "generated/optics/resolved.yaml", "generated/optics/glasses.yaml", "generated/optics/provenance.yaml"]
+        before = Dict(path => read(joinpath(root, path)) for path in generated)
+        @test YAML.load_file(joinpath(root, "generated", "production.yaml")) == graph
+        @test YAML.load_file(joinpath(root, "generated", "optical-reference.yaml")) == graph
+        expected = deepcopy(definition)
+        expected["graphs"] = Dict("production" => "generated/production.yaml", "optical-reference" => "generated/optical-reference.yaml")
+        expected["optical_model"] = Dict("format" => "zemax", "source" => "../simulation/definition.yaml")
+        @test YAML.load_file(joinpath(root, "generated", "simulation.yaml")) == expected
+        withenv("YAMLFMT" => "/does/not/exist") do
+            ZCOMP.prepare(root; yamlfmt=nothing)
+        end
+        @test all(read(joinpath(root, path)) == bytes for (path, bytes) in before)
+        frozen = ZCOMP.prepare_component(root, "recipe.yaml", "relay";
+            settings=COMPONENT_SETTINGS, diameter_m=0.04, frozen=true)
+        @test frozen == in_memory
+        changed_settings = merge(COMPONENT_SETTINGS, Dict("resolution" => 64, "pupil_resolution" => 48, "wavelength_um" => 0.8, "temperature_c" => 5.0))
+        changed = ZCOMP.prepare_component(root, "recipe.yaml", "relay";
+            settings=changed_settings, diameter_m=0.08, frozen=true)
+        @test changed == ZCOMP.prepare_component(root, "recipe.yaml", "relay";
+            settings=changed_settings, diameter_m=0.08)
+        @test changed.config != frozen.config
+        @test changed.config["resolution"] == 64
+        @test changed.config["diameter_m"] == 0.08
+        @test all(read(joinpath(root, path)) == bytes for (path, bytes) in before)
+
+        # Updating receipt hashes alone cannot authorize a changed generated graph
+        # or a changed execution definition: both must match authored content.
+        for (relative, key) in (("generated/production.yaml", "graphs"), ("generated/simulation.yaml", "execution"))
+            document = YAML.load_file(joinpath(root, relative))
+            document["unexpected"] = "tampered"
+            component_yaml(joinpath(root, relative), document)
+            @test_throws ArgumentError ZCOMP.validate_provenance(root)
+            rewritten = deepcopy(receipt)
+            entry = key == "execution" ? rewritten[key] : only(filter(e -> e["path"] == relative, rewritten[key]))
+            entry["sha256"] = component_hash(joinpath(root, relative))
+            @test_throws ArgumentError ZCOMP.validate_provenance(root, rewritten)
+            write(joinpath(root, relative), before[relative])
+        end
+        path = joinpath(root, "simulation", "production.yaml")
+        write(path, read(path, String) * "# source drift\n")
+        @test_throws ArgumentError ZCOMP.validate_provenance(root)
+        @test_throws ArgumentError ZCOMP.prepare_component(root, "recipe.yaml", "relay";
+            settings=COMPONENT_SETTINGS, diameter_m=0.04, frozen=true)
+        write(path, authored["simulation/production.yaml"])
+        @test ZCOMP.validate_provenance(root) == receipt
+    end
+end
+
+@testset "Generated component catalog snapshots and output guards" begin
+    mktempdir() do root
+        catalog = joinpath(root, "glass.agf")
+        write(catalog, "NM G 2 0 1.5 0\nCD 1.25 0 0 0 0 0\nLD 0.3 2.5\nTD 0 0 0 0 0 0 20\nNM UNUSED 2 0 1.5 0\nTD\n")
+        (; definition) = authored_component_fixture(root; catalogs=[component_reference(catalog)])
+        # Two recipes can order duplicate glass names independently while
+        # sharing the same prescription and selected configuration.
+        second_catalog = joinpath(root, "second.agf")
+        write(second_catalog, "NM G 2 0 2.0 0\nCD 3 0 0 0 0 0\nLD 0.3 2.5\n")
+        component_fixture(root, """
+            UNIT MM
+            SURF 0
+              TYPE STANDARD
+            SURF 1
+              TYPE STANDARD
+              CURV 0.001
+              GLAS G
+              DISZ 10
+              DIAM 5 1
+            SURF 2
+              TYPE STANDARD
+              DISZ 999
+            MNUM 1 1
+            """; powered_mirrors=Int[], catalogs=[component_reference(catalog), component_reference(second_catalog)])
+        other = YAML.load_file(joinpath(root, "recipe.yaml"))
+        reverse!(other["catalogs"])
+        component_yaml(joinpath(root, "other.yaml"), other)
+        definition["components"]["relay_copy"]["preparation"]["recipe"] = "other.yaml"
+        component_yaml(joinpath(root, "simulation", "definition.yaml"), definition)
+        ZCOMP.prepare(root; yamlfmt="true")
+        snapshot = YAML.load_file(joinpath(root, "generated", "optics", "glasses.yaml"))
+        @test Set(keys(snapshot["recipes"])) == Set(("recipe.yaml", "other.yaml"))
+        extension = Base.get_extension(AdaptiveOpticsSim, :AdaptiveOpticsSimYAMLExt)
+        empty_glass = extension.frozen_glass(snapshot["recipes"]["recipe.yaml"]["UNUSED"])
+        @test empty_glass["TD"] isa Vector{Float64}
+        @test isempty(empty_glass["TD"])
+        # Empty strings and coefficient sequences must retain their declared
+        # element types even when YAML supplied Vector{Any}.
+        @test extension.frozen_glass(Dict("raw_records" => Any[]))["raw_records"] isa Vector{String}
+        for (recipe, expected_focal) in (("recipe.yaml", 2.0), ("other.yaml", 1.0))
+            frozen = ZCOMP.prepare_component(root, recipe, "relay"; settings=COMPONENT_SETTINGS,
+                diameter_m=0.04, frozen=true)
+            @test frozen == ZCOMP.prepare_component(root, recipe, "relay";
+                settings=COMPONENT_SETTINGS, diameter_m=0.04)
+            @test first(frozen.config["steps"])["focal_length_m"] == expected_focal
+        end
+        write(catalog, read(catalog, String) * "CC catalog changed\n")
+        @test_throws ArgumentError ZCOMP.validate_provenance(root)
+    end
+    for alias in (:symlink, :hardlink)
+        mktempdir() do root
+            authored_component_fixture(root)
+            mkpath(joinpath(root, "generated"))
+            source = joinpath(root, "simulation", "production.yaml")
+            output = joinpath(root, "generated", "production.yaml")
+            alias == :symlink ? symlink(source, output) : hardlink(source, output)
+            before = read(source)
+            @test_throws ArgumentError ZCOMP.prepare(root; yamlfmt="true")
+            @test read(source) == before
+            @test !isfile(joinpath(root, "generated", "simulation.yaml"))
+        end
+    end
+    for change in (d -> (d["graphs"]["production"] = "generated/production.yaml"),
+            d -> (d["components"]["relay"]["preparation"]["recipe"] = "generated/recipe.yaml"),
+            d -> (d["optical_model"] = Dict("format" => "zemax", "source" => "../generated/simulation.yaml")))
+        mktempdir() do root
+            (; definition) = authored_component_fixture(root)
+            change(definition)
+            component_yaml(joinpath(root, "simulation", "definition.yaml"), definition)
+            @test_throws ArgumentError ZCOMP.prepare(root; yamlfmt="true")
+            @test !ispath(joinpath(root, "generated"))
+        end
+    end
+end
