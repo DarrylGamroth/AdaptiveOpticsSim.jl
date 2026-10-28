@@ -9,6 +9,14 @@ defined here before they become public API.
 
 ## Naming Rules
 
+An **external pupil contract** (`AlgorithmGraphs.external_pupil_contract`) binds
+OPD in metres and relative field amplitude to a declared pupil plane, diameter,
+collimated carrier and sampling. Its Float32 packet has logical axes
+`(quantity,y,x)`, with OPD first and amplitude second. Native AOS pupil arrays
+use `[x,y]`; publication transposes the spatial axes. A grey pupil supplies the
+same OPD and amplitude to every wavelength. Provisional registration describes
+an assumed normalized pupil correspondence, not a measured relay transform.
+
 - Do not combine a plane location and an assumed physical quantity in one type
   name. Use, for example, an `IntensityMap` whose metadata says `FocalPlane()`.
 - State coordinate domain and units explicitly. Do not infer metres or radians

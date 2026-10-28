@@ -1,4 +1,61 @@
 """
+    external_pupil_contract(; pupil_resolution, diameter_m, plane, curvature,
+        registration="provisional", spectral_model="grey_pupil_amplitude",
+        wavelength_um=nothing)
+
+Return the transport-neutral `schema`, string `properties`, and `(2,p,p)`
+`shape` of a Float32 external pupil packet. Logical axes are `(quantity,y,x)`;
+quantities are OPD in metres and relative field amplitude. The origin is at
+`fld(p,2)+1`, and sample spacing is `diameter_m/p` metres. Native AOS pupil
+arrays use `[x,y]`: publishers copy `opd[x,y]` to `packet[1,y,x]` and amplitude
+to `packet[2,y,x]`. Storage layout and transport belong to the caller.
+
+The grey OPD/amplitude pair is shared by every receiving wavelength. The
+collimated pupil excludes nominal convergence, which the receiving optical
+train introduces. Registration is descriptive metadata and does not change
+the existing schema hash. This contract does not infer a relay registration
+or flux calibration. `wavelength_um` preserves the original monochromatic
+packet contract for existing callers; omit it for a grey pupil.
+"""
+function external_pupil_contract(; pupil_resolution, diameter_m, plane, curvature,
+        registration="provisional", spectral_model="grey_pupil_amplitude", wavelength_um=nothing)
+    pupil_resolution isa Integer && !(pupil_resolution isa Bool) &&
+        0 < pupil_resolution <= typemax(Int) ||
+        throw(ArgumentError("external pupil_resolution must be a positive Int"))
+    diameter_m isa Real && !(diameter_m isa Bool) && isfinite(diameter_m) && diameter_m > 0 ||
+        throw(ArgumentError("external pupil diameter_m must be positive and finite"))
+    all(value -> value isa AbstractString && !isempty(strip(value)) && !occursin('\n', value),
+        (plane, curvature, registration)) ||
+        throw(ArgumentError("external pupil plane, curvature and registration require nonempty single-line text"))
+    curvature == "collimated" || throw(ArgumentError("unsupported external pupil curvature"))
+    spectral_model == "grey_pupil_amplitude" || throw(ArgumentError("unsupported external pupil spectral_model"))
+    if wavelength_um !== nothing
+        wavelength_um isa Real && !(wavelength_um isa Bool) && isfinite(wavelength_um) && wavelength_um > 0 ||
+            throw(ArgumentError("external pupil wavelength_um must be positive and finite"))
+    end
+    p = Int(pupil_resolution)
+    spectral_contract = wavelength_um === nothing ? spectral_model : wavelength_um
+    # Keep field order and numeric spelling identical to the original CAL2
+    # publisher/receiver contract, independently of YAML mapping order.
+    contract = join(("org.adaptiveopticssim.pupil-field/1", p, diameter_m, spectral_contract,
+        plane, curvature, "quantity,y,x", "opd_m,amplitude",
+        "relative_field_amplitude", "input_owned", "simulation_nanoseconds", "piecewise_constant"), "\n")
+    digest = bytes2hex(sha256(contract))
+    schema = "org.adaptiveopticssim.pupil-field/1;sha256=" * digest
+    properties = Dict("optics.contract-sha256" => digest,
+        "optics.sampling-m" => string(diameter_m/p), "optics.plane" => String(plane),
+        "optics.axis-order" => "quantity,y,x", "optics.quantities" => "opd_m,amplitude",
+        "optics.amplitude-units" => "relative_field_amplitude", "optics.pts-units" => "simulation_nanoseconds",
+        "optics.registration" => String(registration))
+    if wavelength_um === nothing
+        properties["optics.spectral-model"] = String(spectral_model)
+    else
+        properties["optics.wavelength-m"] = string(wavelength_um*1e-6)
+    end
+    return (; schema, properties, shape=(2,p,p))
+end
+
+"""
     IntensityExposure
 
 Single-writer CPU storage for duration-weighted relative intensity over exactly
