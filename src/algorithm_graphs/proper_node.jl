@@ -27,7 +27,8 @@ function _proper_optical_train_node(::Type, name::Symbol,
 end
 
 const _PROPER_CONFIG_FIELDS = (:resolution, :pupil_resolution, :diameter_m, :wavelength_um,
-    :steps, :channels, :output_sampling_m, :pupil_opd_schema, :pupil_amplitude_schema, :output_schema)
+    :steps, :channels, :output_sampling_m, :pupil_grid, :pupil_opd_schema, :pupil_amplitude_schema, :output_schema)
+const _PROPER_MAX_SAMPLED_STEPS = 256
 
 function _proper_channel_configs(config::NamedTuple)
     hasproperty(config, :channels) || return ()
@@ -40,6 +41,27 @@ function _proper_channel_configs(config::NamedTuple)
             (:wavelength_um, :weight, :steps), "Proper optical train channel")
     end
     return channels
+end
+
+function _proper_has_runtime_opd(config::NamedTuple)
+    hasproperty(config, :steps) || throw(AlgorithmGraphError("Proper optical train config is missing steps"))
+    count = 0
+    for train in (config, _proper_channel_configs(config)...)
+        for step in _file_tuple(train.steps, "steps")
+            step isa NamedTuple || throw(AlgorithmGraphError("step must be a mapping"))
+            hasproperty(step, :op) || throw(AlgorithmGraphError("optical step is missing op"))
+            _file_string(step.op, "optical step op") == "add_opd" || continue
+            count += 1
+            count <= 64 || throw(AlgorithmGraphError("Proper optical train admits at most 64 runtime OPD inputs"))
+        end
+    end
+    if count > 0 || hasproperty(config, :pupil_grid)
+        length(config.steps) <= _PROPER_MAX_SAMPLED_STEPS ||
+            throw(AlgorithmGraphError("runtime OPD steps and pupil_grid admit at most $_PROPER_MAX_SAMPLED_STEPS total optical steps"))
+        (hasproperty(config, :channels) || hasproperty(config, :output_sampling_m)) &&
+            throw(AlgorithmGraphError("runtime OPD steps and pupil_grid require a scalar train without channels or output_sampling_m"))
+    end
+    return count > 0
 end
 
 function _proper_mask_roles(config::NamedTuple)
@@ -62,6 +84,7 @@ function _proper_mask_roles(config::NamedTuple)
 end
 
 function graph_node_bindings(::ProperOpticalTrainNodeFactory, config::NamedTuple)
+    _proper_has_runtime_opd(config)
     roles = _proper_mask_roles(config)
     _require_named_fields(config, (_PROPER_CONFIG_FIELDS..., roles...),
         (:resolution, :diameter_m, :wavelength_um, :steps, roles...), "Proper optical train config")

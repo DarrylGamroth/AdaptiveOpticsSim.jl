@@ -13,6 +13,7 @@ const DEFAULT_INTENSITY_SCHEMA = "org.adaptiveopticssim.optical-intensity/1"
 function _train_step(step::NamedTuple, ::Type{T}, config, bindings) where {T}
     hasproperty(step, :op) || throw(AOG.AlgorithmGraphError("optical step is missing op"))
     op = AOG._file_string(step.op, "optical step op")
+    op == "add_opd" && return _runtime_opd_step(step, T)
     fields = if op == "propagate"
         (:distance_m,)
     elseif op == "lens"
@@ -140,13 +141,14 @@ end
 
 struct OpticalTrainNode{T} end
 
-struct OpticalTrainPlan{T,S}
+struct OpticalTrainPlan{T,S,G}
     steps::S
     resolution::Int
     pupil_resolution::Int
     diameter_m::T
     wavelength_um::T
     schemas::NTuple{3,String}
+    pupil_grid::G
 end
 
 function AOG._proper_optical_train_node(::Type{T}, name::Symbol,
@@ -157,6 +159,7 @@ function AOG._proper_optical_train_node(::Type{T}, name::Symbol,
         step isa NamedTuple || throw(AOG.AlgorithmGraphError("step must be a mapping"))
         _train_step(step, T, config, bindings)
     end
+    _validate_runtime_opd_inputs(steps)
     n = AOG._file_integer(config.resolution, "resolution")
     iseven(n) || throw(AOG.AlgorithmGraphError("Proper optical train resolution must be even for centered propagation"))
     p = hasproperty(config, :pupil_resolution) ?
@@ -172,7 +175,8 @@ function AOG._proper_optical_train_node(::Type{T}, name::Symbol,
         isempty(value) && throw(AOG.AlgorithmGraphError("$key must not be empty"))
         value
     end
-    plan = OpticalTrainPlan(steps, n, p, diameter, wavelength, schemas)
+    pupil_grid = hasproperty(config, :pupil_grid) ? _entrance_pupil_grid(config.pupil_grid, T, p) : nothing
+    plan = OpticalTrainPlan(steps, n, p, diameter, wavelength, schemas, pupil_grid)
     if hasproperty(config, :channels) || hasproperty(config, :output_sampling_m)
         return _polychromatic_optical_train_node(T, name, plan, config, bindings)
     end
@@ -182,9 +186,10 @@ end
 function AOG.graph_node_ports(::Type{OpticalTrainNode{T}}, plan::OpticalTrainPlan) where {T}
     pupil = (plan.pupil_resolution, plan.pupil_resolution)
     output = (plan.resolution, plan.resolution)
-    return (AOG.graph_port_contract(:pupil_opd, :input, :data, T, pupil, plan.schemas[1], :column_major),
+    ports = (AOG.graph_port_contract(:pupil_opd, :input, :data, T, pupil, plan.schemas[1], :column_major),
         AOG.graph_port_contract(:pupil_amplitude, :input, :data, T, pupil, plan.schemas[2], :column_major),
         AOG.graph_port_contract(:output, :output, :data, T, output, plan.schemas[3], :column_major))
+    return (ports..., _runtime_opd_ports(T, plan.steps)...)
 end
 
 struct OpticalTrainWorkspace{W,C,A,M,S}
@@ -279,8 +284,10 @@ function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}
 end
 
 function AOG.prepare_graph_node(::Type{OpticalTrainNode{T}}, plan::OpticalTrainPlan{T},
-        ::NamedTuple{()}, inputs::NamedTuple{(:pupil_opd,:pupil_amplitude)},
+        ::NamedTuple{()}, inputs::NamedTuple,
         outputs::NamedTuple{(:output,)}, ::NamedTuple{()}, target) where {T}
+    (plan.pupil_grid !== nothing || any(step -> step.op === :add_opd, plan.steps)) &&
+        return _prepare_runtime_opd_train(plan, inputs, outputs, target)
     return _prepare_optical_train(plan, inputs, outputs, target).owner
 end
 
@@ -324,7 +331,7 @@ function _prepare_train_capture!(owner,
     return nothing
 end
 
-function AOG.step_graph_node!(owner::OpticalTrainOwner)
+function _begin_optical_train!(owner::OpticalTrainOwner)
     plan, workspace = owner.plan, owner.workspace
     opd, amplitude = workspace.padded_opd, workspace.padded_amplitude
     fill!(opd, 0)
@@ -339,6 +346,13 @@ function AOG.step_graph_node!(owner::OpticalTrainOwner)
         beam_diam_fraction=plan.pupil_resolution/plan.resolution)
     Proper.prop_multiply(wf, amplitude)
     Proper.prop_add_phase(wf, opd)
+    return nothing
+end
+
+function AOG.step_graph_node!(owner::OpticalTrainOwner)
+    _begin_optical_train!(owner)
+    plan, workspace = owner.plan, owner.workspace
+    wf = workspace.wavefront
     foreach(plan.steps, workspace.masks) do step, mask
         _train_optic!(wf, step, mask, workspace.context, workspace.shifted_mask)
     end
@@ -359,6 +373,7 @@ function AOG.reset_graph_node!(owner::OpticalTrainOwner)
     return nothing
 end
 
+include("proper_opd.jl")
 include("proper_spectrum.jl")
 
 end

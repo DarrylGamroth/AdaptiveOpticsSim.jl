@@ -211,8 +211,63 @@ function component_preparation_inputs(root, definition_path, instrument_path, de
         execution_path, execution=ordered(execution), write_catalog=true)
 end
 
+function component_screen_length(value::Real)
+    isfinite(value) && value > 0 || throw(ArgumentError("sampled grid diameter_m must be positive and finite"))
+    return Float64(value)
+end
+component_screen_length(value::Bool) = throw(ArgumentError("sampled grid diameter_m must be a length"))
+component_screen_length(value) = throw(ArgumentError("sampled grid diameter_m must be a length"))
+
+function component_screen_opd(value::Real)
+    isfinite(value) || throw(ArgumentError("outside_opd_m must be a finite OPD"))
+    return Float64(value)
+end
+component_screen_opd(value::Bool) = throw(ArgumentError("outside_opd_m must be an OPD"))
+component_screen_opd(value) = throw(ArgumentError("outside_opd_m must be an OPD"))
+component_screen_array(value::Union{Tuple,AbstractVector}) = value
+component_screen_array(value) = throw(ArgumentError("phase screen size and axes must be sequences"))
+
+function component_grid(dimensions, permutation, diameter_m)
+    size = Tuple(model_integer(value, "sampled grid size"; minimum=1)
+        for value in component_screen_array(dimensions))
+    length(size) == 2 || throw(ArgumentError("sampled grid size must have two dimensions"))
+    axes = Tuple(model_integer(value, "sampled grid axis"; minimum=1)
+        for value in component_screen_array(permutation))
+    axes in ((1,2), (2,1)) || throw(ArgumentError("sampled grid axes must permute two dimensions"))
+    diameter = component_screen_length(diameter_m)
+    sampling_m = (diameter/size[axes[1]], diameter/size[axes[2]])
+    center_pixel = ((size[axes[1]]+1)/2, (size[axes[2]]+1)/2)
+    return (; size, axes, sampling_m, center_pixel)
+end
+
+function component_pupil_grid(grid::AbstractDict)
+    model_fields(grid, ("size", "axes", "diameter_m"), "component pupil grid")
+    prepared = component_grid(grid["size"], grid["axes"], grid["diameter_m"])
+    return Zemax.GridDocument(string(key) => collect(value) for (key, value) in pairs(prepared))
+end
+component_pupil_grid(grid) = throw(ArgumentError("pupil_grid must be an object"))
+
+function component_phase_screens(screens::Union{Tuple,AbstractVector})
+    length(screens) <= 32 || throw(ArgumentError("component supports at most 32 phase screens"))
+    normalized = map(Tuple(screens)) do screen
+        model_fields(screen, ("surface", "input", "size", "axes", "diameter_m", "schema", "outside_opd_m"), "component phase screen")
+        surface = model_integer(screen["surface"], "phase screen surface")
+        input = model_string(screen["input"], "phase screen input")
+        occursin(r"^[a-z][a-z0-9_]*$", input) && input ∉ ("pupil_opd", "pupil_amplitude", "output") ||
+            throw(ArgumentError("phase screen input must be a distinct lower-case Port identifier"))
+        grid = component_grid(screen["size"], screen["axes"], screen["diameter_m"])
+        schema = model_string(screen["schema"], "phase screen OPD schema")
+        outside_opd_m = component_screen_opd(screen["outside_opd_m"])
+        return (; surface, input, grid..., schema, outside_opd_m)
+    end
+    length(unique(screen.input for screen in normalized)) == length(normalized) ||
+        throw(ArgumentError("duplicate phase screen input"))
+    return normalized
+end
+component_phase_screens(screens) = throw(ArgumentError("phase_screens must be a sequence"))
+
 function Zemax.prepare_component(root::AbstractString, recipe::AbstractString, branch::AbstractString;
-        settings, diameter_m, frozen=false)
+        settings, diameter_m, frozen=false, phase_screens=(), pupil_grid=nothing)
     root = realpath(root)
     frozen && Zemax.validate_provenance(root)
     selected_settings = component_settings(settings, diameter_m)
@@ -232,7 +287,8 @@ function Zemax.prepare_component(root::AbstractString, recipe::AbstractString, b
     selected = only(filter(b -> b["configuration_id"] == selection.configuration_id, resolved["configurations"]))
     prepared = Zemax.component_train(selected, model.first_surface,
         selection.last_surface, model.initial_direction, model.powered_mirrors,
-        selected_settings, glasses, Float64(diameter_m))
+        selected_settings, glasses, Float64(diameter_m); phase_screens=component_phase_screens(phase_screens))
+    pupil_grid === nothing || (prepared.config["pupil_grid"] = component_pupil_grid(pupil_grid))
     sources = Dict{String,String}(relpath(path, root) => hashfile(path)
         for path in (instrument_path, source_path, recipe_path))
     for catalog in model.catalogs

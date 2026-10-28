@@ -348,3 +348,49 @@ end
         end
     end
 end
+
+@testset "Runtime OPD placement uses active surface identities" begin
+    mktempdir() do root
+        component_fixture(root, COMPONENT_RELAY)
+        baseline = ZCOMP.prepare_component(root,"recipe.yaml","relay";
+            settings=COMPONENT_SETTINGS,diameter_m=0.04)
+        screen = Dict("surface"=>1,"input"=>"woofer_opd","size"=>[12,8],"axes"=>[2,1],
+            "diameter_m"=>0.04,"schema"=>"test.opd-metres/1","outside_opd_m"=>0)
+        last = merge(screen,Dict("surface"=>2,"input"=>"tweeter_opd","diameter_m"=>0.02))
+        result = ZCOMP.prepare_component(root,"recipe.yaml","relay";
+            settings=COMPONENT_SETTINGS,diameter_m=0.04,phase_screens=[screen,last])
+        steps = result.config["steps"]
+        @test filter(s->s["op"]!="add_opd",steps)==baseline.config["steps"]
+        @test result.diagnostics==baseline.diagnostics
+        @test result.sources==baseline.sources
+        @test steps[1]["name"]=="surface_1_power"
+        @test steps[2]["op"]=="add_opd" && steps[2]["input"]=="woofer_opd"
+        @test steps[3]["name"]=="surface_1_propagation"
+        @test steps[end]["op"]=="add_opd" && steps[end]["input"]=="tweeter_opd"
+        @test steps[2]["size"]==[12,8] && steps[2]["axes"]==[2,1]
+        @test steps[2]["sampling_m"]==[0.04/8,0.04/12]
+        @test steps[2]["center_pixel"]==[4.5,6.5]
+        @test steps[2]["outside_opd_m"]==0.0
+        for change in (Dict("surface"=>0),Dict("surface"=>3),Dict("surface"=>1.0),
+                Dict("input"=>"pupil_opd"),Dict("input"=>"a.b"),Dict("size"=>[0,8]),
+                Dict("size"=>[8]),Dict("size"=>4),Dict("axes"=>[1,1]),Dict("axes"=>4),
+                Dict("diameter_m"=>0),Dict("diameter_m"=>true),Dict("diameter_m"=>Inf),
+                Dict("schema"=>""),Dict("outside_opd_m"=>NaN),Dict("outside_opd_m"=>true))
+            @test_throws ArgumentError ZCOMP.prepare_component(root,"recipe.yaml","relay";
+                settings=COMPONENT_SETTINGS,diameter_m=0.04,phase_screens=[merge(screen,change)])
+        end
+        grid = Dict("size"=>[12,8],"axes"=>[2,1],"diameter_m"=>0.04)
+        mapped = ZCOMP.prepare_component(root,"recipe.yaml","relay";
+            settings=COMPONENT_SETTINGS,diameter_m=0.04,pupil_grid=grid)
+        @test mapped.config["pupil_grid"] == Dict("size"=>[12,8],"axes"=>[2,1],
+            "sampling_m"=>[0.04/8,0.04/12],"center_pixel"=>[4.5,6.5])
+        @test mapped.config["steps"] == baseline.config["steps"]
+        for change in (Dict("size"=>[0,8]),Dict("axes"=>[2,2]),
+                Dict("diameter_m"=>NaN),Dict("extra"=>1))
+            @test_throws ArgumentError ZCOMP.prepare_component(root,"recipe.yaml","relay";
+                settings=COMPONENT_SETTINGS,diameter_m=0.04,pupil_grid=merge(grid,change))
+        end
+        @test_throws ArgumentError ZCOMP.prepare_component(root,"recipe.yaml","relay";
+            settings=COMPONENT_SETTINGS,diameter_m=0.04,phase_screens=[screen,screen])
+    end
+end
