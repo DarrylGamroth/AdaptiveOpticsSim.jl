@@ -789,6 +789,8 @@ function _pyramid_rate_f32_node(
         :n_pix_edge,
         :n_pix_separation,
         :opd_schema,
+        :field_schema,
+        :input_quantity,
         :photon_rate_schema,
         :psf_centering,
         :pupil_reflectivity,
@@ -805,7 +807,6 @@ function _pyramid_rate_f32_node(
         :telescope_diameter_m,
     )
     required_fields = (
-        :opd_schema,
         :photon_rate_schema,
         :pupil_samples,
         :resolution,
@@ -941,7 +942,12 @@ function _pyramid_rate_f32_node(
         source_photon_irradiance_m2_s,
         source_separation_arcsec,
         source_position_angle_deg,
-        opd_schema=_file_string(config.opd_schema, "$context.opd_schema"),
+        input_quantity=hasproperty(config, :input_quantity) ?
+            _file_identifier(config.input_quantity, "$context.input_quantity") : :opd,
+        opd_schema=hasproperty(config, :opd_schema) ?
+            _file_string(config.opd_schema, "$context.opd_schema") : "",
+        field_schema=hasproperty(config, :field_schema) ?
+            _file_string(config.field_schema, "$context.field_schema") : "",
         photon_rate_schema=_file_string(
             config.photon_rate_schema,
             "$context.photon_rate_schema",
@@ -1565,6 +1571,8 @@ function builtin_graph_node_types()
             _multilayer_atmosphere_opd_f32_node,
         pupil_opd_composition_f32=_pupil_opd_composition_f32_node,
         pyramid_rate_f32=_pyramid_rate_f32_node,
+        ideal_pupil_relay_f32=_ideal_pupil_relay_f32_node,
+        ideal_pupil_relay_f64=_ideal_pupil_relay_f64_node,
         shack_hartmann_rate_f32=_shack_hartmann_rate_f32_node,
     )
 end

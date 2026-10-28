@@ -69,7 +69,50 @@ central sample on odd output grids. Odd pupil sizes are supported on even grids.
 input OPD and field amplitude are zero-padded with matching central samples,
 without resampling. Input spacing is `diameter_m / pupil_resolution`; the
 beam-diameter fraction is fixed to `pupil_resolution / resolution`. Output is
-always the square propagation grid. Each scalar operation optionally accepts
+always the square propagation grid.
+
+`output_quantity` defaults to `intensity`. Selecting `electric_field` changes
+`:output` to a dimensionless `Complex{T}` field on that same centered grid;
+`abs2` of its values equals the ordinary intensity output. The default field
+schema is `org.adaptiveopticssim.electric-field/1`. Input amplitude and every
+phase screen are applied exactly once. Output is copied into a distinct graph
+buffer, including when Proper's internal FFT field aliases scratch storage.
+No source photon scale, phase extraction or phase unwrapping is performed.
+Complex output currently requires a scalar train without `channels` or
+`output_sampling_m`, and cold preparation rejects a spherical-reference exit.
+Proper's signed `prop_get_refradius` is meaningful for phase restoration only
+when its reference surface is spherical; a nonzero value alone does not imply
+a missing quadratic phase. An explicit physical conversion is required before
+support for spherical-reference field output can be added.
+
+`optical_sampling_m(node.config)` derives the native scalar output pitch from
+the immutable plan on the host during cold composition. It also checks the
+selected output reference before downstream grids are declared. The prepared
+owner reports that same frozen pitch before and after execution.
+
+The generic `ideal_pupil_relay_node` maps such a field to an explicitly declared
+ideal receiving pupil. Its `input_size`, `output_size`, `input_sampling_m`,
+`output_sampling_m`, `wavelength_m`, and scientific schemas are required. The
+`axes` permutation defaults to `(2,1)`, converting Proper `(y,x)` order to
+native AOS `(x,y)` order. Both grids locate zero on sample `fld(size,2)+1` on
+each axis, even when a dimension is even. Cropping aligns those exact samples
+and supports odd or even dimensions without shifting the physical origin by
+half a sample. Input and output pitches are in their own array-axis order;
+after permutation their ratios must give the same isotropic magnification.
+
+This initial relay copies a bounded centered window one sample per sample.
+It performs no interpolation, source scaling, aperture multiplication or phase
+reference conversion. Retained complex amplitudes and phases remain unchanged;
+light outside the window is discarded without renormalization. An output grid
+that needs interpolation, anamorphic magnification or intersample-centered
+coordinates requires a different explicitly supported contract. The declared
+pitches and wavelength describe the ideal optical mapping; they do not infer
+an as-built instrument registration or verify an upstream array's provenance.
+A receiving photon-rate WFS must apply the declared source photon scale once,
+including the telescope-to-relay pupil magnification when its source irradiance
+is specified at a telescope entrance.
+
+Each scalar operation optionally accepts
 `name` as provenance:
 
 | Operation | Required parameters |

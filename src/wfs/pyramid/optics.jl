@@ -303,6 +303,39 @@ end
     return out
 end
 
+@inline function _enqueue_pyramid_rate_batch!(
+    style::AcceleratorStyle,
+    out,
+    front_end::PyramidOpticalFrontEnd,
+    input::ElectricField,
+    ::Nothing,
+    batch::PyramidModulationBatchWorkspace,
+)
+    propagation = pyramid_propagation_workspace(front_end)
+    resolution = input.metadata.dimensions[1]
+    pad = size(propagation.field, 1)
+    offset = div(pad - resolution, 2)
+    T = eltype(propagation.intensity)
+    point_count = modulation_point_count(front_end.modulation)
+    intensity_scale = pyramid_bfft_intensity_scale(T, pad)
+    phases = Optics._modulation_phase_storage(front_end.modulation)
+
+    fill!(out, zero(T))
+    @inbounds for first_point in 1:batch.batch_size:point_count
+        launch_kernel_async!(style, pyramid_electric_field_modulation_batch_kernel!,
+            batch.field_stack, input.values, phases, batch.operating_weights,
+            propagation.phasor, offset, resolution, first_point, pad,
+            batch.batch_size; ndrange=size(batch.field_stack))
+        _pyramid_fft_mask_bfft!(batch.fft_workspace, batch,
+            propagation.pyramid_mask, style, launch_kernel_async!, enqueue_fft_plan!)
+        launch_kernel_async!(style,
+            pyramid_modulation_batch_intensity_kernel!, out,
+            batch.field_stack, intensity_scale, pad, batch.batch_size;
+            ndrange=size(out))
+    end
+    return out
+end
+
 function pyramid_intensity_core!(out::AbstractMatrix{T}, wfs::PyramidWFS,
     pupil::PupilFunction, src::AbstractSource) where {T<:AbstractFloat}
     return pyramid_intensity_core!(out, wfs, pupil, src,
