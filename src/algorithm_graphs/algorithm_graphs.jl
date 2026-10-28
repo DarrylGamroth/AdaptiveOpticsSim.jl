@@ -106,6 +106,9 @@ import ..Detectors:
     NullPersistence,
     NullFrameNonlinearity,
     InGaAsSensor,
+    HgCdTeAvalancheArraySensor,
+    ConditionalGammaAvalancheMultiplication,
+    ClippedGaussianAvalancheMultiplicationApproximation,
     ExponentialPersistence,
     _complete_enqueued_detector_acquisition!,
     _enqueue_detector_acquisition!,
@@ -140,6 +143,7 @@ include("preparation.jl")
 include("native_nodes.jl")
 include("second_order_response_node.jl")
 include("ingaas_detector_node.jl")
+include("hgcdte_avalanche_detector_node.jl")
 include("pixel_mtf_node.jl")
 include("captured_execution.jl")
 include("proper_node.jl")

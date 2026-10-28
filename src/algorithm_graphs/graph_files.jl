@@ -1373,6 +1373,68 @@ function _ingaas_detector_acquisition_f32_node(
         T=Float32)
 end
 
+function _file_hgcdte_avalanche_multiplication(value, context::AbstractString)
+    model = _file_string(value, context)
+    model == "conditional_gamma" && return ConditionalGammaAvalancheMultiplication()
+    model == "clipped_gaussian_approximation" &&
+        return ClippedGaussianAvalancheMultiplicationApproximation()
+    throw(_file_error(context, "unsupported avalanche multiplication model '$model'"))
+end
+
+function _hgcdte_avalanche_detector_acquisition_f32_node(
+    name::Symbol,
+    config::NamedTuple,
+    props::NamedTuple,
+)
+    required_fields = (:rows, :columns, :pixel_sampling_m, :spectral_channel,
+        :exposure_duration_s, :quantum_efficiency, :rng_seed,
+        :photon_rate_schema, :frame_schema)
+    config_fields = (required_fields..., :gain, :dark_current_e_per_pixel_s,
+        :glow_e_per_pixel_s, :bits, :full_well_e, :photon_noise, :readout_noise,
+        :readout_noise_e, :persistence_model, :nonlinearity_model,
+        :avalanche_gain, :excess_noise_factor, :multiplication_model)
+    context = "node '$name' config"
+    _require_named_fields(config, config_fields, required_fields, context)
+    _require_named_fields(props, (), (), "node '$name' props")
+    sampling = _file_real_tuple(config.pixel_sampling_m, "$context.pixel_sampling_m")
+    length(sampling) == 2 || throw(_file_error(
+        "$context.pixel_sampling_m", "expected row and column pitches"))
+    return hgcdte_avalanche_detector_acquisition_node(name;
+        rows=_file_integer(config.rows, "$context.rows"),
+        columns=_file_integer(config.columns, "$context.columns"),
+        pixel_sampling_m=sampling,
+        spectral_channel=_file_identifier(config.spectral_channel, "$context.spectral_channel"),
+        exposure_duration_s=_file_real(config.exposure_duration_s, "$context.exposure_duration_s"),
+        quantum_efficiency=_file_real(config.quantum_efficiency, "$context.quantum_efficiency"),
+        rng_seed=_file_integer(config.rng_seed, "$context.rng_seed"),
+        photon_rate_schema=_file_string(config.photon_rate_schema, "$context.photon_rate_schema"),
+        frame_schema=_file_string(config.frame_schema, "$context.frame_schema"),
+        gain=_file_real(get(config, :gain, 1), "$context.gain"),
+        dark_current_e_per_pixel_s=_file_real(get(config, :dark_current_e_per_pixel_s, 0),
+            "$context.dark_current_e_per_pixel_s"),
+        glow_e_per_pixel_s=_file_real(get(config, :glow_e_per_pixel_s, 0),
+            "$context.glow_e_per_pixel_s"),
+        bits=hasproperty(config, :bits) ? _file_integer(config.bits, "$context.bits") : nothing,
+        full_well_e=hasproperty(config, :full_well_e) ?
+            _file_real(config.full_well_e, "$context.full_well_e") : nothing,
+        photon_noise=_file_bool(get(config, :photon_noise, true), "$context.photon_noise"),
+        readout_noise=_file_bool(get(config, :readout_noise, false), "$context.readout_noise"),
+        readout_noise_e=_file_real(get(config, :readout_noise_e, 0), "$context.readout_noise_e"),
+        persistence_model=hasproperty(config, :persistence_model) ?
+            _file_persistence_model(config.persistence_model, "$context.persistence_model") :
+            NullPersistence(),
+        nonlinearity_model=hasproperty(config, :nonlinearity_model) ?
+            _file_nonlinearity_model(config.nonlinearity_model, "$context.nonlinearity_model") :
+            NullFrameNonlinearity(),
+        avalanche_gain=_file_real(get(config, :avalanche_gain, 1), "$context.avalanche_gain"),
+        excess_noise_factor=_file_real(get(config, :excess_noise_factor, 1),
+            "$context.excess_noise_factor"),
+        multiplication_model=_file_hgcdte_avalanche_multiplication(
+            get(config, :multiplication_model, "clipped_gaussian_approximation"),
+            "$context.multiplication_model"),
+        T=Float32)
+end
+
 _file_matrix(value::AbstractMatrix, context::AbstractString) = value
 _file_matrix(value, context::AbstractString) =
     throw(_file_error(context, "external binding must be a matrix"))
@@ -1459,10 +1521,11 @@ function _detector_node(
         cmos=_cmos_detector_acquisition_f32_node,
         emccd=_emccd_detector_acquisition_f32_node,
         ingaas=_ingaas_detector_acquisition_f32_node,
+        hgcdte_linear_avalanche_array=_hgcdte_avalanche_detector_acquisition_f32_node,
     )
     hasproperty(factories, detector) || throw(_file_error(
         "node '$name' detector",
-        "unsupported detector '$detector'; supported detectors are ccd, cmos, emccd, ingaas",
+        "unsupported detector '$detector'; supported detectors are ccd, cmos, emccd, ingaas, hgcdte_linear_avalanche_array",
     ))
     if hasproperty(config, :shutter)
         shutter = _file_string(config.shutter, "node '$name' config.shutter")

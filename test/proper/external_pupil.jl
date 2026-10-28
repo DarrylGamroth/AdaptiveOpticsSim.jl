@@ -1,6 +1,28 @@
 using AdaptiveOpticsSim.AlgorithmGraphs
 using Test
 
+function external_response_graph(; exposure_s=4e-9, sampling=(1.0,1.0), noise=false, transfer=nothing)
+    detector = ingaas_detector_acquisition_node(:detector; rows=4, columns=4,
+        pixel_sampling_m=sampling, spectral_channel=:reference,
+        exposure_duration_s=exposure_s, quantum_efficiency=0.5,
+        photon_noise=noise, rng_seed=17, photon_rate_schema="test.rate/1",
+        frame_schema="test.frame/1", T=Float32)
+    input = zeros(Float32,4,4)
+    if transfer === nothing
+        definition = algorithm_graph((detector,);
+            inputs=(graph_input(:photon_rate,:detector=>:photon_rate,input),),
+            outputs=(graph_output(:frame,:detector=>:frame),))
+    else
+        mtf = pixel_mtf_node(:mtf; input_shape=(4,4), padding=0, T=Float32,
+            input_schema="test.rate/1", output_schema="test.rate/1", transfer)
+        definition = algorithm_graph((mtf,detector);
+            inputs=(graph_input(:photon_rate,:mtf=>:input,input),),
+            links=(link(:mtf=>:output,:detector=>:photon_rate),),
+            outputs=(graph_output(:frame,:detector=>:frame),))
+    end
+    return prepare_algorithm_graph(definition)
+end
+
 struct ExternalIntensityTestNode end
 struct ExternalIntensityTestOwner{V,O}
     value::V
@@ -43,6 +65,65 @@ function external_test_owner(graphs=(slow=external_test_graph(),fast=external_te
         exposure_durations=(slow=ModelDuration(10),fast=ModelDuration(4)),
         observations=(slow=(output=:intensity,sampling_node=:optics),
             fast=(output=:intensity,sampling_node=:optics)))
+end
+
+@testset "Detector graphs run after complete optical exposures" begin
+    intensity = Ref(2.0)
+    optical = external_intensity_test_graph(intensity)
+    response = external_response_graph(;transfer=ones(Float32,4,4))
+    specification = (graph=response,input=:photon_rate,output=:frame,
+        normalized_to_photon_rate=1e9,pixel_sampling_m=(1.0,1.0),
+        exposure_duration_s=4e-9,frame_schema="test.frame/1")
+    owner = prepare_external_pupil((sensor=optical,);
+        exposure_durations=(sensor=ModelDuration(4),),
+        observations=(sensor=(output=:intensity,sampling_node=:optics,response=specification),))
+    products = NamedTuple[]
+    emit(name,image,metadata) = push!(products,(;name,image=copy(image),metadata))
+    domain = ntuple(_->UInt8(1),16)
+    feed(time,sequence;generation=1,lost=0) = step_external_pupil!(emit,owner,
+        zeros(4,4),ones(4,4),ModelTimestamp(time),ModelDuration(2);
+        domain,generation=UInt64(generation),sequence=UInt64(sequence),lost_samples=UInt64(lost))
+    @test feed(0,1)
+    @test isempty(products)
+    @test all(iszero,graph_output(response,:frame))
+    intensity[]=4
+    @test feed(2,2)
+    @test length(products)==1
+    @test products[1].image≈fill(6f0,4,4) rtol=2e-6
+    @test products[1].metadata.quantity===:detector_frame
+    @test products[1].metadata.frame_schema=="test.frame/1"
+    @test products[1].metadata.duration==4
+    # Input loss discards incomplete optical coverage, without detector readout.
+    @test feed(4,3)
+    @test feed(8,5;lost=1)
+    @test length(products)==1
+    @test feed(10,6;lost=1)
+    @test length(products)==2
+    @test products[2].image≈fill(8f0,4,4) rtol=2e-6
+    # A new generation resets detector RNG/state as well as optical integration.
+    @test feed(0,1;generation=2)
+    @test feed(2,2;generation=2)
+    @test products[3].metadata.generation==2
+    @test products[3].metadata.sequence==1
+    for changed in ((normalized_to_photon_rate=0,), (pixel_sampling_m=(2.0,1.0),),
+            (exposure_duration_s=1e-6,), (frame_schema="",))
+        @test_throws AlgorithmGraphError prepare_external_pupil((sensor=optical,);
+            exposure_durations=(sensor=ModelDuration(4),),
+            observations=(sensor=(output=:intensity,sampling_node=:optics,
+                response=merge(specification,changed)),))
+    end
+    noise_response = external_response_graph(;noise=true)
+    noise_owner = prepare_external_pupil((sensor=external_intensity_test_graph(Ref(2.0)),);
+        exposure_durations=(sensor=ModelDuration(4),),
+        observations=(sensor=(output=:intensity,sampling_node=:optics,
+            response=merge(specification,(graph=noise_response,))),))
+    frames = Matrix{Float32}[]
+    for generation in UInt64(1):UInt64(2), (sequence,time) in enumerate((0,2))
+        @test step_external_pupil!((name,image,metadata)->push!(frames,copy(image)),
+            noise_owner,zeros(4,4),ones(4,4),ModelTimestamp(time),ModelDuration(2);
+            domain,generation,sequence=UInt64(sequence))
+    end
+    @test length(frames)==2 && frames[1]==frames[2]
 end
 
 @testset "Transport-neutral external pupil exposures" begin

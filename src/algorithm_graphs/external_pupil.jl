@@ -125,6 +125,48 @@ struct PreparedExternalPupil{G,E,A,O,I}
     state::_ExternalPupilState
 end
 
+_observation_response(observation) = get(observation, :response, nothing)
+
+function _validate_observation_response(response, graph, observation, duration)
+    response === nothing && return nothing
+    response isa NamedTuple || throw(AlgorithmGraphError("exposure response must be a named tuple"))
+    _require_named_fields(response, (:graph, :input, :output, :normalized_to_photon_rate,
+        :pixel_sampling_m, :exposure_duration_s, :frame_schema),
+        (:graph, :input, :output, :normalized_to_photon_rate,
+        :pixel_sampling_m, :exposure_duration_s, :frame_schema), "exposure response")
+    response.frame_schema isa AbstractString && !isempty(strip(response.frame_schema)) ||
+        throw(AlgorithmGraphError("exposure response requires a nonempty frame_schema"))
+    compute_device(response.graph) == HostComputeDevice() ||
+        throw(AlgorithmGraphError("external pupil response requires a CPU graph"))
+    input = graph_input(response.graph, response.input)
+    output = graph_output(response.graph, response.output)
+    intensity = graph_output(graph, observation.output)
+    input isa Matrix{<:Union{Float32,Float64}} && size(input) == size(intensity) ||
+        throw(AlgorithmGraphError("response photon-rate input must match the optical grid; no resampling is inferred"))
+    output isa Matrix{<:Union{Float32,Float64}} && size(output) == size(intensity) ||
+        throw(AlgorithmGraphError("response frame must match the optical grid"))
+    Base.mightalias(input, output) && throw(AlgorithmGraphError("response input and output must not alias"))
+    scale = response.normalized_to_photon_rate
+    scale isa Real && !(scale isa Bool) && isfinite(scale) && scale > 0 ||
+        throw(AlgorithmGraphError("normalized_to_photon_rate must be finite and positive"))
+    sampling = response.pixel_sampling_m
+    sampling isa Tuple && length(sampling) == 2 &&
+        all(x -> x isa Real && !(x isa Bool) && isfinite(x) && x > 0, sampling) ||
+        throw(AlgorithmGraphError("response pixel_sampling_m requires positive row/column pitches"))
+    seconds = response.exposure_duration_s
+    seconds isa Real && !(seconds isa Bool) && isfinite(seconds) && seconds > 0 &&
+        isapprox(Float64(seconds) * 1e9, model_nanoseconds(duration); rtol=8eps(Float32), atol=0.5) ||
+        throw(AlgorithmGraphError("response detector duration must match the integrated exposure"))
+    # PROPER reports output sampling only after propagation. Probe once while
+    # cold, then reset; this does not consume an acquisition or detector draw.
+    step_graph!(graph)
+    optical_sampling = optical_sampling_m(prepared_graph_node(graph, observation.sampling_node))
+    all(pitch -> isapprox(pitch, optical_sampling; rtol=8eps(Float32), atol=0), sampling) ||
+        throw(AlgorithmGraphError("response pixel sampling differs from optical sampling; declare a resampling model explicitly"))
+    reset_graph!(graph)
+    return nothing
+end
+
 """
     prepare_external_pupil(graphs; exposure_durations, observations,
         input_names=(opd=:pupil_opd,amplitude=:pupil_amplitude))
@@ -134,6 +176,17 @@ exposures. `exposure_durations` contains `ModelDuration` values. Each observatio
 is `(output=:intensity,sampling_node=:optics)`, with caller-selected identifiers.
 Pupil ports must be equally shaped Float64 matrices. No detector sampling,
 photometry, resampling or pupil registration is inferred.
+
+An observation may additionally declare `response=(graph=..., input=:photon_rate,
+output=:frame, normalized_to_photon_rate=..., pixel_sampling_m=(dy,dx),
+exposure_duration_s=..., frame_schema=...)`. The explicit scale converts each relative intensity
+sample to cell-integrated photons/s; it includes the caller's radiometric and
+spatial calibration and is never normalized by the current image sum. A response
+uses the same optical grid and runs once per complete exposure. Preparation
+probes and resets the optical graph to check sampling. Detector readout and noise
+therefore run at the exposure cadence, after optical integration. Responses reset
+after an input discontinuity or a new generation. Required `frame_schema` labels
+the output quantity without inferring electrons or ADC units.
 """
 function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTuple,
         observations::NamedTuple,input_names=(opd=:pupil_opd,amplitude=:pupil_amplitude))
@@ -168,6 +221,28 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
         intensity=graph_output(graph,getproperty(observations,name).output)
         ndims(intensity)==2 || throw(AlgorithmGraphError("intensity observation must be a matrix"))
         prepared_graph_node(graph,getproperty(observations,name).sampling_node)
+        _validate_observation_response(_observation_response(getproperty(observations,name)),
+            graph, getproperty(observations,name), getproperty(exposure_durations,name))
+    end
+    for (name, observation) in pairs(observations)
+        response = _observation_response(observation)
+        response === nothing && continue
+        buffers = (graph_input(response.graph, response.input), graph_output(response.graph, response.output))
+        for other in values(graphs), buffer in buffers
+            any(input -> Base.mightalias(buffer, graph_input(other, input)), values(input_names)) &&
+                throw(AlgorithmGraphError("response storage must not alias pupil inputs"))
+        end
+        for (other_name, other_observation) in pairs(observations)
+            other_response = _observation_response(other_observation)
+            for buffer in buffers
+                Base.mightalias(buffer, graph_output(getproperty(graphs, other_name), other_observation.output)) &&
+                    throw(AlgorithmGraphError("response storage must not alias optical outputs"))
+                (other_name == name || other_response === nothing) && continue
+                any(other -> Base.mightalias(buffer, other),
+                    (graph_input(other_response.graph, other_response.input), graph_output(other_response.graph, other_response.output))) &&
+                    throw(AlgorithmGraphError("independent responses must not share storage"))
+            end
+        end
     end
     exposures=NamedTuple{keys(graphs)}(map(keys(graphs)) do name
         IntensityExposure(size(graph_output(getproperty(graphs,name),getproperty(observations,name).output)),
@@ -217,6 +292,10 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
             changed && (exposure.sequence=0)
         end
         changed && foreach(reset_graph!,values(prepared.graphs))
+        for observation in values(prepared.observations)
+            response = _observation_response(observation)
+            response === nothing || reset_graph!(response.graph)
+        end
     end
     for index in eachindex(prepared.pupil_opd)
         a=amplitude[index]
@@ -229,13 +308,29 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
         step_graph!(graph)
         intensity=graph_output(graph,getproperty(prepared.observations,name).output)
         _validate_intensity(intensity)
+        response = _observation_response(getproperty(prepared.observations,name))
+        if response !== nothing
+            target_type = eltype(graph_input(response.graph, response.input))
+            all(value -> isfinite(target_type(value * response.normalized_to_photon_rate)), intensity) ||
+                throw(AlgorithmGraphError("scaled photon rate exceeds response input precision"))
+        end
     end
     for (name,graph) in pairs(prepared.graphs)
         observation=getproperty(prepared.observations,name)
         sampling=optical_sampling_m(prepared_graph_node(graph,observation.sampling_node))
         integrate_intensity!(getproperty(prepared.exposures,name),graph_output(graph,observation.output),timestamp,duration) do image,pts,exposure,output_sequence
-            emit(name,image,(;pts=model_nanoseconds(pts),duration=UInt64(model_nanoseconds(exposure)),
-                generation,sequence=output_sequence,sampling_m=sampling))
+            metadata = (;pts=model_nanoseconds(pts),duration=UInt64(model_nanoseconds(exposure)),
+                generation,sequence=output_sequence,sampling_m=sampling)
+            response = _observation_response(observation)
+            if response === nothing
+                emit(name,image,metadata)
+            else
+                input = graph_input(response.graph, response.input)
+                input .= image .* response.normalized_to_photon_rate
+                step_graph!(response.graph)
+                emit(name,graph_output(response.graph, response.output),
+                    merge(metadata,(;quantity=:detector_frame,frame_schema=response.frame_schema)))
+            end
         end
     end
     state.domain=domain;state.generation=generation;state.sequence=sequence

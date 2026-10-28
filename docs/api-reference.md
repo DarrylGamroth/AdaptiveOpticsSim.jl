@@ -327,6 +327,17 @@ current, glow, saturation, and optional quantization. Pixel MTF remains a
 separate upstream operation. Captured execution is restricted to the admitted
 full-frame null-persistence and null-nonlinearity path.
 
+`hgcdte_avalanche_detector_acquisition_node` uses the same metric photon-rate
+and frame contracts for `HgCdTeAvalancheArraySensor`, including caller-supplied
+SAPHIRA configurations. It prepares the existing numerical detector with
+single-read sampling. `avalanche_gain` multiplies charge before read noise;
+`gain` is the separate post-readout conversion gain. `full_well_e` bounds
+multiplied charge. `excess_noise_factor` uses F = E[M²]/E[M]², with F = 1
+deterministic. `multiplication_model` accepts the CPU conditional-Gamma reference
+or the clipped-Gaussian approximation described in the glossary. No empirical
+camera defaults are supplied. CPU stream execution is covered; accelerator
+capture qualification is unchanged.
+
 The built-in graph catalog stops at complete detector frames. For a maintained
 Shack–Hartmann estimator and RTC composition, use the
 [`filter_graph_algorithms` fixture](../examples/integrations/filter_graph_algorithms/),
