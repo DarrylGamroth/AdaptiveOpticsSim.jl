@@ -339,6 +339,7 @@ const REVIEWED_SUPPORTED_API = (
         public_advanced =
         (
             :CCDDetectorAcquisitionNode, :CCDDetectorAcquisitionNodeConfig,
+            :external_pupil_contract,
             :CMOSDetectorAcquisitionNode, :CMOSDetectorAcquisitionNodeConfig,
             :DeformableMirrorSurfaceNode, :DeformableMirrorSurfaceNodeConfig,
             :EMCCDDetectorAcquisitionNode, :EMCCDDetectorAcquisitionNodeConfig,

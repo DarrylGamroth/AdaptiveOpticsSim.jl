@@ -10,6 +10,7 @@ module AlgorithmGraphs
 
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault
 using KernelAbstractions
+using SHA: sha256
 import ..Backends
 
 import ..AdaptiveOpticsSim: AdaptiveOpticsSimError

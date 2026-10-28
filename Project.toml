@@ -1,6 +1,6 @@
 name = "AdaptiveOpticsSim"
 uuid = "002fb5eb-ad68-44a0-adbe-b299bfc2febc"
-version = "0.3.6"
+version = "0.3.7"
 authors = ["AdaptiveOpticsSim.jl Contributors"]
 
 [deps]
