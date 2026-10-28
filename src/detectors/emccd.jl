@@ -549,3 +549,112 @@ function _snr_ratio(signal, variance)
     variance > zero(variance) && return signal / sqrt(variance)
     return signal > zero(signal) ? oftype(signal / one(signal), Inf) : zero(signal)
 end
+
+"""
+    emccd_mean(signal_electrons, sensor::EMCCDSensor;
+        dark_electrons=0, cic_electrons=sensor.clock_induced_charge_per_frame,
+        gain=1, poisson_cutoff=64)
+
+Return `(mean_electrons, truncation_bound_electrons)` as a named tuple for
+one pixel's unsaturated, linear-mode output charge before read noise or ADC.
+Signal, dark charge and CIC are independent Poisson expectations
+in electrons per completed exposure. `gain` is the electron-multiplication gain;
+the conventional output path bypasses it, as in acquisition.
+`cic_electrons` defaults to the sensor's configured expectation; an explicit
+value can represent a separately computed effective Poisson mean.
+
+Conditional-Gamma multiplication and zero conditional noise factor have exact
+mean `gain * (signal + dark + CIC)`. For clipped-Gaussian multiplication, sum
+the positive clipping bias through `poisson_cutoff`, retaining the exact linear
+mean separately. If `K ~ Poisson(λ)` and the configured conditional factor is
+`f`, the conditional bias at integer `k > 0` is
+`f*sqrt(k)*φ(sqrt(k)/f) - k*Φ(-sqrt(k)/f)`.
+
+The nonnegative truncation bound covers the omitted mathematical Poisson sum,
+not floating-point evaluation, native RNG distributions, readout, quantization,
+or hardware error. Arithmetic uses Float64; the conditional factor is obtained
+from the supplied sensor in its configured precision. The expectation assumes
+ideal independent Poisson and standard-normal/Gamma draws represented by the
+simulator's RNG. Photon counting and EM-register saturation are unsupported.
+Input full-well saturation, defects, persistence, response and binning must be
+handled separately by the caller.
+"""
+function emccd_mean(signal_electrons::Real, sensor::EMCCDSensor;
+    dark_electrons::Real=0,
+    cic_electrons::Real=sensor.clock_induced_charge_per_frame,
+    gain::Real=1, poisson_cutoff::Int=64)
+    signal, dark, cic, em_gain = Float64.((signal_electrons, dark_electrons,
+        cic_electrons, gain))
+    all(x -> isfinite(x) && x >= 0, (signal, dark, cic)) ||
+        throw(InvalidConfiguration("emccd_mean charge expectations must be finite and >= 0"))
+    isfinite(em_gain) && em_gain > 0 ||
+        throw(InvalidConfiguration("emccd_mean gain must be finite and > 0"))
+    poisson_cutoff > 0 ||
+        throw(InvalidConfiguration("emccd_mean poisson_cutoff must be positive"))
+    λ = signal + dark + cic
+    isfinite(λ) || throw(InvalidConfiguration("emccd_mean total charge must be finite"))
+    _require_emccd_mean(sensor.operating_mode)
+    validate_emccd_gain(sensor.output_path, sensor, em_gain)
+    result = _emccd_mean(sensor.output_path, sensor, λ, em_gain, poisson_cutoff)
+    isfinite(result.mean_electrons) ||
+        throw(InvalidConfiguration("emccd_mean output charge exceeds Float64 range"))
+    return result
+end
+
+_require_emccd_mean(::LinearEMMode) = nothing
+_require_emccd_mean(::AbstractEMCCDOperatingMode) =
+    throw(InvalidConfiguration("emccd_mean supports LinearEMMode only"))
+
+_emccd_mean(::ConventionalOutput, ::EMCCDSensor, λ, gain, cutoff) =
+    (; mean_electrons=λ, truncation_bound_electrons=0.0)
+
+function _emccd_mean(::EMOutput, sensor::EMCCDSensor, λ, gain, cutoff)
+    sensor.register_full_well === nothing || throw(InvalidConfiguration(
+        "emccd_mean does not include EM-register saturation"))
+    f = Float64(em_conditional_noise_factor(sensor.multiplication_model, sensor))
+    isfinite(f) || throw(InvalidConfiguration("emccd_mean conditional factor must be finite"))
+    return _emccd_mean(sensor.multiplication_model, λ, gain, f, cutoff)
+end
+
+_emccd_mean(::ConditionalGammaMultiplication, λ, gain, f, cutoff) =
+    (; mean_electrons=gain * λ, truncation_bound_electrons=0.0)
+
+function _emccd_clipping_bias(k, f)
+    k == 0 && return 0.0
+    z = sqrt(k) / f
+    # Rounding can make the difference slightly negative in the negligible tail.
+    return max(0.0, f * sqrt(k) * exp(-z^2 / 2) / sqrt(2π) -
+        k * erfc(z / sqrt(2)) / 2)
+end
+
+function _emccd_mean(::ClippedGaussianMultiplicationApproximation, λ, gain, f, cutoff)
+    (λ == 0 || f == 0) && return (
+        mean_electrons=gain * λ, truncation_bound_electrons=0.0)
+    # Start near the largest retained probability; p(0) can underflow for large λ.
+    mode = λ >= cutoff ? cutoff : floor(Int, λ)
+    p = exp(-λ + mode * log(λ) - loggamma(Float64(mode) + 1))
+    bias = p * _emccd_clipping_bias(mode, f)
+    probability = p
+    if mode < cutoff
+        for k in (mode + 1):cutoff
+            probability *= λ / k
+            bias += probability * _emccd_clipping_bias(k, f)
+        end
+    end
+    probability = p
+    for k in (mode - 1):-1:1
+        probability *= (k + 1) / λ
+        bias += probability * _emccd_clipping_bias(k, f)
+    end
+    # b(k) ≤ f*k*a^k/sqrt(2π), a=exp(-1/(2f²)). Exponential tilting
+    # gives E[K*a^K; K>cutoff] = λ*a*exp(λ*(a-1))*P(Pois(λ*a)≥cutoff).
+    loga = -inv(f)^2 / 2
+    tilted_mean = λ * exp(loga)
+    logtail = tilted_mean < cutoff && tilted_mean > 0 ?
+        -tilted_mean + cutoff * (1 + log(tilted_mean) - log(cutoff)) : 0.0
+    logbound = log(gain) + log(f) - log(2π) / 2 + log(λ) + loga +
+        λ * expm1(loga) + logtail
+    # Keep a positive upper envelope when the evaluated exponential underflows.
+    bound = max(floatmin(Float64), exp(logbound))
+    return (; mean_electrons=gain * (λ + bias), truncation_bound_electrons=bound)
+end
