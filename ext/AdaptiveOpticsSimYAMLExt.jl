@@ -34,4 +34,6 @@ function _read_algorithm_graph(path::AbstractString)
     return only(documents)
 end
 
+include("zemax_preparation.jl")
+
 end

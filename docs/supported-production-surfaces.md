@@ -44,6 +44,13 @@ The Julia 1.12 CPU baseline includes:
 Warmed allocation claims apply only to the concrete paths with allocation tests.
 They are not a promise for arbitrary user callbacks or every optional library.
 
+Optional native Proper optical trains and external-pupil intensity exposures
+have a separate CPU target, `test/proper`, checked on Julia 1.13.3 with registered
+Proper 0.4.0. Even propagation grids are required. The `zemax` selector checks
+bounded sequential inspection and paraxial preparation. These checks establish
+the software contracts in the [Proper integration guide](proper-integration-guide.md);
+they do not qualify instrument optical fidelity, GPU execution or deadlines.
+
 The CPU qualification environment (`test/cpu`) and CPU benchmark environment
 (`benchmarks`) pin KernelAbstractions 0.10.1 and registered AOC 0.17.1.
 KA CPU kernels and algorithm graphs are checked on Julia 1.13.2. This version

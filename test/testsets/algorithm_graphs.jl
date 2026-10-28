@@ -2238,6 +2238,8 @@ end
     end
 
     @test keys(builtin_graph_node_types()) == (
+        :proper_optical_train_f64,
+        :proper_optical_train_f32,
         :detector,
         :pixel_mtf,
         :deformable_mirror_surface_f32,

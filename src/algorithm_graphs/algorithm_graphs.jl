@@ -142,12 +142,15 @@ include("second_order_response_node.jl")
 include("ingaas_detector_node.jl")
 include("pixel_mtf_node.jl")
 include("captured_execution.jl")
+include("proper_node.jl")
 include("graph_files.jl")
 include("execution.jl")
 include("model_time.jl")
 include("hil_boundary.jl")
 include("calibration_boundary.jl")
 include("output_snapshot.jl")
+include("external_pupil.jl")
+
 include("api.jl")
 
 end # module AlgorithmGraphs
