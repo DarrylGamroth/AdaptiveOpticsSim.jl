@@ -436,3 +436,36 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
     state.last_end_ns=finish;state.lost_samples=lost_samples
     return true
 end
+
+"""
+    reset_external_pupil!(prepared)
+
+Reset optical and response histories, partial exposures, emitted sequences and
+input-domain admission. The sole owner must stop and serialize input processing
+before calling this function. The next sample establishes a fresh domain and
+generation; no previous partial exposure or detector history participates.
+Transport buffers and source lifecycle remain the caller's responsibility.
+"""
+function reset_external_pupil!(prepared::PreparedExternalPupil)
+    foreach(reset_graph!, values(prepared.graphs))
+    for observation in values(prepared.observations)
+        response = _observation_response(observation)
+        response === nothing || reset_graph!(response.graph)
+    end
+    for exposure in values(prepared.exposures)
+        reset_intensity_exposure!(exposure, ModelTimestamp(0))
+        exposure.sequence = 0
+        exposure.incomplete = 0
+        Backends._with_compute_device(compute_device(exposure.image)) do
+            fill!(exposure.image, 0)
+        end
+    end
+    fill!(prepared.pupil_opd, 0)
+    fill!(prepared.pupil_amplitude, 0)
+    state = prepared.state
+    state.last_end_ns = -1
+    state.generation = state.sequence = 0
+    state.domain = nothing
+    state.lost_samples = state.discontinuities = state.rejected = 0
+    return prepared
+end

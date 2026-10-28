@@ -203,6 +203,33 @@ end
     end
 end
 
+@testset "external-pupil reset clears histories, partial coverage and domain admission" begin
+    graph = external_test_graph()
+    prepared = prepare_external_pupil((;sensor=graph);
+        exposure_durations=(;sensor=ModelDuration(4)),
+        observations=(;sensor=(;output=:intensity,sampling_node=:optics)))
+    original_domain = ntuple(i->UInt8(i),16)
+    replacement_domain = ntuple(i->UInt8(i+16),16)
+    products = Any[]
+    emit(name,image,metadata) = push!(products,(copy(image),metadata))
+    @test step_external_pupil!(emit,prepared,zeros(4,4),ones(4,4),ModelTimestamp(0),ModelDuration(2);
+        domain=original_domain,generation=UInt64(7),sequence=UInt64(3))
+    @test prepared.exposures.sensor.covered_ns == 2
+    @test reset_external_pupil!(prepared) === prepared
+    @test prepared.state.domain === nothing && prepared.state.sequence == 0
+    @test prepared.exposures.sensor.covered_ns == prepared.exposures.sensor.sequence == 0
+    @test all(iszero,prepared.exposures.sensor.image)
+    for sequence in UInt64(1):UInt64(2)
+        @test step_external_pupil!(emit,prepared,zeros(4,4),fill(2.0,4,4),
+            ModelTimestamp(Int64((sequence-1)*2)),ModelDuration(2);
+            domain=replacement_domain,generation=UInt64(1),sequence)
+    end
+    @test length(products) == 1
+    @test only(products)[2].sequence == 1
+    @test sum(only(products)[1]) ≈ 64
+    @test prepared.state.domain == replacement_domain
+end
+
 @testset "Exactly covered intensity means" begin
     images = Matrix{Float64}[]
     emit = (image,args...) -> push!(images,copy(image))
