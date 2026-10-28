@@ -174,6 +174,7 @@ end
     ))
     @test registered_testset_paths() == normpath.(actual_testsets)
     @test registered_test_fixture_paths() == sort!(normpath.([
+        joinpath(dirname(@__DIR__), "atmosphere_axes.jl"),
         joinpath(
             dirname(@__DIR__),
             "backend_execution_context_conformance.jl",
@@ -196,6 +197,7 @@ end
         "ka-cpu",
         "prepared-execution-interfaces",
         "direct-imaging-batch",
+        "atmosphere",
         "atmosphere-direction-batch",
         DETECTOR_TEST_SUITE_NAMES...,
         "wfs-common",

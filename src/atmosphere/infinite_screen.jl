@@ -11,35 +11,35 @@ end
 @kernel function gather_stencil_data_kernel!(dest, screen, coords, n::Int)
     k = @index(Global, Linear)
     if k <= n
-        @inbounds dest[k] = screen[coords[k, 2], coords[k, 1]]
+        @inbounds dest[k] = screen[coords[k, 1], coords[k, 2]]
     end
 end
 
 @kernel function inject_column_positive_kernel!(dest, src, boundary, m::Int)
     i, j = @index(Global, NTuple)
     if i <= m && j <= m
-        @inbounds dest[i, j] = j == 1 ? boundary[i] : src[i, j - 1]
+        @inbounds dest[i, j] = i == 1 ? boundary[j] : src[i - 1, j]
     end
 end
 
 @kernel function inject_column_negative_kernel!(dest, src, boundary, m::Int)
     i, j = @index(Global, NTuple)
     if i <= m && j <= m
-        @inbounds dest[i, j] = j == m ? boundary[i] : src[i, j + 1]
+        @inbounds dest[i, j] = i == m ? boundary[j] : src[i + 1, j]
     end
 end
 
 @kernel function inject_row_positive_kernel!(dest, src, boundary, m::Int)
     i, j = @index(Global, NTuple)
     if i <= m && j <= m
-        @inbounds dest[i, j] = i == 1 ? boundary[j] : src[i - 1, j]
+        @inbounds dest[i, j] = j == 1 ? boundary[i] : src[i, j - 1]
     end
 end
 
 @kernel function inject_row_negative_kernel!(dest, src, boundary, m::Int)
     i, j = @index(Global, NTuple)
     if i <= m && j <= m
-        @inbounds dest[i, j] = i == m ? boundary[j] : src[i + 1, j]
+        @inbounds dest[i, j] = j == m ? boundary[i] : src[i, j + 1]
     end
 end
 
@@ -226,7 +226,7 @@ function _fill_stencil_data!(dest::AbstractVector{T}, screen::AbstractMatrix{T},
     length(dest) == size(coords, 1) ||
         throw(DimensionMismatchError("stencil buffer length must match the boundary-model stencil length"))
     @inbounds for k in eachindex(dest)
-        dest[k] = screen[coords[k, 2], coords[k, 1]]
+        dest[k] = screen[coords[k, 1], coords[k, 2]]
     end
     return dest
 end
@@ -252,9 +252,9 @@ function _inject_column_positive!(screen::AbstractMatrix{T}, state::InfinitePhas
     sample_boundary_line!(state.boundary_buffer, model.operator, state.stencil_buffer, state.noise_buffer, rng)
     @inbounds for row in 1:m
         for col in m:-1:2
-            screen[row, col] = screen[row, col - 1]
+            screen[col, row] = screen[col - 1, row]
         end
-        screen[row, 1] = state.boundary_buffer[row]
+        screen[1, row] = state.boundary_buffer[row]
     end
     return screen
 end
@@ -283,9 +283,9 @@ function _inject_column_negative!(screen::AbstractMatrix{T}, state::InfinitePhas
     sample_boundary_line!(state.boundary_buffer, model.operator, state.stencil_buffer, state.noise_buffer, rng)
     @inbounds for row in 1:m
         for col in 1:(m - 1)
-            screen[row, col] = screen[row, col + 1]
+            screen[col, row] = screen[col + 1, row]
         end
-        screen[row, m] = state.boundary_buffer[row]
+        screen[m, row] = state.boundary_buffer[row]
     end
     return screen
 end
@@ -315,11 +315,11 @@ function _inject_row_positive!(screen::AbstractMatrix{T}, state::InfinitePhaseSc
     @inbounds begin
         for row in m:-1:2
             for col in 1:m
-                screen[row, col] = screen[row - 1, col]
+                screen[col, row] = screen[col, row - 1]
             end
         end
         for col in 1:m
-            screen[1, col] = state.boundary_buffer[col]
+            screen[col, 1] = state.boundary_buffer[col]
         end
     end
     return screen
@@ -350,11 +350,11 @@ function _inject_row_negative!(screen::AbstractMatrix{T}, state::InfinitePhaseSc
     @inbounds begin
         for row in 1:(m - 1)
             for col in 1:m
-                screen[row, col] = screen[row + 1, col]
+                screen[col, row] = screen[col, row + 1]
             end
         end
         for col in 1:m
-            screen[m, col] = state.boundary_buffer[col]
+            screen[col, m] = state.boundary_buffer[col]
         end
     end
     return screen

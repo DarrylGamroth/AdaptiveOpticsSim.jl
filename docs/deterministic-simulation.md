@@ -51,6 +51,16 @@ advance after initialization returns the current epoch without changing the RNG
 stream or epoch sequence. Direction renderers and direction batches may render
 the same current epoch in any order before the atmosphere advances.
 
+Atmosphere screens use the same native `[x,y]` axes as pupil-plane metadata and
+DM surfaces. Frozen-flow sampling subtracts `(v_x t / Δ_x, v_y t / Δ_y)` from
+the screen coordinates; source footprints add `(h θ_x / Δ_x, h θ_y / Δ_y)`.
+Consequently, 0° wind transports features toward increasing first index and
+90° toward increasing second index. Infinite-screen boundary injection and
+fractional interpolation use these same axes. Version 0.3.3 corrects the earlier
+swapped wind and footprint axes: seeded evolved traces change, while initial
+screen generation and the wind-component equations remain unchanged. Image
+presentation must separately honor the product's declared coordinate system.
+
 ## Algorithm Graph Ownership
 
 A stochastic native graph node owns one prepared RNG and its immutable reset

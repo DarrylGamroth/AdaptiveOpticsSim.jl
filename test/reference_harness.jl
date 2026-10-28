@@ -202,7 +202,7 @@ maintained_reference_cases(bundle::ReferenceBundle, baseline::Symbol) =
      if !retired_estimator_reference(case)]
 
 function load_reference_array(case::ReferenceCase)
-    flat = vec(readdlm(case.data_path, Float64))
+    flat = vec(readdlm(case.data_path, Float64; comments=true))
     n_expected = prod(case.shape)
     if length(flat) != n_expected
         throw(DimensionMismatchError("reference data for '$(case.id)' has $(length(flat)) values, expected $(n_expected)"))
@@ -219,7 +219,7 @@ function load_reference_aux_array(
     storage_order::AbstractString="F",
 )
     path = joinpath(dirname(case.data_path), relpath)
-    flat = vec(readdlm(path, Float64))
+    flat = vec(readdlm(path, Float64; comments=true))
     dims = Tuple(Int.(shape))
     n_expected = prod(dims)
     if length(flat) != n_expected

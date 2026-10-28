@@ -1,17 +1,19 @@
 @inline wrap_upper_index(i::Int, n::Int) = ifelse(i > n, i - n, i)
 
+# Native pupil and screen arrays use [x,y], matching their plane orientation.
+# Sampling is center + cone_scale * pupil_position - wind_offset + source_shift.
 @kernel function moving_layer_extract_kernel!(out, screen, start_x, start_y, footprint_scale, output_scale, n::Int, m::Int)
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         T = eltype(out)
-        y = start_y + footprint_scale * T(i - 1)
+        y = start_y + footprint_scale * T(j - 1)
         y0 = unsafe_trunc(Int, floor(y))
         fy = y - T(y0)
         wy0 = one(T) - fy
         iy0 = wrap_upper_index(y0, m)
         iy1 = wrap_upper_index(y0 + 1, m)
 
-        x = start_x + footprint_scale * T(j - 1)
+        x = start_x + footprint_scale * T(i - 1)
         x0 = unsafe_trunc(Int, floor(x))
         fx = x - T(x0)
         wx0 = one(T) - fx
@@ -19,10 +21,10 @@
         ix1 = wrap_upper_index(x0 + 1, m)
 
         @inbounds begin
-            v00 = screen[iy0, ix0]
-            v01 = screen[iy0, ix1]
-            v10 = screen[iy1, ix0]
-            v11 = screen[iy1, ix1]
+            v00 = screen[ix0, iy0]
+            v01 = screen[ix1, iy0]
+            v10 = screen[ix0, iy1]
+            v11 = screen[ix1, iy1]
             out[i, j] = output_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
@@ -32,14 +34,14 @@ end
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         T = eltype(out)
-        y = start_y + footprint_scale * T(i - 1)
+        y = start_y + footprint_scale * T(j - 1)
         y0 = unsafe_trunc(Int, floor(y))
         fy = y - T(y0)
         wy0 = one(T) - fy
         iy0 = wrap_upper_index(y0, m)
         iy1 = wrap_upper_index(y0 + 1, m)
 
-        x = start_x + footprint_scale * T(j - 1)
+        x = start_x + footprint_scale * T(i - 1)
         x0 = unsafe_trunc(Int, floor(x))
         fx = x - T(x0)
         wx0 = one(T) - fx
@@ -47,10 +49,10 @@ end
         ix1 = wrap_upper_index(x0 + 1, m)
 
         @inbounds begin
-            v00 = screen[iy0, ix0]
-            v01 = screen[iy0, ix1]
-            v10 = screen[iy1, ix0]
-            v11 = screen[iy1, ix1]
+            v00 = screen[ix0, iy0]
+            v01 = screen[ix1, iy0]
+            v10 = screen[ix0, iy1]
+            v11 = screen[ix1, iy1]
             out[i, j] += output_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
@@ -71,14 +73,14 @@ end
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         T = eltype(out)
-        y = @inbounds(start_y[layer_index]) + footprint_scale * T(i - 1)
+        y = @inbounds(start_y[layer_index]) + footprint_scale * T(j - 1)
         y0 = unsafe_trunc(Int, floor(y))
         fy = y - T(y0)
         wy0 = one(T) - fy
         iy0 = wrap_upper_index(y0, m)
         iy1 = wrap_upper_index(y0 + 1, m)
 
-        x = @inbounds(start_x[layer_index]) + footprint_scale * T(j - 1)
+        x = @inbounds(start_x[layer_index]) + footprint_scale * T(i - 1)
         x0 = unsafe_trunc(Int, floor(x))
         fx = x - T(x0)
         wx0 = one(T) - fx
@@ -86,10 +88,10 @@ end
         ix1 = wrap_upper_index(x0 + 1, m)
 
         @inbounds begin
-            v00 = screen[iy0, ix0]
-            v01 = screen[iy0, ix1]
-            v10 = screen[iy1, ix0]
-            v11 = screen[iy1, ix1]
+            v00 = screen[ix0, iy0]
+            v01 = screen[ix1, iy0]
+            v10 = screen[ix0, iy1]
+            v11 = screen[ix1, iy1]
             value = output_scale * (
                 wy0 * (wx0 * v00 + fx * v01) +
                 fy * (wx0 * v10 + fx * v11)
@@ -338,26 +340,26 @@ function _extract_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, scre
     start_x::T, start_y::T, footprint_scale::T, output_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
     # Finite moving-screen backend: move a periodic canvas under the pupil with
     # bilinear subpixel interpolation.
-    @inbounds for i in 1:n
-        y = start_y + footprint_scale * T(i - 1)
+    @inbounds for j in 1:n
+        y = start_y + footprint_scale * T(j - 1)
         y0 = floor(Int, y)
         fy = y - T(y0)
         wy0 = one(T) - fy
         iy0 = wrap_index(y0, m)
         iy1 = wrap_index(y0 + 1, m)
 
-        for j in 1:n
-            x = start_x + footprint_scale * T(j - 1)
+        for i in 1:n
+            x = start_x + footprint_scale * T(i - 1)
             x0 = floor(Int, x)
             fx = x - T(x0)
             wx0 = one(T) - fx
             ix0 = wrap_index(x0, m)
             ix1 = wrap_index(x0 + 1, m)
 
-            v00 = screen[iy0, ix0]
-            v01 = screen[iy0, ix1]
-            v10 = screen[iy1, ix0]
-            v11 = screen[iy1, ix1]
+            v00 = screen[ix0, iy0]
+            v01 = screen[ix1, iy0]
+            v10 = screen[ix0, iy1]
+            v11 = screen[ix1, iy1]
             out[i, j] = output_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end
@@ -401,26 +403,26 @@ end
 
 function _accumulate_shifted_screen!(::ScalarCPUStyle, out::AbstractMatrix{T}, screen::AbstractMatrix{T},
     start_x::T, start_y::T, footprint_scale::T, output_scale::T, n::Int, m::Int) where {T<:AbstractFloat}
-    @inbounds for i in 1:n
-        y = start_y + footprint_scale * T(i - 1)
+    @inbounds for j in 1:n
+        y = start_y + footprint_scale * T(j - 1)
         y0 = floor(Int, y)
         fy = y - T(y0)
         wy0 = one(T) - fy
         iy0 = wrap_index(y0, m)
         iy1 = wrap_index(y0 + 1, m)
 
-        for j in 1:n
-            x = start_x + footprint_scale * T(j - 1)
+        for i in 1:n
+            x = start_x + footprint_scale * T(i - 1)
             x0 = floor(Int, x)
             fx = x - T(x0)
             wx0 = one(T) - fx
             ix0 = wrap_index(x0, m)
             ix1 = wrap_index(x0 + 1, m)
 
-            v00 = screen[iy0, ix0]
-            v01 = screen[iy0, ix1]
-            v10 = screen[iy1, ix0]
-            v11 = screen[iy1, ix1]
+            v00 = screen[ix0, iy0]
+            v01 = screen[ix1, iy0]
+            v10 = screen[ix0, iy1]
+            v11 = screen[ix1, iy1]
             out[i, j] += output_scale * (wy0 * (wx0 * v00 + fx * v01) + fy * (wx0 * v10 + fx * v11))
         end
     end

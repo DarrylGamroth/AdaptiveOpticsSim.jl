@@ -29,6 +29,13 @@ function ka_cpu_close(actual, expected; atol=1e-12, rtol=1e-12)
 end
 
 @testset "KA CPU Matrix" begin
+    @testset "Atmosphere physical axes" begin
+        atmosphere_axis_checks(CPUBackend(), Array, KA_CPU_STYLE)
+        mark_ka_cpu_kernel!(:gather_stencil_data_kernel!,
+            :inject_column_negative_kernel!, :inject_column_positive_kernel!,
+            :inject_row_negative_kernel!, :inject_row_positive_kernel!,
+            :moving_layer_replay_kernel!)
+    end
     @testset "Core kernels" begin
         src = reshape(collect(1.0:16.0), 4, 4)
 
@@ -1401,13 +1408,7 @@ end
             :diagonal_matrix_kernel!,
             :dm_apply_gaussian_operator_kernel!,
             :fit_source_average_kernel!,
-            :gather_stencil_data_kernel!,
-            :inject_column_negative_kernel!,
-            :inject_column_positive_kernel!,
-            :inject_row_negative_kernel!,
-            :inject_row_positive_kernel!,
             :masked_sum2d_kernel!,
-            :moving_layer_replay_kernel!,
             :pyramid_electric_field_modulation_batch_kernel!,
             :pyramid_modulation_batch_intensity_kernel!,
             :pyramid_pupil_modulation_batch_kernel!,

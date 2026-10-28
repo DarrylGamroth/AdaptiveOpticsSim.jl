@@ -1,0 +1,44 @@
+# Recorded validation evidence; this is not a latency or hardware qualification.
+source_base = "4cfced10087928057dcddc3492751cf701962306"
+source_branch = "codex/atmosphere-axes-20261027"
+package_version = "0.3.3"
+julia_version = "1.13.3"
+scope = "Native [x,y] atmosphere extraction, source footprints, infinite-screen boundary injection, and registered GPI2 calibration compatibility"
+evidence_directory = "2026-10-27-atmosphere-axes"
+independent_review = "No remaining production or validation blockers; generator command names the default output directory, which is correct for the selected checked-in snapshot."
+
+[regression]
+before = "Initial asymmetric core oracle: 1 pass, 40 failures; before.log.gz"
+after = "All 51 physical-axis checks pass; after-cpu.log.gz"
+coverage = "Unequal x/y slopes, four wind quadrants, periodic wrapping, fractional and integer motion, stencil gather, boundary injection, replay, NGS offsets and LGS cone scaling"
+seeded_behavior = "Initial generation unchanged; evolved traces change because wind and source offsets now use the declared optical axes."
+
+[cpu]
+commands = ["test/runtests.jl ka-cpu atmosphere atmosphere-direction-batch", "test/runtests.jl algorithm-graphs interface-conformance reference-tutorials gate0", "Pkg.test(AdaptiveOpticsSim; test_args=[quality, atmosphere, atmosphere-direction-batch], allow_reresolve=false)"]
+ka_assertions = 1185
+package_tests = "passed; pkg-test-final.log.gz"
+graph_and_interface_tests = "passed before the local Fresnel snapshot mismatch; no affected source changes afterward"
+reference_tests = "passed after generator-based local snapshot update; references-after.log.gz"
+warnings = "Existing tutorial dynamic-module world-age warnings remain; no runtime source or warning suppression was added for them."
+
+[cuda]
+version = "6.4.2"
+physical_axis_assertions = 51
+scalar_indexing = false
+result = "passed; cuda.log.gz"
+
+[amdgpu]
+version = "2.9.2"
+assertions_including_functional_device_check = 52
+scalar_indexing = false
+result = "passed; amdgpu.log.gz"
+
+[gpi2]
+selector = "test/gpi2_closed_loop.jl cuda INSTALLED_SOURCE CALIBRATION REPORT.yaml noisy 128"
+calibration = "Existing installed GPI2 supervision application; all graph, prescription and FITS hashes checked by the maintained selector"
+camera_element_type = "UInt16"
+frames = 128
+assertions = 4
+trailing_mean_residual_ratio = 0.04373620164566871
+result = "passed; gpi-cuda.log.gz and gpi-cuda.yaml.gz"
+limits = "Private-array provisional plant plus JFG controller; excludes native transport, GUI, fixed-rate deadlines, long-term stability and physical hardware qualification."
