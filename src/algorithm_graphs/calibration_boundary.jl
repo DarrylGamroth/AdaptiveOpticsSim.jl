@@ -17,11 +17,11 @@ exchange buffers.
 """
 struct PreparedGraphCalibrationBoundary{
     Graph<:PreparedAlgorithmGraph,
-    CommandInput<:AbstractArray,
+    CommandInput<:Union{AbstractArray,NamedTuple},
     FrameOutput<:AbstractArray,
-    CommandBuffer<:Array,
+    CommandBuffer<:Union{Array,NamedTuple},
     FrameBuffer<:Array,
-    InitialCommand<:Array,
+    InitialCommand<:Union{Array,NamedTuple},
 }
     graph::Graph
     command_input::CommandInput
@@ -38,13 +38,15 @@ end
 
 Bind an unstepped graph's exact command input and frame output to distinct host
 `Array` exchange buffers using the same preparation contract as
-[`prepare_graph_hil_boundary`](@ref). No probe is initially adopted. After
+[`prepare_graph_hil_boundary`](@ref). `command_input` is one Symbol or a tuple of
+1 to 16 unique Symbols. Named command buffers retain that exact order; all
+commands form one coherent held probe. No probe is initially adopted. After
 preparation this boundary must be the sole owner that steps the graph or mutates
 its exact command input. Transport writes only [`hil_command_buffer`](@ref).
 """
 function prepare_graph_calibration_boundary(
     graph::PreparedAlgorithmGraph;
-    command_input::Symbol,
+    command_input::Union{Symbol,Tuple},
     frame_output::Symbol,
     command_buffer=nothing,
     frame_buffer=nothing,
@@ -92,7 +94,7 @@ end
 """
     adopt_hil_probe!(boundary, probe_sequence::UInt64) -> probe_sequence
 
-Validate the entire host command buffer and synchronously copy it to the exact
+Validate every host command buffer before synchronously copying any exact
 graph command input. The positive probe sequence must strictly advance; it is
 independent of exposure sequences. A failed target copy stops the boundary
 because the target may have changed partially. Successful adoption completes
@@ -110,7 +112,7 @@ function adopt_hil_probe!(
     _validate_hil_command_shape(boundary.command_buffer, boundary.command_input)
     _validate_hil_command(boundary.command_buffer)
     try
-        _copy_hil_buffer!(boundary.graph, boundary.command_input, boundary.command_buffer)
+        _copy_hil_commands!(boundary.graph, boundary.command_input, boundary.command_buffer)
     catch
         state.failed = true
         rethrow()
@@ -198,8 +200,8 @@ function reset_hil_boundary!(boundary::PreparedGraphCalibrationBoundary)
     state.failed = true
     _validate_hil_command_shape(boundary.command_buffer, boundary.initial_command)
     reset_graph!(boundary.graph)
-    copyto!(boundary.command_buffer, boundary.initial_command)
-    _copy_hil_buffer!(boundary.graph, boundary.command_input, boundary.initial_command)
+    _restore_hil_host_commands!(boundary.command_buffer, boundary.initial_command)
+    _copy_hil_commands!(boundary.graph, boundary.command_input, boundary.initial_command)
     fill!(boundary.frame_buffer, zero(eltype(boundary.frame_buffer)))
     state.frame_sequence = UInt64(0)
     state.active_probe_sequence = UInt64(0)

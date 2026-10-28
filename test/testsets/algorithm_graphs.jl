@@ -3101,6 +3101,101 @@ function multi_command_hil_test_boundary(graph=multi_command_hil_test_graph(); k
     )
 end
 
+@testset "graph calibration holds complete named probes" begin
+    graph = multi_command_hil_test_graph()
+    prepare(graph; kwargs...) = prepare_graph_calibration_boundary(
+        graph; command_input=(:dm, :tiptilt, :offload), frame_output=:frame, kwargs...,
+    )
+    buffers = (dm=zeros(Float32, 2), tiptilt=zeros(Float32, 1), offload=zeros(Float32, 3))
+    boundary = prepare(graph; command_buffer=buffers)
+    initial = map(copy, boundary.command_input)
+    @test keys(hil_command_buffer(boundary)) == (:dm, :tiptilt, :offload)
+    @test hil_command_buffer(boundary) === buffers
+    @test buffers == initial
+    @test all(isconcretetype, fieldtypes(typeof(boundary)))
+    @test_throws AlgorithmGraphError step_hil_exposure!(boundary)
+    foreach(buffer -> fill!(buffer, 9.0f0), buffers)
+    for invalid in (NaN32, Inf32, -Inf32)
+        buffers.offload[end] = invalid
+        @test_throws AlgorithmGraphError adopt_hil_probe!(boundary, UInt64(7))
+        @test boundary.command_input == initial
+        @test !hil_boundary_status(boundary).failed
+        @test hil_boundary_status(boundary).active_probe_sequence == 0
+    end
+    buffers.offload[end] = 9.0f0
+    @test @inferred(adopt_hil_probe!(boundary, UInt64(7))) == UInt64(7)
+    @test boundary.command_input == buffers
+    @test graph_step_sequence(graph) == 0
+    @test @inferred(step_hil_exposure!(boundary)) == UInt64(1)
+    @test hil_frame_buffer(boundary) == Float32[9, 9]
+    foreach(buffer -> fill!(buffer, 3.0f0), buffers)
+    @test @allocated(step_hil_exposure!(boundary)) == 0
+    @test hil_frame_buffer(boundary) == Float32[9, 9]
+    @test hil_boundary_status(boundary).active_probe_sequence == 7
+    @test_throws AlgorithmGraphError adopt_hil_probe!(boundary, UInt64(7))
+    @test @allocated(adopt_hil_probe!(boundary, UInt64(8))) == 0
+    @test @inferred(reset_hil_boundary!(boundary)) === boundary
+    @test boundary.command_input == buffers == initial
+    @test all(iszero, hil_frame_buffer(boundary))
+    @test_throws AlgorithmGraphError step_hil_exposure!(boundary)
+
+    # A malformed last buffer cannot copy either earlier command or reset the graph.
+    resize!(buffers.offload, 2)
+    foreach(buffer -> fill!(buffer, 8.0f0), buffers)
+    @test_throws AlgorithmGraphError adopt_hil_probe!(boundary, UInt64(1))
+    @test boundary.command_input == initial
+    @test_throws AlgorithmGraphError reset_hil_boundary!(boundary)
+    @test hil_boundary_status(boundary).failed
+    @test boundary.command_input == initial
+    resize!(buffers.offload, 3)
+    reset_hil_boundary!(boundary)
+
+    # Reuse ordinary HIL's exact names/order, shapes and distinct-storage admission.
+    for invalid in (
+        (dm=buffers.dm, tiptilt=buffers.tiptilt),
+        (tiptilt=buffers.tiptilt, dm=buffers.dm, offload=buffers.offload),
+        merge(buffers, (foreign=zeros(Float32, 1),)),
+        merge(buffers, (offload=zeros(Float32, 2),)),
+        merge(buffers, (offload=zeros(Float64, 3),)),
+        merge(buffers, (offload=view(buffers.offload, :),)),
+        merge(buffers, (dm=buffers.offload,)),
+    )
+        @test_throws AlgorithmGraphError prepare(multi_command_hil_test_graph(); command_buffer=invalid)
+    end
+    for names in ((), (:dm, :dm), (:dm, :missing), (:dm, 1), ntuple(_ -> :dm, 17))
+        @test_throws AlgorithmGraphError prepare_graph_calibration_boundary(
+            multi_command_hil_test_graph(); command_input=names, frame_output=:frame,
+        )
+    end
+    one = prepare_graph_calibration_boundary(
+        calibration_test_graph(); command_input=(:command,), frame_output=:frame,
+    )
+    @test keys(hil_command_buffer(one)) == (:command,)
+    @test adopt_hil_probe!(one, UInt64(1)) == UInt64(1)
+
+    # A target-copy failure after an earlier command changed fences every exposure.
+    fault = CalibrationTestFailingCommand(boundary.command_input.offload, Ref(true))
+    failing = PreparedGraphCalibrationBoundary(
+        boundary.graph, merge(boundary.command_input, (offload=fault,)),
+        boundary.frame_output, boundary.command_buffer, boundary.frame_buffer,
+        boundary.initial_command, boundary.state,
+    )
+    foreach(buffer -> fill!(buffer, 8.0f0), hil_command_buffer(failing))
+    @test_throws ErrorException adopt_hil_probe!(failing, UInt64(2))
+    @test failing.command_input.dm == Float32[8, 8]
+    @test fault.values == Float32[8, 5, 6]
+    @test hil_boundary_status(failing).failed
+    @test hil_boundary_status(failing).active_probe_sequence == 0
+    @test_throws AlgorithmGraphError step_hil_exposure!(failing)
+    @test_throws AlgorithmGraphError adopt_hil_probe!(failing, UInt64(3))
+    @test_throws ErrorException reset_hil_boundary!(failing)
+    fault.fail[] = false
+    reset_hil_boundary!(failing)
+    @test failing.command_input == initial
+    @test hil_command_buffer(failing) == initial
+    @test_throws AlgorithmGraphError step_hil_exposure!(failing)
+end
+
 @testset "graph HIL complete multi-command response" begin
     graph = multi_command_hil_test_graph()
     buffers = (dm=zeros(Float32, 2), tiptilt=zeros(Float32, 1), offload=zeros(Float32, 3))
