@@ -57,7 +57,7 @@ function _polychromatic_optical_train_node(::Type{T}, name, reference, config, b
             _train_step(step, T, config, bindings)
         end
         OpticalTrainPlan(steps, reference.resolution, reference.pupil_resolution,
-            reference.diameter_m, wavelength, reference.schemas, nothing)
+            reference.diameter_m, wavelength, reference.schemas, nothing, reference.output_quantity)
     end
     normalized_weights = Tuple(sample.weight for sample in spectrum)
     plan = PolychromaticOpticalTrainPlan(reference, plans, normalized_weights, transmission, output_sampling_m)

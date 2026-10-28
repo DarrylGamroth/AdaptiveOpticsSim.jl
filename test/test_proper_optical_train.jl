@@ -108,3 +108,5 @@ end
 include("proper/sampled_masks.jl")
 
 include("proper/polychromatic_train.jl")
+
+include("proper/electric_field.jl")

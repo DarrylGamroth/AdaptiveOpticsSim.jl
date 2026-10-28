@@ -325,7 +325,7 @@ end
 
 function enqueue_wfs_optical_products!(
     output::IntensityMap,
-    input::PupilFunction,
+    input::Union{PupilFunction,ElectricField},
     plan::PreparedPyramidOptics,
 )
     propagation = plan.workspace

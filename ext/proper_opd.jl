@@ -250,7 +250,7 @@ function AOG.step_graph_node!(owner::RuntimeOPDTrainOwner)
     _begin_sampled_pupil!(train, owner.entrance)
     workspace = train.workspace
     _step_opd_train!(workspace, owner.inputs, train.plan.steps, workspace.masks, owner.interpolation)
-    Proper.prop_end(workspace.wavefront, train.output)
+    _finish_optical_train!(workspace.wavefront, train.output, train.plan.output_quantity)
     return nothing
 end
 

@@ -56,6 +56,14 @@ Julia 1.13.3 and CUDA 6.4.2, including changing pupil inputs, CPU/stream/replay
 agreement, conservative spectral resampling and reset. This does not qualify
 AMDGPU capture or an instrument's deadline performance.
 
+Scalar Proper trains also support planar-reference complex-field output. The
+matched-grid ideal pupil relay and field-input Pyramid preserve that amplitude
+and phase without applying a second aperture or source pointing. CPU and
+captured-CUDA checks use Proper 0.4.1, including rectangular axis/crop checks,
+separated runtime OPD screens, photon scaling and replay. Spherical-reference
+conversion, interpolating relays and a measured instrument's downstream WFS
+prescription are outside this contract.
+
 The streamed external-pupil owner also supports AMDGPU propagation, Float64
 exposure accumulation and post-exposure InGaAs response. The optional
 `test/amdgpu_external_pupil.jl` selector compares these against CPU outputs,

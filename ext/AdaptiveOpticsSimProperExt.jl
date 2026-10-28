@@ -9,6 +9,33 @@ import AdaptiveOpticsSim.Backends
 const DEFAULT_OPD_SCHEMA = "org.adaptiveopticssim.pupil-opd/1"
 const DEFAULT_AMPLITUDE_SCHEMA = "org.adaptiveopticssim.pupil-amplitude/1"
 const DEFAULT_INTENSITY_SCHEMA = "org.adaptiveopticssim.optical-intensity/1"
+const DEFAULT_FIELD_SCHEMA = "org.adaptiveopticssim.electric-field/1"
+
+function _proper_output_quantity(quantity::Symbol)
+    quantity in (:intensity, :electric_field) ||
+        throw(AOG.AlgorithmGraphError("Proper output_quantity must be intensity or electric_field"))
+    return Val(quantity)
+end
+_proper_output_quantity(quantity::AbstractString) = _proper_output_quantity(Symbol(quantity))
+_proper_output_quantity(quantity) =
+    throw(AOG.AlgorithmGraphError("Proper output_quantity must be intensity or electric_field"))
+
+_output_schema(::Val{:intensity}) = DEFAULT_INTENSITY_SCHEMA
+_output_schema(::Val{:electric_field}) = DEFAULT_FIELD_SCHEMA
+_output_type(::Type{T}, ::Val{:intensity}) where {T} = T
+_output_type(::Type{T}, ::Val{:electric_field}) where {T} = Complex{T}
+
+_require_output_reference(::Val{:intensity}, wavefront) = nothing
+function _require_output_reference(::Val{:electric_field}, wavefront)
+    wavefront.reference_surface === Proper.PLANAR || throw(AOG.AlgorithmGraphError(
+        "Proper electric_field output requires a planar reference surface; spherical-reference fields need an explicit physical phase conversion"))
+    return nothing
+end
+
+_finish_optical_train!(wavefront, output, ::Val{:intensity}) =
+    Proper.prop_end!(output, wavefront)
+_finish_optical_train!(wavefront, output, ::Val{:electric_field}) =
+    Proper.prop_end!(output, wavefront; noabs=true)
 
 function _train_step(step::NamedTuple, ::Type{T}, config, bindings) where {T}
     hasproperty(step, :op) || throw(AOG.AlgorithmGraphError("optical step is missing op"))
@@ -141,7 +168,7 @@ end
 
 struct OpticalTrainNode{T} end
 
-struct OpticalTrainPlan{T,S,G}
+struct OpticalTrainPlan{T,S,G,Q}
     steps::S
     resolution::Int
     pupil_resolution::Int
@@ -149,6 +176,7 @@ struct OpticalTrainPlan{T,S,G}
     wavelength_um::T
     schemas::NTuple{3,String}
     pupil_grid::G
+    output_quantity::Q
 end
 
 function AOG._proper_optical_train_node(::Type{T}, name::Symbol,
@@ -169,14 +197,21 @@ function AOG._proper_optical_train_node(::Type{T}, name::Symbol,
     wavelength = T(AOG._file_real(config.wavelength_um, "wavelength_um"))
     all(x -> isfinite(x) && x > 0, (diameter, wavelength)) ||
         throw(AOG.AlgorithmGraphError("diameter and wavelength must be finite and positive"))
+    output_quantity = hasproperty(config, :output_quantity) ?
+        _proper_output_quantity(config.output_quantity) : Val(:intensity)
+    if output_quantity === Val(:electric_field) &&
+            (hasproperty(config, :channels) || hasproperty(config, :output_sampling_m))
+        throw(AOG.AlgorithmGraphError(
+            "Proper electric_field output requires a scalar train without channels or output_sampling_m"))
+    end
     schemas = map((:pupil_opd_schema, :pupil_amplitude_schema, :output_schema),
-        (DEFAULT_OPD_SCHEMA, DEFAULT_AMPLITUDE_SCHEMA, DEFAULT_INTENSITY_SCHEMA)) do key, default
+        (DEFAULT_OPD_SCHEMA, DEFAULT_AMPLITUDE_SCHEMA, _output_schema(output_quantity))) do key, default
         value = hasproperty(config, key) ? AOG._file_string(getproperty(config, key), string(key)) : default
         isempty(value) && throw(AOG.AlgorithmGraphError("$key must not be empty"))
         value
     end
     pupil_grid = hasproperty(config, :pupil_grid) ? _entrance_pupil_grid(config.pupil_grid, T, p) : nothing
-    plan = OpticalTrainPlan(steps, n, p, diameter, wavelength, schemas, pupil_grid)
+    plan = OpticalTrainPlan(steps, n, p, diameter, wavelength, schemas, pupil_grid, output_quantity)
     if hasproperty(config, :channels) || hasproperty(config, :output_sampling_m)
         return _polychromatic_optical_train_node(T, name, plan, config, bindings)
     end
@@ -188,7 +223,7 @@ function AOG.graph_node_ports(::Type{OpticalTrainNode{T}}, plan::OpticalTrainPla
     output = (plan.resolution, plan.resolution)
     ports = (AOG.graph_port_contract(:pupil_opd, :input, :data, T, pupil, plan.schemas[1], :column_major),
         AOG.graph_port_contract(:pupil_amplitude, :input, :data, T, pupil, plan.schemas[2], :column_major),
-        AOG.graph_port_contract(:output, :output, :data, T, output, plan.schemas[3], :column_major))
+        AOG.graph_port_contract(:output, :output, :data, _output_type(T, plan.output_quantity), output, plan.schemas[3], :column_major))
     return (ports..., _runtime_opd_ports(T, plan.steps)...)
 end
 
@@ -201,12 +236,13 @@ struct OpticalTrainWorkspace{W,C,A,M,S}
     shifted_mask::S
 end
 
-struct OpticalTrainOwner{P,W,D,A,O}
+struct OpticalTrainOwner{P,W,D,A,O,T}
     plan::P
     workspace::W
     pupil_opd::D
     pupil_amplitude::A
     output::O
+    sampling_m::T
 end
 
 function _mask_sample(step, row, col)
@@ -280,6 +316,7 @@ function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}
             device_mask
         end
     end
+    _require_output_reference(plan.output_quantity, wf)
     return (; masks, sampling_m=T(Proper.prop_get_sampling(wf)))
 end
 
@@ -293,10 +330,11 @@ end
 
 function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, target) where {T}
     n = plan.resolution
-    for (array, shape) in ((inputs.pupil_opd, (plan.pupil_resolution, plan.pupil_resolution)),
-            (inputs.pupil_amplitude, (plan.pupil_resolution, plan.pupil_resolution)),
-            (outputs.output, (n,n)))
-        eltype(array) === T && size(array) == shape && Backends.compute_device(array) == target ||
+    for (array, shape, numeric_type) in
+            ((inputs.pupil_opd, (plan.pupil_resolution, plan.pupil_resolution), T),
+             (inputs.pupil_amplitude, (plan.pupil_resolution, plan.pupil_resolution), T),
+             (outputs.output, (n,n), _output_type(T, plan.output_quantity)))
+        eltype(array) === numeric_type && size(array) == shape && Backends.compute_device(array) == target ||
             throw(AOG.AlgorithmGraphError("Proper optical train buffer contract mismatch"))
     end
     field = Backends.allocate_device_array(target, Complex{T}, n, n)
@@ -312,7 +350,7 @@ function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, targ
         Backends.allocate_device_array(target, Complex{T}, n, n) : nothing
     workspace = OpticalTrainWorkspace(wavefront, context, padded_opd, padded_amplitude,
         geometry.masks, shifted_mask)
-    owner = OpticalTrainOwner(plan, workspace, inputs.pupil_opd, inputs.pupil_amplitude, outputs.output)
+    owner = OpticalTrainOwner(plan, workspace, inputs.pupil_opd, inputs.pupil_amplitude, outputs.output, geometry.sampling_m)
     _prepare_train_capture!(owner, target)
     return (; owner, geometry.sampling_m)
 end
@@ -356,11 +394,14 @@ function AOG.step_graph_node!(owner::OpticalTrainOwner)
     foreach(plan.steps, workspace.masks) do step, mask
         _train_optic!(wf, step, mask, workspace.context, workspace.shifted_mask)
     end
-    Proper.prop_end(wf, owner.output)
+    _finish_optical_train!(wf, owner.output, plan.output_quantity)
     return nothing
 end
 
-AOG.optical_sampling_m(owner::OpticalTrainOwner) = Proper.prop_get_sampling(owner.workspace.wavefront)
+AOG.optical_sampling_m(plan::OpticalTrainPlan) =
+    _prepare_masks(plan, Backends.HostComputeDevice()).sampling_m
+
+AOG.optical_sampling_m(owner::OpticalTrainOwner) = owner.sampling_m
 _optical_train_capture_capability(::Backends.AbstractComputeDevice) = AOG.GraphNodeCaptureUnsupported()
 _optical_train_capture_capability(::Backends.AcceleratorComputeDevice{Backends.CUDABackend}) = AOG.GraphNodeCaptureSafe()
 AOG.graph_node_capture_capability(owner::OpticalTrainOwner) =

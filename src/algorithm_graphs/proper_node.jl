@@ -27,7 +27,7 @@ function _proper_optical_train_node(::Type, name::Symbol,
 end
 
 const _PROPER_CONFIG_FIELDS = (:resolution, :pupil_resolution, :diameter_m, :wavelength_um,
-    :steps, :channels, :output_sampling_m, :pupil_grid, :pupil_opd_schema, :pupil_amplitude_schema, :output_schema)
+    :steps, :channels, :output_sampling_m, :output_quantity, :pupil_grid, :pupil_opd_schema, :pupil_amplitude_schema, :output_schema)
 const _PROPER_MAX_SAMPLED_STEPS = 256
 
 function _proper_channel_configs(config::NamedTuple)
@@ -96,13 +96,17 @@ end
 
 """
     optical_sampling_m(owner)
+    optical_sampling_m(plan)
 
-Return the physical sample pitch in metres on both axes of a prepared Proper
-optical train's raw output intensity. For a scalar train, read this after stepping
-the graph: it reports the retained wavefront's current sampling. CUDA cold
-preparation may already trace the output geometry before the first user step. A
-mapped train always returns the declared fixed pitch or cold-prepared reference
-output sampling.
-Obtain the owner with `prepared_graph_node(graph, node_name)`.
+Return the physical sample pitch in metres on both axes of a Proper optical
+train's raw output intensity or complex electric field. A prepared scalar
+owner reports its frozen native output pitch, including before the first step.
+A mapped train reports its declared fixed pitch or cold-prepared reference
+output pitch. Obtain an owner with `prepared_graph_node(graph, node_name)`.
+
+For a scalar train's run-immutable plan, obtained as `node.config` from the
+Proper node factory, perform the geometry traversal on the host during cold
+composition. This validates the selected output reference and returns its
+native pitch without binding execution inputs, outputs or an accelerator.
 """
 function optical_sampling_m end

@@ -119,3 +119,6 @@ end
 
 # Keep runtime OPD and entrance-grid capture in the maintained scalar Proper gate.
 include("cuda_proper_runtime_opd.jl")
+
+# Qualify the complex pupil handoff to the native analytic sensing model once.
+include("cuda_proper_pyramid_field.jl")
