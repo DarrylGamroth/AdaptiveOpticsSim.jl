@@ -1,0 +1,25 @@
+schema_version: 1
+name: optical_train
+nodes:
+- name: optics
+  type: proper_optical_train_f64
+  config:
+    resolution: 16
+    pupil_resolution: 8
+    diameter_m: 0.008
+    wavelength_um: 1.55
+    steps:
+    - op: circular_mask
+      mode: transmit
+      circles:
+      - {radius_m: 1.0, x_m: 0.0, y_m: 0.0}
+inputs:
+- name: pupil_opd
+  destination: optics.pupil_opd
+  binding: pupil_opd
+- name: pupil_amplitude
+  destination: optics.pupil_amplitude
+  binding: pupil_amplitude
+outputs:
+- name: intensity
+  source: optics.output

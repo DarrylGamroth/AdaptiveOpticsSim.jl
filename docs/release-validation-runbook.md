@@ -108,6 +108,18 @@ When Proper integration changes, use the explicit environment containing
 Proper.jl:
 
 ~~~bash
+julia --project=test/proper --startup-file=no -e 'using Pkg; Pkg.instantiate()'
+julia --project=test/proper --startup-file=no test/proper/runtests.jl
+~~~
+
+This target tests the optional native YAML optical train and external-pupil
+exposures with registered Proper.jl. The full CPU suite also runs the `zemax`
+selector for sequential model inspection and paraxial conversion. These checks
+do not qualify instrument optical fidelity, detector response, or GPU execution.
+
+For changes to the legacy prescription integration, use its companion environment:
+
+~~~bash
 julia --project=. examples/integrations/proper_hil_coronagraph.jl
 julia --project=. scripts/profile_proper_hil_coronagraph.jl
 ~~~

@@ -1,3 +1,5 @@
+public Zemax
+
 export CircularAperture, AnnularAperture, SpiderMask
 export RectangularROI, SubapertureGridMask
 export build_mask!, apply_mask!

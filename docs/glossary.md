@@ -299,6 +299,7 @@ forced into an area-frame API.
 | Frame sequence | The positive graph-step sequence attached to a completed HIL frame. The boundary requires a same-sequence command response before the next frame. |
 | HIL execution time | Host-side time at which simulation work runs. It is distinct from exact model time and from a detector or RTC's reported timestamp domain. |
 | Rolling shutter | A detector exposure in which rows or row groups integrate at different model times. The optical path may be reevaluated at those times while the detector publishes one complete frame. |
+| Proper optical train | An optional AOS algorithm-graph node containing a fixed ordered sequence of scalar Proper.jl propagation, thin-lens powers and amplitude masks. It consumes centered real pupil OPD in metres and field amplitude, zero-pads without resampling, and writes raw centered relative intensity. Graph configuration contains data rather than executable Julia prescriptions. The output sample pitch is physical width in metres on both axes; a sample is not an integrated detector pixel. |
 | Proper prescription | A Proper.jl propagation function plus prepared application-owned context. It enters AdaptiveOpticsSim through explicit optical products or a graph-node adapter; Proper remains optional. |
 | NGS | Natural guide star. |
 | LGS | Laser guide star. |
@@ -306,3 +307,5 @@ forced into an area-frame API.
 | MOAO | Multi-object adaptive optics, with target-specific correction paths in addition to shared sensing or tomography. |
 | RTC | Real-time controller. In HIL use the RTC consumes simulated sensor frames and returns complete commands. AdaptiveOpticsSim supplies the plant; an RTC graph is maintained by FilterGraphAlgorithms/JuliaFilterGraph or an external RTC. AOS-native controller graph nodes are not provided. |
 | HIL | Hardware-in-the-loop execution connecting simulated optical/sensor products to external hardware or RTC software through an explicit boundary. |
+| Intensity exposure | A mean optical intensity over a completely covered model-time interval: ∫ I(t) dt / T. `AlgorithmGraphs.IntensityExposure` integrates propagated samples before detector response; it does not assign photon-rate normalization or camera pixels. |
+| External pupil sample | A coherent field-amplitude and residual-OPD pair at a declared pupil, with model-time coverage and source identity. `AlgorithmGraphs.PreparedExternalPupil` binds these samples to ordinary prepared optical graph observations without owning transport. |

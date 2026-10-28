@@ -54,6 +54,7 @@ import ..Backends:
     require_same_backend,
     synchronize_backend!
 
+include("zemax.jl")
 include("types.jl")
 include("aperture_masks.jl")
 include("telescope.jl")

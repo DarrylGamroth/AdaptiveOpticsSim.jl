@@ -15,6 +15,150 @@ Use this when:
 - both packages may run on CPU, CUDA, or AMDGPU without unnecessary host/device
   transfers
 
+## Native declarative scalar optical trains
+
+AOS provides the optional `AdaptiveOpticsSimProperExt` extension. Load `Proper`
+and use the same `AlgorithmGraphs.load_algorithm_graph` and definition/component
+tooling as other AOS instruments. YAML remains an independently optional I/O
+extension; neither Proper nor YAML is a core dependency.
+
+```julia
+using AdaptiveOpticsSim.AlgorithmGraphs, Proper, YAML
+
+graph = prepare_algorithm_graph(load_algorithm_graph("science.yaml";
+    bindings=(pupil_opd=opd_m, pupil_amplitude=amplitude)))
+step_graph!(graph)
+pitch_m = optical_sampling_m(AlgorithmGraphs.prepared_graph_node(graph, :optics))
+```
+
+The built-in node types are `proper_optical_train_f64` and
+`proper_optical_train_f32`. They use the same fixed train schema and differ in
+input/output precision. An application constructing nodes directly can call
+`proper_optical_train_node_factory(; T=Float64)(name, config, (;))`. Without
+`using Proper`, construction raises `AlgorithmGraphError`.
+
+```yaml
+schema_version: 1
+name: science
+nodes:
+- name: optics
+  type: proper_optical_train_f64
+  config:
+    resolution: 256
+    pupil_resolution: 128
+    diameter_m: 0.012
+    wavelength_um: 1.55
+    steps:
+    - {op: lens, focal_length_m: 0.2, name: focusing lens}
+    - {op: propagate, distance_m: 0.2}
+    - op: circular_mask
+      mode: transmit
+      circles:
+      - {radius_m: 0.0005, x_m: 0.0, y_m: 0.0}
+inputs:
+- {name: opd, destination: optics.pupil_opd, binding: pupil_opd}
+- {name: amplitude, destination: optics.pupil_amplitude, binding: pupil_amplitude}
+outputs:
+- {name: intensity, source: optics.output}
+```
+
+`resolution`, `diameter_m`, `wavelength_um` and `steps` are required.
+Propagation `resolution` must be even: Proper 0.4 does not preserve the declared
+central sample on odd output grids. Odd pupil sizes are supported on even grids.
+`pupil_resolution` defaults to `resolution` and must fit inside it. Centered
+input OPD and field amplitude are zero-padded with matching central samples,
+without resampling. Input spacing is `diameter_m / pupil_resolution`; the
+beam-diameter fraction is fixed to `pupil_resolution / resolution`. Output is
+always the square propagation grid. Each scalar operation optionally accepts
+`name` as provenance:
+
+| Operation | Required parameters |
+| --- | --- |
+| `propagate` | signed `distance_m` |
+| `lens` | nonzero signed `focal_length_m` |
+| `circular_aperture`, `circular_obscuration` | positive `radius_m` |
+| `multiply` | field `amplitude` in [0,1] |
+| `circular_mask` | `mode: transmit` or `reflect`; `circles` containing positive `radius_m`, `x_m`, `y_m` |
+
+Circle coordinates are in metres in the current optical plane: x increases
+with columns and y with rows; the origin is sample `fld(resolution,2)+1` on
+each axis. Circle masks form a hard-edge union. Reflection uses its binary
+complement, so complementary branches conserve power at mask samples.
+Preparation traces scalar geometry to create masks at each plane's sampling.
+Every declared circle must contain at least one represented sample on that
+plane; an off-grid or unresolved circle raises a preparation error. This
+numerical support check does not establish convergence or incident signal.
+Unknown fields, unsupported operations, nonfinite values and numerical booleans
+are rejected. Configuration never evaluates Julia source.
+
+Ports default to `org.adaptiveopticssim.pupil-opd/1`,
+`org.adaptiveopticssim.pupil-amplitude/1`, and
+`org.adaptiveopticssim.optical-intensity/1`; override them with
+`pupil_opd_schema`, `pupil_amplitude_schema`, and `output_schema`. The fixed
+operations are deterministic and have no random-state configuration.
+
+Output is squared field amplitude without per-path normalization, photon-rate
+scaling or detector integration. After a graph step, `optical_sampling_m(owner)`
+returns square physical sample width in metres on both axes. Before the first
+step it returns entrance sampling. Detector pixel integration, exposure timing,
+noise, throughput and photometry belong to their declared AOS components.
+
+This is a centered monochromatic scalar approximation. It does not infer mask
+fabrication data, global fold orientation, polarization or off-axis aberrations.
+Instrument data owns those assumptions and calibration identity. CPU numerical
+checks do not qualify GPU execution, acquisition deadlines or physical devices.
+Graph capture is not admitted for this node.
+
+Run the optional CPU target with `julia --project=test/proper test/proper/runtests.jl`
+after instantiating that environment. It checks missing-dependency rejection,
+YAML loading, direct Proper agreement, physical sampling, padding, phase/flux
+response and complementary mask power.
+
+## Sequential ZEMAX preparation
+
+`Optics.Zemax.inspect(path; configurations=[3, 5])` reads a bounded UTF-16LE,
+MM sequential ZMX snapshot. Omit `configurations` to inspect the saved
+configuration. It applies explicit supported status-zero multi-configuration
+values and preserves raw surface records; it does not reevaluate solves or run
+a ray trace. Configuration numbers belong to the instrument.
+
+With YAML loaded, `Optics.Zemax.prepare(root)` generates optical graphs and
+content-hash provenance from `instrument.yaml`, `simulation/definition.yaml`,
+and authored `simulation/optics/model.yaml`, resolved geometry and glass data.
+`Optics.Zemax.validate_provenance(root)` checks those sources and selected graphs
+before use. Standalone `yamlfmt` formats generated documents.
+
+Conversion is centered and paraxial: STANDARD refraction, flat TILTSURF surfaces,
+signed axial coordinate breaks, and explicitly selected input-lens and OAP
+idealizations. Transverse tilts/decenters are omitted. Unsupported surface types
+and unmodeled curved mirrors are rejected. The authored conversion rules and
+idealized masks require instrument-specific optical validation.
+
+## External pupil observations
+
+`AlgorithmGraphs.prepare_external_pupil` binds a named tuple of ordinary prepared
+CPU optical graphs to independent `IntensityExposure` products. This is a
+transport-neutral scientific owner, not another graph executor. It uses the
+same `step_graph!` and `reset_graph!` methods as other AOS callers.
+`step_external_pupil!` accepts coherent OPD/amplitude arrays, `ModelTimestamp`
+and `ModelDuration`, with an explicit source domain, generation and sequence.
+Adapters own packet formats and convert their receipts to these values.
+
+Each sample declares piecewise-constant coverage. Propagation precedes intensity
+integration; a complete exposure mean is the duration-weighted sum over its
+covered model interval. Missing coverage, sample loss or a newer generation
+invalidates partial exposures; duplicates and overlaps are rejected. Exposure
+origins currently share model time zero. CPU reference input buffers are
+Float64, and no physical photometry or detector response is inferred.
+Cross-quantity and input/output aliasing are rejected before execution.
+
+`IntensityExposure` also supports direct contiguous integration. Reset it at a
+gap before adding more data; overlaps and gaps never count as complete coverage.
+Input intensity must be real, finite, nonnegative, representable as Float64, and
+independent of the exposure's accumulation and output storage.
+Its emitted image is borrowed until the next exposure update, so asynchronous
+consumers must copy it.
+
 ## Recommended Ownership
 
 Keep the packages loosely coupled.
