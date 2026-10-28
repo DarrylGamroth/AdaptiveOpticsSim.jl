@@ -138,7 +138,7 @@ end
         merge(sampled,(steps=(),channels=((wavelength_um=1.55,weight=1.0,steps=()),))), (;))
     node = factory(:optics,merge(sampled,(steps=(),)),(;))
     device = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
-        AdaptiveOpticsSim.Backends.CUDABackend(),0)
+        AdaptiveOpticsSim.Backends.AMDGPUBackend(),0)
     @test_throws AlgorithmGraphError AlgorithmGraphs.prepare_graph_node(
         typeof(node).parameters[2],node.config,(;),
         (pupil_opd=zeros(8,8),pupil_amplitude=ones(8,8)),
@@ -256,7 +256,7 @@ end
     @test_throws AlgorithmGraphError runtime_opd_graph((first_step,),(first=zeros(Float32,16,16),))
     node = factory(:optics,merge(RUNTIME_OPD_BASE,(steps=(first_step,),)),(;))
     device = AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
-        AdaptiveOpticsSim.Backends.CUDABackend(),0)
+        AdaptiveOpticsSim.Backends.AMDGPUBackend(),0)
     @test_throws AlgorithmGraphError AlgorithmGraphs.prepare_graph_node(
         typeof(node).parameters[2],node.config,(;),
         (pupil_opd=zeros(16,16),pupil_amplitude=ones(16,16),first=zeros(16,16)),

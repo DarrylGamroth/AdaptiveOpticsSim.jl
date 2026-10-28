@@ -116,3 +116,6 @@ end
         compare_cuda_proper_capture(T, config; bindings=(; mask_amplitude, mask_phase))
     end
 end
+
+# Keep runtime OPD and entrance-grid capture in the maintained scalar Proper gate.
+include("cuda_proper_runtime_opd.jl")

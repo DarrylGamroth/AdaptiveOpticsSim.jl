@@ -131,7 +131,7 @@ values may change between completed steps; their bindings and geometry remain
 fixed until preparation is repeated. Supplying a correction both at the entrance
 and through `add_opd` applies it twice.
 
-Runtime OPD steps currently require the host compute device and a scalar train
+Runtime OPD steps currently require a host or CUDA compute device and a scalar train
 without `channels` or `output_sampling_m`; other combinations are rejected during
 cold construction or preparation. Trains with runtime OPD steps or `pupil_grid`
 admit at most 256 total optical steps. They do not declare measured optical
@@ -156,7 +156,11 @@ field amplitude separately, with zero outside support, before Proper forms the
 complex entrance field. These declarations describe sampling at the existing
 entrance plane. Omitting `pupil_grid` preserves the direct padding convention.
 The option works with or without runtime OPD steps and currently requires a
-scalar host train without `channels` or `output_sampling_m`.
+scalar host or CUDA train without `channels` or `output_sampling_m`. CUDA prepares
+the same interpolation coefficients in device storage and warms the complete
+train before capture. Input values may change between captured replays; maps,
+input bindings and all scratch addresses remain fixed. AMDGPU runtime sampled
+OPD and entrance-grid execution is not currently admitted.
 
 The shared instrument loader supports physical `optical_masks.<name>.<port>`
 responses for `transmitted` and `reflected` ports. Each response declares
@@ -230,7 +234,8 @@ fabrication data, global fold orientation, polarization or off-axis aberrations.
 Instrument data owns those assumptions and calibration identity. CPU numerical
 checks do not qualify acquisition deadlines or physical devices.
 
-Fixed scalar and polychromatic trains admit CUDA `CapturedGraphExecution` through
+Scalar trains, including runtime OPD steps and explicit entrance grids, and
+polychromatic trains admit CUDA `CapturedGraphExecution` through
 the normal AOS graph executor. Shape, buffer identities, wavelength samples,
 propagation steps, masks and resampling geometry remain fixed until rebuilding;
 device OPD and amplitude contents may change each frame. Cold preparation retains
@@ -244,6 +249,15 @@ Float32/Float64 with changing inputs, masks, signed propagation, unequal spectra
 sampling, attenuation, clipped support and reset. They pass on Julia 1.13.3,
 CUDA 6.4.2 and an RTX 3080. They establish correctness for these software paths;
 no RTC latency or deadline claim follows from them.
+
+The scalar selector includes `test/cuda_proper_runtime_opd.jl`, which checks
+real bilinear interpolation
+against an independent tent-basis reference and compares CPU, streamed CUDA and
+captured runtime OPD/entrance-grid trains in both precisions. It covers changing
+entrance and screen values, rectangular source grids, both axis permutations,
+fractional centers, sampled masks, reset and retained buffer identities. The
+qualified small-grid fixtures allocate no device memory during streamed steps
+or captured replay, and no Julia heap memory during warmed captured replay.
 
 A focused allocation observation of public `step_graph!` on 32 × 32 grids with
 16 × 16 pupils found 0 Julia heap bytes for each of 20 warmed CUDA capture

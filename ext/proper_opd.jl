@@ -109,9 +109,29 @@ function _prepare_opd_interpolation(plan::OpticalTrainPlan{T}, masks) where {T}
         interpolation = step.op === :add_opd ?
             _bilinear_interpolation_plan(step, plan.resolution,
                 T(Proper.prop_get_sampling(wf)), step.outside_opd_m) : nothing
-        _train_optic!(wf, step, mask, context)
+        _train_optic!(wf, step, _interpolation_host_mask(mask), context)
         interpolation
     end
+end
+
+_interpolation_host_mask(::Nothing) = nothing
+_interpolation_host_mask(mask) = Backends.host_array(mask)
+
+_prepare_grid_interpolation(::Nothing, target) = nothing
+_prepare_grid_interpolation(plan::BilinearInterpolationPlan, ::Backends.HostComputeDevice) = plan
+
+function _interpolation_device_array(source, target)
+    destination = Backends.allocate_device_array(target, eltype(source), length(source))
+    copyto!(destination, collect(source))
+    return destination
+end
+
+function _prepare_grid_interpolation(plan::BilinearInterpolationPlan,
+        target::Backends.AcceleratorComputeDevice{Backends.CUDABackend})
+    return BilinearInterpolationPlan(_interpolation_device_array(plan.row_indices, target),
+        _interpolation_device_array(plan.column_indices, target),
+        _interpolation_device_array(plan.row_weights, target),
+        _interpolation_device_array(plan.column_weights, target), plan.axes, plan.outside)
 end
 
 struct RuntimeOPDTrainOwner{O,P,I,G}
@@ -121,8 +141,13 @@ struct RuntimeOPDTrainOwner{O,P,I,G}
     entrance::G
 end
 
-function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs,
-        ::Backends.HostComputeDevice) where {T}
+_require_sampled_train_target(::Backends.HostComputeDevice) = nothing
+_require_sampled_train_target(::Backends.AcceleratorComputeDevice{Backends.CUDABackend}) = nothing
+_require_sampled_train_target(target) =
+    throw(AOG.AlgorithmGraphError("runtime OPD steps and pupil_grid currently support host and CUDA compute devices only"))
+
+function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs, target) where {T}
+    _require_sampled_train_target(target)
     length(plan.steps) <= AOG._PROPER_MAX_SAMPLED_STEPS ||
         throw(AOG.AlgorithmGraphError("sampled scalar train exceeds the total optical step limit"))
     roles = Tuple(step.input for step in plan.steps if step.op === :add_opd)
@@ -132,38 +157,68 @@ function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs,
         step.op === :add_opd || continue
         array = getproperty(inputs, step.input)
         eltype(array) === T && size(array) == step.size &&
-            !Base.has_offset_axes(array) && Backends.compute_device(array) == Backends.HostComputeDevice() ||
+            !Base.has_offset_axes(array) && Backends.compute_device(array) == target ||
             throw(AOG.AlgorithmGraphError("runtime OPD buffer contract mismatch for '$(step.input)'"))
     end
-    train = _prepare_optical_train(plan, inputs, outputs, Backends.HostComputeDevice()).owner
-    interpolation = _prepare_opd_interpolation(plan, train.workspace.masks)
+    train = _prepare_optical_train(plan, inputs, outputs, target).owner
+    interpolation = map(_prepare_opd_interpolation(plan, train.workspace.masks)) do grid
+        _prepare_grid_interpolation(grid, target)
+    end
     opd_inputs = map(plan.steps) do step
         step.op === :add_opd ? getproperty(inputs, step.input) : nothing
     end
-    entrance = plan.pupil_grid === nothing ? nothing :
+    entrance_geometry = plan.pupil_grid === nothing ? nothing :
         _bilinear_interpolation_plan(plan.pupil_grid, plan.resolution,
             plan.diameter_m/T(plan.pupil_resolution), zero(T))
-    return RuntimeOPDTrainOwner(train, interpolation, opd_inputs, entrance)
+    entrance = _prepare_grid_interpolation(entrance_geometry, target)
+    owner = RuntimeOPDTrainOwner(train, interpolation, opd_inputs, entrance)
+    _prepare_train_capture!(owner, target)
+    return owner
 end
 
-function _prepare_runtime_opd_train(plan, inputs, outputs, target)
-    throw(AOG.AlgorithmGraphError("runtime OPD steps and pupil_grid currently support the host compute device only"))
+@inline function _grid_sample(input, row, column, permutation, outside)
+    (iszero(row) || iszero(column)) && return outside
+    return permutation[1] == 1 ? input[row, column] : input[column, row]
 end
 
-@inline function _grid_sample(input, row, column, plan)
-    (iszero(row) || iszero(column)) && return plan.outside
-    return plan.axes[1] == 1 ? input[row, column] : input[column, row]
+@inline function _interpolated_sample(input, row, column, row_indices, column_indices,
+        row_weights, column_weights, permutation, outside)
+    i, j = row_indices[row], column_indices[column]
+    dy, dx = row_weights[row], column_weights[column]
+    return (1-dy)*((1-dx)*_grid_sample(input, i[1], j[1], permutation, outside)+
+        dx*_grid_sample(input, i[1], j[2], permutation, outside))+
+        dy*((1-dx)*_grid_sample(input, i[2], j[1], permutation, outside)+
+        dx*_grid_sample(input, i[2], j[2], permutation, outside))
 end
 
 function _interpolate_grid!(output, input, plan::BilinearInterpolationPlan)
+    _interpolate_grid!(Backends.execution_style(output), output, input, plan)
+    return nothing
+end
+
+function _interpolate_grid!(::Backends.ScalarCPUStyle, output, input, plan::BilinearInterpolationPlan)
     for column in axes(output, 2), row in axes(output, 1)
-        i, j = plan.row_indices[row], plan.column_indices[column]
-        dy, dx = plan.row_weights[row], plan.column_weights[column]
-        output[row,column] = (1-dy)*((1-dx)*_grid_sample(input, i[1], j[1], plan)+
-            dx*_grid_sample(input, i[1], j[2], plan))+
-            dy*((1-dx)*_grid_sample(input, i[2], j[1], plan)+
-            dx*_grid_sample(input, i[2], j[2], plan))
+        output[row,column] = _interpolated_sample(input, row, column,
+            plan.row_indices, plan.column_indices, plan.row_weights,
+            plan.column_weights, plan.axes, plan.outside)
     end
+    return nothing
+end
+
+Backends.KernelAbstractions.@kernel function _interpolate_grid_kernel!(output, input,
+        row_indices, column_indices, row_weights, column_weights, permutation, outside)
+    row, column = Backends.KernelAbstractions.@index(Global, NTuple)
+    if row <= size(output, 1) && column <= size(output, 2)
+        output[row,column] = _interpolated_sample(input, row, column, row_indices,
+            column_indices, row_weights, column_weights, permutation, outside)
+    end
+end
+
+function _interpolate_grid!(style::Backends.AcceleratorStyle, output, input,
+        plan::BilinearInterpolationPlan)
+    Backends.launch_kernel_async!(style, _interpolate_grid_kernel!, output, input,
+        plan.row_indices, plan.column_indices, plan.row_weights, plan.column_weights,
+        plan.axes, plan.outside; ndrange=size(output))
     return nothing
 end
 
@@ -214,5 +269,6 @@ function _begin_sampled_pupil!(train, entrance::BilinearInterpolationPlan)
 end
 
 AOG.optical_sampling_m(owner::RuntimeOPDTrainOwner) = AOG.optical_sampling_m(owner.train)
-AOG.graph_node_capture_capability(::RuntimeOPDTrainOwner) = AOG.GraphNodeCaptureUnsupported()
+AOG.graph_node_capture_capability(owner::RuntimeOPDTrainOwner) =
+    _optical_train_capture_capability(Backends.compute_device(owner.train.output))
 AOG.reset_graph_node!(owner::RuntimeOPDTrainOwner) = AOG.reset_graph_node!(owner.train)
