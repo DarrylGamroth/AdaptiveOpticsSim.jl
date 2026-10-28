@@ -207,7 +207,8 @@ function component_preparation_inputs(root, definition_path, instrument_path, de
         [ZEMAX_RESOLVED_PATH, ZEMAX_GLASSES_PATH, ZEMAX_PROVENANCE_PATH, ZEMAX_EXECUTION_PATH])
     validate_optical_outputs(root, sources, outputs; regenerated=[ZEMAX_RESOLVED_PATH, ZEMAX_GLASSES_PATH])
     catalog = ordered(Dict("schema_version" => 2, "recipes" => catalogs))
-    return (; root, catalog, sources, graphs, glass_path, resolved_path, resolved=ordered(resolved),
+    return (; root, catalog, sources, base_sources=sources, variant_paths=Set{String}(),
+        graphs, glass_path, resolved_path, resolved=ordered(resolved),
         execution_path, execution=ordered(execution), write_catalog=true)
 end
 

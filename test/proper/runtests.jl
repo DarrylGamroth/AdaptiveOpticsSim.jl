@@ -8,3 +8,4 @@ include("../external_pupil_contract.jl")
 end
 include("../test_proper_optical_train.jl")
 include("external_pupil.jl")
+include("external_pupil_chopping.jl")

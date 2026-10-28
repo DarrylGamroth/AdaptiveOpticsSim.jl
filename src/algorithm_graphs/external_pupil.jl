@@ -207,6 +207,62 @@ end
 
 _observation_response(observation) = get(observation, :response, nothing)
 
+_observation_graphs(graph, observation) = haskey(observation, :chopping) ?
+    (graph, observation.chopping.unfringed) : (graph,)
+
+function _validate_chopping(graph, observation, input_names)
+    haskey(observation, :chopping) || return nothing
+    chopping = observation.chopping
+    chopping isa NamedTuple || throw(AlgorithmGraphError("chopping must be a named tuple"))
+    _require_named_fields(chopping, (:unfringed, :initial_phase),
+        (:unfringed, :initial_phase), "chopping")
+    chopping.initial_phase in (:fringed, :unfringed) ||
+        throw(AlgorithmGraphError("initial_phase must be :fringed or :unfringed"))
+    other = chopping.unfringed
+    other isa PreparedAlgorithmGraph || throw(AlgorithmGraphError("unfringed must be a prepared graph"))
+    compute_device(other) == compute_device(graph) ||
+        throw(AlgorithmGraphError("chopping graphs must use the same compute device"))
+    output, alternate = graph_output(graph, observation.output), graph_output(other, observation.output)
+    size(output) == size(alternate) && eltype(output) == eltype(alternate) ||
+        throw(AlgorithmGraphError("chopping output shape and element type must match"))
+    for input in values(input_names)
+        a, b = graph_input(graph, input), graph_input(other, input)
+        size(a) == size(b) && eltype(a) == eltype(b) ||
+            throw(AlgorithmGraphError("chopping pupil input contracts must match"))
+    end
+    return nothing
+end
+
+function _validate_chopping_sampling(graph, observation)
+    haskey(observation, :chopping) || return nothing
+    other = observation.chopping.unfringed
+    # Sampling is established by propagation, including all spectral channels.
+    try
+        step_graph!(graph); step_graph!(other)
+        first_sampling = optical_sampling_m(prepared_graph_node(graph, observation.sampling_node))
+        other_sampling = optical_sampling_m(prepared_graph_node(other, observation.sampling_node))
+        isfinite(first_sampling) && first_sampling > 0 && isfinite(other_sampling) && other_sampling > 0 &&
+            isapprox(first_sampling, other_sampling; rtol=8eps(Float32), atol=0) ||
+            throw(AlgorithmGraphError("chopping optical sampling must match"))
+    finally
+        reset_graph!(graph); reset_graph!(other)
+    end
+    return nothing
+end
+
+function _chopped_image_kind(chopping, start, duration)
+    even = iseven(fld(start, duration))
+    return even == (chopping.initial_phase === :fringed) ? :fringed : :unfringed
+end
+
+function _active_observation_graphs(graph, observation, start, finish, duration)
+    haskey(observation, :chopping) || return (graph,)
+    chopping = observation.chopping
+    first = _chopped_image_kind(chopping, start, duration) === :fringed ? graph : chopping.unfringed
+    last = _chopped_image_kind(chopping, finish-1, duration) === :fringed ? graph : chopping.unfringed
+    return first === last ? (first,) : (first, last)
+end
+
 function _validate_observation_response(response, graph, observation, duration)
     response === nothing && return nothing
     response isa NamedTuple || throw(AlgorithmGraphError("exposure response must be a named tuple"))
@@ -271,33 +327,69 @@ probes and resets the optical graph to check sampling. Detector readout and nois
 therefore run at the exposure cadence, after optical integration. Responses reset
 after an input discontinuity or a new generation. Required `frame_schema` labels
 the output quantity without inferring electrons or ADC units.
+
+An observation may declare `chopping=(unfringed=prepared_graph,
+initial_phase=:fringed)`. The ordinary graph supplies the fringed intensity;
+the separate static graph blocks the reference field in that observation only.
+Both variants must have matching pupil/output arrays, compute device and optical
+sampling, with independent mutable graph state and boundary storage. The caller
+owns their physical optical meaning and calibration. No mask is inferred or
+changed by this API. `initial_phase` is `:fringed` or `:unfringed` for the exposure
+starting at model time zero. The kind alternates at every model exposure boundary,
+including incomplete or discarded intervals, and is published in completed
+metadata as `chopped_image_kind`. It is not electrical trigger polarity or pair
+completion. A sample crossing a boundary uses the corresponding graph on each
+side before integration; other observations retain their original sampling.
+One shared detector response runs once per completed chopped exposure.
 """
 function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTuple,
         observations::NamedTuple,input_names=(opd=:pupil_opd,amplitude=:pupil_amplitude))
     isempty(graphs) && throw(AlgorithmGraphError("external pupil requires an optical graph"))
     keys(graphs)==keys(exposure_durations)==keys(observations) || throw(AlgorithmGraphError("optical observation names differ"))
+    for (name, graph) in pairs(graphs)
+        _validate_chopping(graph, getproperty(observations, name), input_names)
+    end
+    all_graphs = Tuple(variant for (name, graph) in pairs(graphs)
+        for variant in _observation_graphs(graph, getproperty(observations, name)))
+    # Chopping variants are independent graph owners, not alternate aliases of
+    # one graph's mutable execution state or borrowed boundary buffers.
+    if any(observation -> haskey(observation, :chopping), values(observations))
+        buffers = Tuple((graph_input(variant, input_names.opd),
+            graph_input(variant, input_names.amplitude),
+            graph_output(variant, getproperty(observations, name).output))
+            for (name, graph) in pairs(graphs)
+            for variant in _observation_graphs(graph, getproperty(observations, name)))
+        for i in eachindex(all_graphs), j in 1:i-1
+            a, b = all_graphs[i], all_graphs[j]
+            (a === b || a.state === b.state ||
+                any(x -> any(y -> x.owner === y.owner, values(b.nodes)), values(a.nodes))) &&
+                throw(AlgorithmGraphError("chopping observations must own independent graph state"))
+            any(x -> any(y -> Base.mightalias(x, y), buffers[j]), buffers[i]) &&
+                throw(AlgorithmGraphError("chopping observation buffers must not alias"))
+        end
+    end
     opd=graph_input(first(values(graphs)),input_names.opd)
     amplitude=graph_input(first(values(graphs)),input_names.amplitude)
     target=compute_device(first(values(graphs)))
     opd isa AbstractMatrix{Float64} && amplitude isa AbstractMatrix{Float64} && size(opd)==size(amplitude) ||
         throw(AlgorithmGraphError("external pupil requires equally shaped Float64 OPD and amplitude matrices"))
-    for opd_graph in values(graphs),amplitude_graph in values(graphs)
+    for opd_graph in all_graphs,amplitude_graph in all_graphs
         Base.mightalias(graph_input(opd_graph,input_names.opd),graph_input(amplitude_graph,input_names.amplitude)) &&
             throw(AlgorithmGraphError("external pupil OPD and amplitude buffers must not alias"))
     end
-    for (name,graph) in pairs(graphs)
+    for (name,base_graph) in pairs(graphs), graph in _observation_graphs(base_graph,getproperty(observations,name))
         intensity=graph_output(graph,getproperty(observations,name).output)
-        for input_graph in values(graphs),input in values(input_names)
+        for input_graph in all_graphs,input in values(input_names)
             Base.mightalias(intensity,graph_input(input_graph,input)) &&
                 throw(AlgorithmGraphError("intensity observations must not alias pupil inputs"))
         end
-        for (other_name,other_graph) in pairs(graphs)
+        for (other_name,other_base) in pairs(graphs), other_graph in _observation_graphs(other_base,getproperty(observations,other_name))
             name==other_name && continue
             Base.mightalias(intensity,graph_output(other_graph,getproperty(observations,other_name).output)) &&
                 throw(AlgorithmGraphError("independent intensity observations must not alias"))
         end
     end
-    for (name,graph) in pairs(graphs)
+    for (name,base_graph) in pairs(graphs), graph in _observation_graphs(base_graph,getproperty(observations,name))
         compute_device(graph)==target || throw(AlgorithmGraphError("external pupil graphs must use the same compute device"))
         for input in values(input_names)
             input_buffer=graph_input(graph,input)
@@ -309,18 +401,22 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
         _validate_observation_response(_observation_response(getproperty(observations,name)),
             graph, getproperty(observations,name), getproperty(exposure_durations,name))
     end
+    for (name, graph) in pairs(graphs)
+        _validate_chopping_sampling(graph, getproperty(observations, name))
+    end
     for (name, observation) in pairs(observations)
         response = _observation_response(observation)
         response === nothing && continue
         buffers = (graph_input(response.graph, response.input), graph_output(response.graph, response.output))
-        for other in values(graphs), buffer in buffers
+        for other in all_graphs, buffer in buffers
             any(input -> Base.mightalias(buffer, graph_input(other, input)), values(input_names)) &&
                 throw(AlgorithmGraphError("response storage must not alias pupil inputs"))
         end
-        for (other_name, other_observation) in pairs(observations)
+        for (other_name, other_observation) in pairs(observations),
+                other_graph in _observation_graphs(getproperty(graphs, other_name), other_observation)
             other_response = _observation_response(other_observation)
             for buffer in buffers
-                Base.mightalias(buffer, graph_output(getproperty(graphs, other_name), other_observation.output)) &&
+                Base.mightalias(buffer, graph_output(other_graph, other_observation.output)) &&
                     throw(AlgorithmGraphError("response storage must not alias optical outputs"))
                 (other_name == name || other_response === nothing) && continue
                 any(other -> Base.mightalias(buffer, other),
@@ -342,6 +438,38 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
         _ExternalPupilState(-1,0,0,nothing,0,0,0))
 end
 
+function _reset_observation_graphs!(prepared)
+    for (name, graph) in pairs(prepared.graphs),
+            variant in _observation_graphs(graph, getproperty(prepared.observations, name))
+        reset_graph!(variant)
+    end
+    return nothing
+end
+
+function _integrate_observation!(emit, prepared, name, graph, observation,
+        timestamp, duration, generation, kind=nothing)
+    sampling = optical_sampling_m(prepared_graph_node(graph, observation.sampling_node))
+    integrate_intensity!(getproperty(prepared.exposures,name),
+            graph_output(graph,observation.output),timestamp,duration) do image,pts,exposure,output_sequence
+        metadata = (;pts=model_nanoseconds(pts),duration=UInt64(model_nanoseconds(exposure)),
+            generation,sequence=output_sequence,sampling_m=sampling)
+        kind === nothing || (metadata = merge(metadata,(;chopped_image_kind=kind)))
+        response = _observation_response(observation)
+        if response === nothing
+            emit(name,image,metadata)
+        else
+            input = graph_input(response.graph, response.input)
+            _with_prepared_device_execution_context(response.graph.context) do
+                input .= image .* response.normalized_to_photon_rate
+            end
+            step_graph!(response.graph)
+            emit(name,graph_output(response.graph, response.output),
+                merge(metadata,(;quantity=:detector_frame,frame_schema=response.frame_schema)))
+        end
+    end
+    return nothing
+end
+
 """
     step_external_pupil!(emit, prepared, opd, amplitude, timestamp, duration;
         domain, generation, sequence, lost_samples=0)
@@ -353,6 +481,8 @@ or a newer generation invalidate partial exposures. Duplicate/overlapping and
 older-generation samples are rejected with `false`. Different domains require
 repreparation. `emit(name,image,metadata)` runs synchronously; copy its borrowed
 image before retaining it. No transport or controller runs in this API.
+Chopped observations classify the actual model-time exposure, not receive or
+emission parity. A gap discards partial coverage without moving the phase origin.
 """
 function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::AbstractMatrix,
         amplitude::AbstractMatrix,timestamp::ModelTimestamp,duration::ModelDuration;
@@ -366,6 +496,8 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
     span=model_nanoseconds(duration);start=model_nanoseconds(timestamp)
     0<span<=minimum(e.duration_ns for e in values(prepared.exposures)) || throw(AlgorithmGraphError("sample coverage must fit shortest exposure"))
     generation>0 && sequence>0 && any(!iszero,domain) || throw(AlgorithmGraphError("invalid pupil sample identity"))
+    start >= 0 || !any(observation -> haskey(observation,:chopping),values(prepared.observations)) ||
+        throw(AlgorithmGraphError("chopping requires nonnegative model timestamps"))
     finish=Base.checked_add(start,span);state=prepared.state
     if state.domain!==nothing && (domain!=state.domain || generation<state.generation ||
             (generation==state.generation && (sequence<=state.sequence || start<state.last_end_ns)))
@@ -383,7 +515,7 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
             reset_intensity_exposure!(exposure,timestamp)
             changed && (exposure.sequence=0)
         end
-        changed && foreach(reset_graph!,values(prepared.graphs))
+        changed && _reset_observation_graphs!(prepared)
         for observation in values(prepared.observations)
             response = _observation_response(observation)
             response === nothing || reset_graph!(response.graph)
@@ -394,7 +526,9 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
         prepared.pupil_amplitude[index]=a
         prepared.pupil_opd[index]=a==0 ? 0 : opd[index]
     end
-    for (name,graph) in pairs(prepared.graphs)
+    for (name,base_graph) in pairs(prepared.graphs), graph in _active_observation_graphs(
+            base_graph,getproperty(prepared.observations,name),start,finish,
+            getproperty(prepared.exposures,name).duration_ns)
         _with_prepared_device_execution_context(graph.context) do
             copyto!(graph_input(graph,prepared.input_names.opd),prepared.pupil_opd)
             copyto!(graph_input(graph,prepared.input_names.amplitude),prepared.pupil_amplitude)
@@ -414,22 +548,20 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
     end
     for (name,graph) in pairs(prepared.graphs)
         observation=getproperty(prepared.observations,name)
-        sampling=optical_sampling_m(prepared_graph_node(graph,observation.sampling_node))
-        integrate_intensity!(getproperty(prepared.exposures,name),graph_output(graph,observation.output),timestamp,duration) do image,pts,exposure,output_sequence
-            metadata = (;pts=model_nanoseconds(pts),duration=UInt64(model_nanoseconds(exposure)),
-                generation,sequence=output_sequence,sampling_m=sampling)
-            response = _observation_response(observation)
-            if response === nothing
-                emit(name,image,metadata)
-            else
-                input = graph_input(response.graph, response.input)
-                _with_prepared_device_execution_context(response.graph.context) do
-                    input .= image .* response.normalized_to_photon_rate
-                end
-                step_graph!(response.graph)
-                emit(name,graph_output(response.graph, response.output),
-                    merge(metadata,(;quantity=:detector_frame,frame_schema=response.frame_schema)))
-            end
+        if !haskey(observation,:chopping)
+            _integrate_observation!(emit,prepared,name,graph,observation,timestamp,duration,generation)
+            continue
+        end
+        exposure=getproperty(prepared.exposures,name)
+        cursor=start
+        while cursor<finish
+            boundary=Base.checked_add(exposure.start_ns,exposure.duration_ns)
+            stop=min(finish,boundary)
+            kind=_chopped_image_kind(observation.chopping,cursor,exposure.duration_ns)
+            selected=kind===:fringed ? graph : observation.chopping.unfringed
+            _integrate_observation!(emit,prepared,name,selected,observation,
+                ModelTimestamp(cursor),ModelDuration(stop-cursor),generation,kind)
+            cursor=stop
         end
     end
     state.domain=domain;state.generation=generation;state.sequence=sequence
@@ -444,10 +576,11 @@ Reset optical and response histories, partial exposures, emitted sequences and
 input-domain admission. The sole owner must stop and serialize input processing
 before calling this function. The next sample establishes a fresh domain and
 generation; no previous partial exposure or detector history participates.
+Both chopped graph variants reset; their phase origin remains model time zero.
 Transport buffers and source lifecycle remain the caller's responsibility.
 """
 function reset_external_pupil!(prepared::PreparedExternalPupil)
-    foreach(reset_graph!, values(prepared.graphs))
+    _reset_observation_graphs!(prepared)
     for observation in values(prepared.observations)
         response = _observation_response(observation)
         response === nothing || reset_graph!(response.graph)

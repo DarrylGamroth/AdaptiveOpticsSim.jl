@@ -282,7 +282,9 @@ function preparation_source(root)
         nothing
     else
         preparation = get(definition, "preparation", nothing)
-        model_fields(preparation, ("kind", "recipe"), "simulation preparation")
+        preparation isa AbstractDict && Set(keys(preparation)) ⊆ Set(("kind", "recipe", "variants")) &&
+            all(key -> haskey(preparation, key), ("kind", "recipe")) ||
+            throw(ArgumentError("simulation preparation requires kind, recipe and optional variants"))
         preparation["kind"] == "zemax" || throw(ArgumentError("unsupported simulation preparation kind"))
         recipe = model_path(preparation["recipe"], "preparation recipe")
         optical_path(root, normpath(joinpath("simulation", recipe)); generated=false)
@@ -294,6 +296,29 @@ function preparation_source(root)
     return (; definition_path, instrument_path, definition, instrument, recipe_path)
 end
 
+# Variants belong to simulation authoring, not the physical conversion recipe.
+# Retain the selected physical branch for filter and sampled-mask routing.
+function preparation_variants(definition, model)
+    variants = get(definition["preparation"], "variants", Dict())
+    variants isa AbstractDict && length(variants) <= 16 ||
+        throw(ArgumentError("preparation variants must be a mapping with at most 16 entries"))
+    reserved = union(Set(keys(model["branches"])), Set(["simulation"]),
+        Set(name * "_response" for name in keys(get(definition,"observations",Dict()))))
+    for name in keys(variants)
+        name isa String && occursin(r"^[a-z][a-z0-9_-]{0,63}$", name) ||
+            throw(ArgumentError("variant names must be lower-case filename stems of at most 64 bytes"))
+        name ∉ reserved || throw(ArgumentError("variant name collides with a selected graph: $name"))
+    end
+    return map(Tuple(sort!(collect(keys(variants))))) do name
+        selection = variants[name]
+        model_fields(selection, ("branch", "settings"), "optical variant $name")
+        branch = model_string(selection["branch"], "variant branch")
+        haskey(model["branches"], branch) || throw(ArgumentError("variant names an unknown physical branch: $branch"))
+        settings = selected_settings(definition["defaults"], selection["settings"])
+        (; name, branch, settings)
+    end
+end
+
 function preparation_inputs(root; catalog_dir=nothing, frozen=false, settings=Dict())
     root = realpath(root)
     (; definition_path, instrument_path, definition, instrument, recipe_path) = preparation_source(root)
@@ -301,6 +326,7 @@ function preparation_inputs(root; catalog_dir=nothing, frozen=false, settings=Di
         definition_path, instrument_path, definition, instrument; catalog_dir, frozen)
     definition["defaults"] = selected_settings(definition["defaults"], settings)
     model = Zemax.load_model(recipe_path)
+    variants = preparation_variants(definition, model)
     physical = physical_inputs(root, instrument)
     Set(keys(model["branches"])) == Set(keys(physical.modes)) ||
         throw(ArgumentError("optical path and conversion recipe branch names must match"))
@@ -346,6 +372,20 @@ function preparation_inputs(root; catalog_dir=nothing, frozen=false, settings=Di
         graph_paths[name] = relpath(graph_path, root)
         push!(graphs, (relpath(graph_path, root), graph, diagnostics))
     end
+    base_mask_sources = copy(mask_sources)
+    for variant in variants
+        name = variant.branch
+        selected = model["branches"][name]
+        branch = selected_branch(resolved, selected, model["conversion"])
+        prepared = spectral_train(root, branch, name, selected, model, variant.settings,
+            instrument, catalog["glasses"], physical.modes[name])
+        union!(mask_sources, prepared.sources)
+        graph, diagnostics = prepared.graph, prepared.diagnostics
+        graph["name"] = isempty(instrument["id"]) ? variant.name : "$(instrument["id"])_$(variant.name)"
+        graph_path = optical_path(root, "generated/$(variant.name).yaml"; generated=true)
+        graph_paths[variant.name] = relpath(graph_path, root)
+        push!(graphs, (relpath(graph_path, root), graph, diagnostics))
+    end
     if catalog_dir !== nothing
         catalog["glasses"] = Dict{String,GlassDocument}(k => catalog["glasses"][k] for k in sort!(collect(needed)))
     end
@@ -373,9 +413,15 @@ function preparation_inputs(root; catalog_dir=nothing, frozen=false, settings=Di
         end
     end
     execution["graphs"] = graph_paths
-    execution["optical_model"] = Dict("format"=>"zemax", "source"=>"../simulation/definition.yaml")
+    variant_branches = Dict{String,Dict{String,String}}(
+        variant.name => Dict("branch"=>variant.branch) for variant in variants)
+    optical_model = Dict{String,Union{String,typeof(variant_branches)}}(
+        "format"=>"zemax", "source"=>"../simulation/definition.yaml")
+    isempty(variants) || (optical_model["variants"] = variant_branches)
+    execution["optical_model"] = optical_model
     execution["instrument"] = relpath(instrument_path, dirname(execution_path))
     sources = [relpath(path, root) for path in (source, instrument_path, definition_path, recipe_path, glass_path, resolved_path, archive)]
+    base_sources = sort!(unique(vcat(sources,collect(base_mask_sources),observation_sources)))
     append!(sources, sort!(collect(setdiff(union(mask_sources, Set(observation_sources)), Set(sources)))))
     sort!(sources)
     outputs = [first(graph) for graph in graphs]
@@ -385,7 +431,8 @@ function preparation_inputs(root; catalog_dir=nothing, frozen=false, settings=Di
         [abspath(joinpath(catalog_dir, name)) for name in model["catalog_order"]]
     regenerated = catalog_dir === nothing ? [ZEMAX_RESOLVED_PATH] : [ZEMAX_RESOLVED_PATH, ZEMAX_GLASSES_PATH]
     validate_optical_outputs(root, sources, outputs; regenerated, catalog_paths)
-    return (; root, catalog, sources, graphs, glass_path, resolved_path, resolved,
+    variant_paths = Set("generated/$(variant.name).yaml" for variant in variants)
+    return (; root, catalog, sources, base_sources, variant_paths, graphs, glass_path, resolved_path, resolved,
         execution_path, execution=ordered(execution), write_catalog=catalog_dir !== nothing)
 end
 
@@ -434,12 +481,14 @@ function Zemax.prepare(root; catalog_dir=nothing, yamlfmt=get(ENV, "YAMLFMT", "y
     regeneration = "julia --project=<validation-env> tools/prepare-proper.jl $(basename(root))"
     catalog_dir === nothing || (regeneration *= " --catalog-dir <extracted-catalogs>")
     guidance = join(inputs.sources, ", ") * "; " * regeneration
+    base_guidance = join(inputs.base_sources, ", ") * "; " * regeneration
     generated_yaml(inputs.resolved_path, inputs.resolved, guidance; yamlfmt, formatter_config)
     if inputs.write_catalog
         generated_yaml(inputs.glass_path, inputs.catalog, guidance; yamlfmt, formatter_config)
     end
     for (path, graph, diagnostics) in inputs.graphs
-        generated_yaml(joinpath(root, path), graph, guidance; yamlfmt, formatter_config)
+        generated_yaml(joinpath(root, path), graph,
+            path in inputs.variant_paths ? guidance : base_guidance; yamlfmt, formatter_config)
         for id in sort!(collect(keys(diagnostics)); by=x -> parse(Int, x))
             println("$path surface $id ABCD = ", diagnostics[id])
         end
@@ -496,11 +545,14 @@ function validate_optical_provenance(root, receipt)
         throw(ArgumentError("optical source hashes must match the declared conversion recipe sources"))
     Set(first(graph) for graph in inputs.graphs) == Set(e["path"] for e in receipt["graphs"]) ||
         throw(ArgumentError("missing or unselected optical graph hash"))
+    execution = read_zemax_yaml(inputs.execution_path)
+    get(execution,"optical_model",nothing) == inputs.execution["optical_model"] ||
+        throw(ArgumentError("prepared optical model descriptor differs from authored preparation"))
     for (relative, graph, _) in inputs.graphs
         read_zemax_yaml(joinpath(root, relative)) == graph ||
             throw(ArgumentError("altered optical graph: $relative; regenerate the optical preparation"))
     end
-    read_zemax_yaml(inputs.execution_path) == inputs.execution ||
+    execution == inputs.execution ||
         throw(ArgumentError("altered optical execution definition; regenerate the optical preparation"))
     return receipt
 end
