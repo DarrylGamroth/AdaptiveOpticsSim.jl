@@ -2,6 +2,7 @@ module AdaptiveOpticsSimProperExt
 
 using AdaptiveOpticsSim
 using Proper
+using FixedSizeArrays: FixedSizeMatrixDefault, FixedSizeVectorDefault
 import AdaptiveOpticsSim.AlgorithmGraphs as AOG
 import AdaptiveOpticsSim.Backends
 
@@ -9,7 +10,7 @@ const DEFAULT_OPD_SCHEMA = "org.adaptiveopticssim.pupil-opd/1"
 const DEFAULT_AMPLITUDE_SCHEMA = "org.adaptiveopticssim.pupil-amplitude/1"
 const DEFAULT_INTENSITY_SCHEMA = "org.adaptiveopticssim.optical-intensity/1"
 
-function _train_step(step::NamedTuple, ::Type{T}) where {T}
+function _train_step(step::NamedTuple, ::Type{T}, config, bindings) where {T}
     hasproperty(step, :op) || throw(AOG.AlgorithmGraphError("optical step is missing op"))
     op = AOG._file_string(step.op, "optical step op")
     fields = if op == "propagate"
@@ -22,11 +23,39 @@ function _train_step(step::NamedTuple, ::Type{T}) where {T}
         (:amplitude,)
     elseif op == "circular_mask"
         (:circles, :mode)
+    elseif op == "sampled_mask"
+        (:amplitude, :sampling_m, :center_pixel, :outside_amplitude, :outside_phase_rad)
     else
         throw(AOG.AlgorithmGraphError("unsupported optical operation '$op'"))
     end
-    AOG._require_named_fields(step, (:op, :name, fields...), fields, "optical step")
+    allowed = op == "sampled_mask" ? (:op, :name, fields..., :phase) : (:op, :name, fields...)
+    required = op == "sampled_mask" ? (:name, fields...) : fields
+    AOG._require_named_fields(step, allowed, required, "optical step")
     name = hasproperty(step, :name) ? AOG._file_string(step.name, "optical step name") : op
+    if op == "sampled_mask"
+        amplitude_role = AOG._file_identifier(step.amplitude, "sampled mask amplitude role")
+        amplitude = _mask_snapshot(AOG._require_binding(bindings,
+            getproperty(config, amplitude_role), "sampled mask amplitude"), T, :amplitude)
+        phase = if hasproperty(step, :phase)
+            phase_role = AOG._file_identifier(step.phase, "sampled mask phase role")
+            _mask_snapshot(AOG._require_binding(bindings,
+                getproperty(config, phase_role), "sampled mask phase"), T, :phase)
+        else
+            nothing
+        end
+        phase === nothing || size(phase) == size(amplitude) ||
+            throw(AOG.AlgorithmGraphError("sampled mask amplitude and phase shapes must match"))
+        sampling_m = _mask_pair(step.sampling_m, T, "sampling_m")
+        all(>(zero(T)), sampling_m) || throw(AOG.AlgorithmGraphError("sampled mask sampling_m must be positive"))
+        center_pixel = _mask_pair(step.center_pixel, T, "center_pixel")
+        outside_amplitude = T(AOG._file_real(step.outside_amplitude, "outside_amplitude"))
+        0 <= step.outside_amplitude <= 1 && isfinite(outside_amplitude) ||
+            throw(AOG.AlgorithmGraphError("outside_amplitude must be in [0,1]"))
+        outside_phase_rad = T(AOG._file_real(step.outside_phase_rad, "outside_phase_rad"))
+        isfinite(outside_phase_rad) || throw(AOG.AlgorithmGraphError("outside_phase_rad is not representable"))
+        return (; op=:sampled_mask, name, amplitude, phase, sampling_m, center_pixel,
+            outside=outside_amplitude*cis(outside_phase_rad))
+    end
     if op == "circular_mask"
         mode = AOG._file_string(step.mode, "circular mask mode")
         mode in ("transmit", "reflect") || throw(AOG.AlgorithmGraphError("invalid circular mask mode"))
@@ -54,6 +83,29 @@ function _train_step(step::NamedTuple, ::Type{T}) where {T}
     return merge((; op=Symbol(op), name), NamedTuple{(key,)}((value,)))
 end
 
+function _mask_pair(value, ::Type{T}, name) where {T}
+    pair = AOG._file_tuple(value, "sampled mask $name")
+    length(pair) == 2 || throw(AOG.AlgorithmGraphError("sampled mask $name must contain two values"))
+    converted = map(x -> T(AOG._file_real(x, "sampled mask $name")), pair)
+    all(isfinite, converted) || throw(AOG.AlgorithmGraphError("sampled mask $name is not representable"))
+    return converted
+end
+
+function _mask_snapshot(array, ::Type{T}, quantity) where {T}
+    array isa AbstractMatrix && eltype(array) <: Real ||
+        throw(AOG.AlgorithmGraphError("sampled mask $quantity must be a real matrix"))
+    !Base.has_offset_axes(array) ||
+        throw(AOG.AlgorithmGraphError("sampled mask $quantity requires one-based axes"))
+    all(>(0), size(array)) || throw(AOG.AlgorithmGraphError("sampled mask $quantity must not be empty"))
+    host = Backends.host_array(array)
+    all(isfinite, host) || throw(AOG.AlgorithmGraphError("sampled mask $quantity must be finite"))
+    quantity === :amplitude && !all(x -> 0 <= x <= 1, host) &&
+        throw(AOG.AlgorithmGraphError("sampled mask amplitude must be in [0,1]"))
+    converted = T.(host)
+    all(isfinite, converted) || throw(AOG.AlgorithmGraphError("sampled mask $quantity is not representable"))
+    return FixedSizeMatrixDefault{T}(converted)
+end
+
 function _train_optic!(wf, step, mask, context)
     if step.op === :propagate
         Proper.prop_propagate(wf, step.distance_m, context, step.name)
@@ -65,7 +117,7 @@ function _train_optic!(wf, step, mask, context)
         Proper.prop_circular_obscuration(wf, step.radius_m)
     elseif step.op === :multiply
         Proper.prop_multiply(wf, step.amplitude)
-    elseif step.op === :circular_mask
+    elseif step.op === :circular_mask || step.op === :sampled_mask
         Proper.prop_multiply(wf, mask)
     end
     return nothing
@@ -84,15 +136,12 @@ struct OpticalTrainPlan{T,S}
 end
 
 function AOG._proper_optical_train_node(::Type{T}, name::Symbol,
-        config::NamedTuple, props::NamedTuple) where {T<:Union{Float32,Float64}}
-    allowed = (:resolution, :pupil_resolution, :diameter_m, :wavelength_um,
-        :steps, :pupil_opd_schema, :pupil_amplitude_schema, :output_schema)
-    AOG._require_named_fields(config, allowed,
-        (:resolution, :diameter_m, :wavelength_um, :steps), "Proper optical train config")
+        config::NamedTuple, props::NamedTuple, bindings::NamedTuple) where {T<:Union{Float32,Float64}}
+    AOG.graph_node_bindings(AOG.ProperOpticalTrainNodeFactory{T}(), config)
     AOG._require_named_fields(props, (), (), "Proper optical train props")
     steps = map(AOG._file_tuple(config.steps, "steps")) do step
         step isa NamedTuple || throw(AOG.AlgorithmGraphError("step must be a mapping"))
-        _train_step(step, T)
+        _train_step(step, T, config, bindings)
     end
     n = AOG._file_integer(config.resolution, "resolution")
     iseven(n) || throw(AOG.AlgorithmGraphError("Proper optical train resolution must be even for centered propagation"))
@@ -110,6 +159,9 @@ function AOG._proper_optical_train_node(::Type{T}, name::Symbol,
         value
     end
     plan = OpticalTrainPlan(steps, n, p, diameter, wavelength, schemas)
+    if hasproperty(config, :channels) || hasproperty(config, :output_sampling_m)
+        return _polychromatic_optical_train_node(T, name, plan, config, bindings)
+    end
     return AOG.algorithm_node(name, OpticalTrainNode{T}, plan; props=NamedTuple())
 end
 
@@ -137,12 +189,43 @@ struct OpticalTrainOwner{P,W,D,A,O}
     output::O
 end
 
+function _mask_sample(step, row, col)
+    if 1 <= row <= size(step.amplitude, 1) && 1 <= col <= size(step.amplitude, 2)
+        amplitude = step.amplitude[row, col]
+        return step.phase === nothing ? complex(amplitude) : amplitude*cis(step.phase[row, col])
+    end
+    return step.outside
+end
+
+function _resample_mask(step, n, sampling::T) where {T}
+    isfinite(sampling) && sampling > 0 ||
+        throw(AOG.AlgorithmGraphError("sampled mask has invalid plane sampling"))
+    mask = Matrix{Complex{T}}(undef, n, n)
+    center = fld(n, 2)+1
+    for col in 1:n, row in 1:n
+        source_row = (row-center)*sampling/step.sampling_m[1]+step.center_pixel[1]
+        source_col = (col-center)*sampling/step.sampling_m[2]+step.center_pixel[2]
+        if !(0 <= source_row <= size(step.amplitude, 1)+1 &&
+                0 <= source_col <= size(step.amplitude, 2)+1)
+            mask[row, col] = step.outside
+            continue
+        end
+        i, j = floor(Int, source_row), floor(Int, source_col)
+        dy, dx = source_row-i, source_col-j
+        # Interpolate the phasors, including each outside neighbor, to preserve
+        # continuity across phase wraps rather than interpolating phase angles.
+        mask[row, col] = (1-dy)*((1-dx)*_mask_sample(step, i, j)+dx*_mask_sample(step, i, j+1))+
+            dy*((1-dx)*_mask_sample(step, i+1, j)+dx*_mask_sample(step, i+1, j+1))
+    end
+    return mask
+end
+
 function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}
     n = plan.resolution
     context = Proper.RunContext(Matrix{Complex{T}})
     wf = Proper.prop_begin(plan.diameter_m, plan.wavelength_um*T(1e-6), n;
         beam_diam_fraction=T(plan.pupil_resolution/n), context)
-    return map(plan.steps) do step
+    masks = map(plan.steps) do step
         mask = if step.op === :circular_mask
             sampling = Proper.prop_get_sampling(wf)
             isfinite(sampling) && sampling > 0 ||
@@ -163,6 +246,8 @@ function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}
                 centered[i,j] = T(step.mode === :transmit ? inside : !inside)
             end
             centered
+        elseif step.op === :sampled_mask
+            _resample_mask(step, n, T(Proper.prop_get_sampling(wf)))
         else
             nothing
         end
@@ -170,16 +255,21 @@ function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}
         if mask === nothing
             nothing
         else
-            device_mask = Backends.allocate_device_array(target, T, n, n)
+            device_mask = Backends.allocate_device_array(target, eltype(mask), n, n)
             copyto!(device_mask, mask)
             device_mask
         end
     end
+    return (; masks, sampling_m=T(Proper.prop_get_sampling(wf)))
 end
 
 function AOG.prepare_graph_node(::Type{OpticalTrainNode{T}}, plan::OpticalTrainPlan{T},
         ::NamedTuple{()}, inputs::NamedTuple{(:pupil_opd,:pupil_amplitude)},
         outputs::NamedTuple{(:output,)}, ::NamedTuple{()}, target) where {T}
+    return _prepare_optical_train(plan, inputs, outputs, target).owner
+end
+
+function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, target) where {T}
     n = plan.resolution
     for (array, shape) in ((inputs.pupil_opd, (plan.pupil_resolution, plan.pupil_resolution)),
             (inputs.pupil_amplitude, (plan.pupil_resolution, plan.pupil_resolution)),
@@ -195,9 +285,11 @@ function AOG.prepare_graph_node(::Type{OpticalTrainNode{T}}, plan::OpticalTrainP
     padded_amplitude = similar(padded_opd)
     fill!(padded_opd, 0)
     fill!(padded_amplitude, 0)
+    geometry = _prepare_masks(plan, target)
     workspace = OpticalTrainWorkspace(wavefront, context, padded_opd, padded_amplitude,
-        _prepare_masks(plan, target))
-    return OpticalTrainOwner(plan, workspace, inputs.pupil_opd, inputs.pupil_amplitude, outputs.output)
+        geometry.masks)
+    owner = OpticalTrainOwner(plan, workspace, inputs.pupil_opd, inputs.pupil_amplitude, outputs.output)
+    return (; owner, geometry.sampling_m)
 end
 
 function AOG.step_graph_node!(owner::OpticalTrainOwner)
@@ -231,5 +323,7 @@ function AOG.reset_graph_node!(owner::OpticalTrainOwner)
     fill!(owner.output, 0)
     return nothing
 end
+
+include("proper_spectrum.jl")
 
 end

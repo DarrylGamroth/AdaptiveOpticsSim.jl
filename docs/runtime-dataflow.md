@@ -508,7 +508,8 @@ name:
     # Exposure, sensor response, noise, schemas and RNG settings follow here.
 ```
 
-The supported selectors are `ccd`, `cmos`, `emccd` and `ingaas`. They select
+The supported selectors are `ccd`, `cmos`, `emccd`, `ingaas` and
+`hgcdte_linear_avalanche_array`. They select
 the existing Float32 complete-frame acquisitions; UInt16 camera output remains a separate
 ADC/formatting step. `shutter` defaults to `global`. Other shutter modes and
 unsupported detector names are rejected, rather than approximated silently.
@@ -535,6 +536,21 @@ Optional scalar fields are `gain` (default 1), `dark_current_e_per_pixel_s` and
 Glow is charge per integration time, rather than read-cadence glow. Scalar QE
 is effective across the declared channel; no wavelength-dependent response,
 pixel blur, camera profile, or axis conversion is inferred.
+
+`detector: hgcdte_linear_avalanche_array` uses the same required metric-grid
+fields and optional scalar fields as `ingaas`, with the existing HgCdTe
+linear-avalanche numerical sensor and single-read sampling. Additional optional
+fields are `avalanche_gain` (default 1, finite and at least 1),
+`excess_noise_factor` (default 1, finite and at least 1), and
+`multiplication_model`: `conditional_gamma` for the CPU reference or
+`clipped_gaussian_approximation` (default) for the numerical sensor's portable
+approximation. The latter is qualified for q/(F−1) ≥ 25; F = 1 is deterministic.
+`readout_noise_e` applies after avalanche multiplication, before `gain`.
+`full_well_e` bounds multiplied charge. SAPHIRA settings remain explicit
+instrument data. This adapter does not infer detector calibration or read
+cadence; `read_duration_s` and nondestructive sampling settings are rejected.
+The [synthetic HgCdTe fixture](../test/graph_files/hgcdte_avalanche.yaml) shows
+the complete YAML contract with explicit test coefficients.
 
 Optional persistence and nonlinearity use the native model names and explicit
 modes:

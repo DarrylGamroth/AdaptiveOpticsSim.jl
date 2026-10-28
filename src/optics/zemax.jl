@@ -4,7 +4,7 @@ module Zemax
 using SHA
 using LinearAlgebra
 
-export inspect, write_inspection, prepare, refractive_index, train, validate_provenance
+export inspect, write_inspection, load_model, prepare, execution_graphs, refractive_index, train, validate_provenance
 
 # These cold document builders retain the string-key mapping API without erasing
 # stored values. Each document has a finite set of scalar and child shapes.
@@ -14,10 +14,11 @@ const BranchDocument = Dict{String,Union{Int,String,Vector{Int},Vector{String},V
 const SourceDocument = Dict{String,Union{Int,String}}
 const InspectionDocument = Dict{String,Union{Int,String,Vector{Int},SourceDocument,Vector{BranchDocument}}}
 const CircleDocument = Dict{String,Union{Int,Float64}}
-const StepDocument = Dict{String,Union{String,Float64,Vector{CircleDocument}}}
-const TrainConfiguration = Dict{String,Union{Int,Float64,Vector{StepDocument}}}
-const TrainNode = Dict{String,Union{String,TrainConfiguration}}
+const StepDocument = Dict{String,Union{String,Float64,Vector{Float64},Vector{CircleDocument}}}
+const ChannelDocument = Dict{String,Union{Float64,Vector{StepDocument}}}
+const TrainConfiguration = Dict{String,Union{Int,Float64,Vector{StepDocument},Vector{ChannelDocument}}}
 const PortDocument = Dict{String,String}
+const TrainNode = Dict{String,Union{String,TrainConfiguration,PortDocument}}
 const TrainDocument = Dict{String,Union{Int,String,Vector{TrainNode},Vector{PortDocument}}}
 
 # Bounded sequential-ZMX inspection: evaluated file values, never a Zemax solver.
@@ -189,20 +190,48 @@ end
 step(op, name; kwargs...) = StepDocument("op" => op, "name" => name,
     (string(k) => v for (k,v) in kwargs)...)
 
+function ideal_focal_mask(masks)
+    radius = masks["focal_plane"]["radius_m"]
+    radius isa Real && !(radius isa Bool) && isfinite(radius) && radius > 0 ||
+        throw(ArgumentError("ideal focal mask radius_m must be positive and finite"))
+    return step("circular_obscuration", "ideal_focal_mask"; radius_m=radius)
+end
+
+function ideal_lyot_mask(masks, mode)
+    circles = masks["lyot"]["circles"]
+    circles isa AbstractVector && 1 <= length(circles) <= 16 ||
+        throw(ArgumentError("ideal Lyot mask requires 1:16 circles"))
+    for circle in circles
+        circle isa AbstractDict && Set(keys(circle)) == Set(("radius_m","x_m","y_m")) ||
+            throw(ArgumentError("invalid ideal Lyot circle fields"))
+        all(value -> value isa Real && !(value isa Bool) && isfinite(value), values(circle)) &&
+            circle["radius_m"] > 0 || throw(ArgumentError("invalid ideal Lyot circle geometry"))
+    end
+    return step("circular_mask", "ideal_lyot_mask"; mode,
+        circles=CircleDocument[CircleDocument(circle) for circle in circles])
+end
+
 """
-    train(branch, name, selection, model, settings, masks, glasses, diameter; instrument_id="")
+    train(branch, name, selection, model, settings, masks, glasses, diameter; lyot_mode, instrument_id="")
 
 Convert an explicitly selected sequential snapshot into a centered scalar
 paraxial optical graph document and diagnostic ABCD matrices. Coordinate breaks
 retain signed axial translation; transverse offsets and tilts are omitted.
 The authored conversion rules select idealized input-lens and OAP surfaces and
-masks. Other surfaces must be STANDARD, COORDBRK, or zero-curvature TILTSURF;
+masks. `selection = model["branches"][name]` supplies the configuration, detector
+and Lyot surface; `lyot_mode` explicitly selects `transmit` or `reflect`.
+`prepare` maps the physical Lyot stop port and validates the complete selection.
+Its `mask_steps` keyword supplies sampled-mask steps and their ordinary cold
+construction bindings when physical FITS maps replace the ideal masks.
+Other surfaces must be STANDARD, COORDBRK, or zero-curvature TILTSURF;
 TILTSURF tilts are omitted by the centered approximation. Curved mirrors outside the
 selected OAP are rejected. Curvature is in inverse metres. Coordinate-break
 parameters retain native units during inspection; tilts and offsets are omitted
 by this centered conversion.
 """
-function train(branch, name, selection, model, settings, masks, glasses, diameter; instrument_id="")
+function train(branch, name, selection, model, settings, masks, glasses, diameter;
+        lyot_mode, instrument_id="", mask_steps=Dict{String,StepDocument}())
+    lyot_mode in ("transmit", "reflect") || throw(ArgumentError("invalid lyot_mode"))
     rule = model["conversion"]
     surfaces = filter(s -> rule["first_surface"] <= s["id"] <= selection["detector_surface"], branch["active_surfaces"])
     isempty(surfaces) && error("Empty selected train")
@@ -219,13 +248,13 @@ function train(branch, name, selection, model, settings, masks, glasses, diamete
         (glass != "MIRROR" || s["curvature_inv_m"] == 0 || id == rule["oap_surface"]) ||
             error("Unmodeled curved mirror at surface $id")
         if id == rule["apodizer_surface"]
-            push!(steps, step("multiply", "ideal_unity_apodizer"; amplitude=1.0))
+            push!(steps, haskey(mask_steps,"apodizer") ? mask_steps["apodizer"] :
+                step("multiply", "ideal_unity_apodizer"; amplitude=1.0))
         elseif id == rule["focal_mask_surface"]
-            push!(steps, step("circular_obscuration", "ideal_focal_mask"; radius_m=masks["focal_plane"]["radius_m"]))
-        elseif id == rule["lyot_surfaces"][name]
-            push!(steps, step("circular_mask", "ideal_lyot_mask";
-                mode=rule["lyot_modes"][name],
-                circles=CircleDocument[CircleDocument(c) for c in masks["lyot"]["circles"]]))
+            push!(steps, haskey(mask_steps,"focal_plane") ? mask_steps["focal_plane"] :
+                ideal_focal_mask(masks))
+        elseif id == selection["lyot_surface"]
+            push!(steps, haskey(mask_steps,"lyot") ? mask_steps["lyot"] : ideal_lyot_mask(masks,lyot_mode))
         end
         phi = 0.0
         if id == rule["input_lens_surface"]
@@ -256,7 +285,7 @@ function train(branch, name, selection, model, settings, masks, glasses, diamete
             end
             radius > 0 && push!(steps, step("circular_aperture", "$(label)_clear_aperture"; radius_m=radius))
         end
-        if id in (rule["focal_mask_surface"], rule["lyot_surfaces"][name], selection["detector_surface"])
+        if id in (rule["focal_mask_surface"], selection["lyot_surface"], selection["detector_surface"])
             diagnostics[string(id)] = copy(matrix)
         end
         id == selection["detector_surface"] && break
@@ -268,8 +297,16 @@ function train(branch, name, selection, model, settings, masks, glasses, diamete
     end
     config = TrainConfiguration("resolution" => settings["resolution"], "pupil_resolution" => settings["pupil_resolution"],
         "wavelength_um" => settings["wavelength_um"], "diameter_m" => diameter, "steps" => steps)
+    node = TrainNode("type" => "proper_optical_train_f64", "name" => "optics", "config" => config)
+    if !isempty(mask_steps)
+        bindings = PortDocument()
+        for mask in values(mask_steps), field in ("amplitude","phase")
+            haskey(mask,field) && (bindings[mask[field]] = mask[field])
+        end
+        node["bindings"] = bindings
+    end
     graph = TrainDocument("schema_version" => 1, "name" => isempty(instrument_id) ? name : "$(instrument_id)_$(name)",
-        "nodes" => [TrainNode("type" => "proper_optical_train_f64", "name" => "optics", "config" => config)],
+        "nodes" => [node],
         "inputs" => [PortDocument("name" => port, "binding" => port, "destination" => "optics.$port") for port in ("pupil_opd", "pupil_amplitude")],
         "outputs" => [PortDocument("name" => "intensity", "source" => "optics.output")])
     return graph, diagnostics
@@ -284,19 +321,42 @@ Write a generated YAML inspection document and format it with standalone
 function write_inspection end
 
 """
+    load_model(path)
+
+Read one authored version-1 ZEMAX YAML conversion recipe, rejecting duplicate keys,
+unknown fields and invalid conversion or branch selections. Return a mapping
+with bounded concrete value types. Load YAML.jl to activate this optional loader.
+The source simulation definition selects this recipe by a relative path.
+"""
+function load_model end
+
+"""
     prepare(root; catalog_dir=nothing, yamlfmt="yamlfmt", formatter_config=nothing)
 
-Generate paraxial optical graph documents and a provenance receipt from an
-instrument's authored simulation data. Load YAML.jl to activate preparation.
-An extracted archive catalog directory is needed only to regenerate glass data.
+Generate paraxial optical graphs, frozen ZMX inspection, a shared runtime
+definition at `generated/simulation.yaml`, and a provenance receipt from an
+instrument's authored simulation definition and selected conversion recipe.
+All derived outputs belong under `generated/`. Load YAML.jl to activate
+preparation. Supply extracted AGF catalogs through `catalog_dir` to generate glass
+data; otherwise reuse the frozen `generated/optics/glasses.yaml` snapshot.
 """
 function prepare end
 
 """
+    execution_graphs(root; settings=Dict())
+
+Validate frozen Zemax preparation and replan optical graphs for selected cold
+settings in memory. Authored files and generated snapshots remain unchanged.
+Load YAML.jl to activate this preparation boundary.
+"""
+function execution_graphs end
+
+"""
     validate_provenance(root[, receipt])
 
-Validate required authored sources, selected graphs, local paths, and exact
-content hashes before preparing a generated optical model. Load YAML.jl to
+Validate the exact authored and frozen snapshot source set, selected graphs,
+prepared execution definition, local paths, and content hashes. This reads frozen
+artifacts without regenerating files or invoking formatters. Load YAML.jl to
 activate this optional document validation.
 """
 function validate_provenance end

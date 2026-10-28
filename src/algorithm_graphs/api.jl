@@ -26,6 +26,7 @@ export ccd_detector_acquisition_node
 export cmos_detector_acquisition_node
 export emccd_detector_acquisition_node
 export ingaas_detector_acquisition_node, pixel_mtf_node
+export hgcdte_avalanche_detector_acquisition_node
 export proper_optical_train_node_factory, optical_sampling_m
 export load_algorithm_graph, builtin_graph_node_types
 export prepare_algorithm_graph, step_graph_async!, wait_graph_step!
@@ -70,6 +71,7 @@ public CCDDetectorAcquisitionNode, CCDDetectorAcquisitionNodeConfig
 public CMOSDetectorAcquisitionNode, CMOSDetectorAcquisitionNodeConfig
 public EMCCDDetectorAcquisitionNode, EMCCDDetectorAcquisitionNodeConfig
 public InGaAsDetectorAcquisitionNode, InGaAsDetectorAcquisitionNodeConfig
+public HgCdTeAvalancheDetectorAcquisitionNode, HgCdTeAvalancheDetectorAcquisitionNodeConfig
 public PixelMTFNode, PixelMTFNodeConfig
 
 export IntensityExposure, reset_intensity_exposure!, integrate_intensity!

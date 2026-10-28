@@ -1,0 +1,43 @@
+# Synthetic detector coefficients for adapter validation; no camera calibration.
+schema_version: 1
+name: hgcdte_avalanche_test
+nodes:
+  - name: detector
+    type: detector
+    detector: hgcdte_linear_avalanche_array
+    config:
+      shutter: global
+      rows: 3
+      columns: 5
+      pixel_sampling_m: [0.000024, 0.000025]
+      spectral_channel: test_hgcdte_band
+      exposure_duration_s: 0.5
+      quantum_efficiency: 0.75
+      gain: 2
+      avalanche_gain: 4
+      excess_noise_factor: 1.2
+      multiplication_model: conditional_gamma
+      photon_noise: true
+      readout_noise: true
+      readout_noise_e: 0.7
+      dark_current_e_per_pixel_s: 2
+      glow_e_per_pixel_s: 3
+      bits: 12
+      full_well_e: 1000
+      persistence_model:
+        mode: exponential
+        coupling: 0.1
+        decay: 0.5
+      nonlinearity_model:
+        mode: saturating
+        coefficient: 0.001
+      rng_seed: 43969
+      photon_rate_schema: test.hgcdte.photon-rate/1
+      frame_schema: test.hgcdte.frame/1
+inputs:
+  - name: rate
+    destination: detector.photon_rate
+    binding: photons
+outputs:
+  - name: frame
+    source: detector.frame

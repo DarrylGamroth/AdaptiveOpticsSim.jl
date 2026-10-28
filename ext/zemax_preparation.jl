@@ -3,7 +3,11 @@ import SHA
 
 const GlassDocument = Dict{String,Union{Int,String,Vector{String},Vector{Float64}}}
 const CatalogDocument = Dict{String,Union{Int,Dict{String,String},Vector{Dict{String,String}},Dict{String,GlassDocument}}}
-const ProvenanceDocument = Dict{String,Union{Int,Vector{Dict{String,String}}}}
+const ProvenanceDocument = Dict{String,Union{Int,Dict{String,String},Vector{Dict{String,String}}}}
+const ZEMAX_EXECUTION_PATH = "generated/simulation.yaml"
+const ZEMAX_RESOLVED_PATH = "generated/optics/resolved.yaml"
+const ZEMAX_GLASSES_PATH = "generated/optics/glasses.yaml"
+const ZEMAX_PROVENANCE_PATH = "generated/optics/provenance.yaml"
 
 hashfile(path) = bytes2hex(SHA.sha256(read(path)))
 ordered(value) = value
@@ -64,7 +68,7 @@ function read_catalogs(dir, model, archive)
     end
     return CatalogDocument("schema_version" => 1,
         "archive" => Dict("basename" => basename(archive), "sha256" => hashfile(archive),
-            "extraction" => "zmxtools 0.1.5 ZAR extraction"),
+            "extraction" => "caller-supplied AGF catalogs; archive extraction is external"),
         "catalogs" => catalogs, "glasses" => glasses)
 end
 
@@ -80,103 +84,392 @@ function Zemax.write_inspection(output, data; yamlfmt=get(ENV, "YAMLFMT", "yamlf
     return output
 end
 
-function Zemax.prepare(root; catalog_dir=nothing, yamlfmt=get(ENV, "YAMLFMT", "yamlfmt"), formatter_config=nothing)
-    simulation = joinpath(root, "simulation"); optics = joinpath(simulation, "optics")
-    model = YAML.load_file(joinpath(optics, "model.yaml"))
-    definition = YAML.load_file(joinpath(simulation, "definition.yaml"))
-    instrument = YAML.load_file(joinpath(root, "instrument.yaml"))
-    resolved_path = joinpath(optics, model["resolved_source"])
-    resolved = YAML.load_file(resolved_path)
-    source = joinpath(root, resolved["source"]["basename"])
-    hashfile(source) == resolved["source"]["sha256"] || error("Resolved ZMX hash mismatch")
-    archive = normpath(joinpath(optics, model["source_archive"]))
-    glass_path = joinpath(optics, model["glass_source"])
-    # Retain only materials used by these curated branches, not entire vendor catalogs.
-    if catalog_dir !== nothing
-        data = read_catalogs(catalog_dir, model, archive)
-        detectors = Dict{Int,Int}(v["configuration_id"] => v["detector_surface"] for v in values(instrument["wavefront_sensors"]))
-        needed = Set{String}(s["glass_after"] for b in resolved["configurations"] if haskey(detectors, b["configuration_id"])
-            for s in b["active_surfaces"] if model["conversion"]["first_surface"] <= s["id"] <= detectors[b["configuration_id"]]
-            && s["glass_after"] ∉ ("", "MIRROR", "VACUUM"))
-        data["glasses"] = Dict{String,GlassDocument}(k => data["glasses"][k] for k in sort!(collect(needed)))
-        generated_yaml(glass_path, data, "archived AGF NM/CD/TD/LD; julia --project=<validation-env> tools/prepare-proper.jl $(basename(abspath(root))) --catalog-dir <extracted-ZAR-directory>"; yamlfmt, formatter_config)
-    end
-    catalog = YAML.load_file(glass_path)
-    hashfile(archive) == catalog["archive"]["sha256"] || error("Glass archive hash mismatch")
-    graph_paths = String[]
-    for name in sort!(collect(keys(definition["graphs"])))
-        selected = instrument["wavefront_sensors"][name]
-        branch = only(filter(b -> b["configuration_id"] == selected["configuration_id"], resolved["configurations"]))
-        graph, diagnostics = Zemax.train(branch, name, selected, model, definition["defaults"], definition["defaults"]["masks"],
-            catalog["glasses"], instrument["optical_input"]["diameter_m"]; instrument_id=instrument["id"])
-        generated_yaml(joinpath(root, definition["graphs"][name]), graph,
-            "simulation/optics/model.yaml, simulation/optics/resolved.yaml, simulation/optics/glasses.yaml, instrument.yaml, simulation/definition.yaml; julia --project=<validation-env> tools/prepare-proper.jl $(basename(abspath(root)))"; yamlfmt, formatter_config)
-        push!(graph_paths, definition["graphs"][name])
-        for id in sort!(collect(keys(diagnostics)); by=x -> parse(Int, x))
-            println("$name surface $id ABCD = ", diagnostics[id])
-        end
-    end
-    sources = [relpath(source, root), "instrument.yaml", "simulation/definition.yaml",
-        "simulation/optics/model.yaml", "simulation/optics/glasses.yaml", "simulation/optics/resolved.yaml",
-        relpath(archive, root)]
-    receipt = ProvenanceDocument("schema_version" => 1,
-        "sources" => [Dict("path" => p, "sha256" => hashfile(joinpath(root, p))) for p in sort!(sources)],
-        "graphs" => [Dict("path" => p, "sha256" => hashfile(joinpath(root, p))) for p in sort!(graph_paths)])
-    generated_yaml(joinpath(optics, "provenance.yaml"), receipt,
-        "all sources and generated graphs identified below; julia --project=<validation-env> tools/prepare-proper.jl $(basename(abspath(root)))"; yamlfmt, formatter_config)
+# Parsing is a cold external boundary. Normalize the authored conversion recipe immediately
+# into finite scalar and child shapes rather than retaining YAML's Any storage.
+const ModelSelection = Dict{String,Union{Int,String}}
+const ModelDocument = Dict{String,Union{Int,String,Vector{String},ModelSelection,Dict{String,ModelSelection}}}
+
+read_zemax_yaml(path) = _read_strict_yaml(path, ArgumentError)
+
+function model_fields(document, allowed, label)
+    document isa AbstractDict && Set(keys(document)) == Set(allowed) ||
+        throw(ArgumentError("$label must contain exactly $(join(allowed, ", "))"))
 end
 
-function provenance_fields(document, allowed)
-    Set(keys(document)) == Set(allowed) || throw(ArgumentError("unexpected provenance fields"))
+function model_string(value, label)
+    value isa String && 0 < ncodeunits(value) <= 4096 && !isempty(strip(value)) ||
+        throw(ArgumentError("$label must be a nonempty string of at most 4096 bytes"))
+    return value
 end
 
-function local_provenance_path(root, path)
-    path isa AbstractString || throw(ArgumentError("provenance path must be a string"))
-    (isabspath(path) || normpath(path) != path || ".." in splitpath(path)) &&
-        throw(ArgumentError("nonlocal provenance path: $path"))
-    absolute = joinpath(root, path)
-    relative = relpath(realpath(absolute), realpath(root))
-    ".." in splitpath(relative) && throw(ArgumentError("nonlocal provenance target: $path"))
+function model_integer(value, label; minimum=0)
+    value isa Int && value >= minimum ||
+        throw(ArgumentError("$label must be an integer >= $minimum"))
+    return value
+end
+
+function model_path(value, label)
+    path = model_string(value, label)
+    isabspath(path) && throw(ArgumentError("$label must be relative"))
+    return path
+end
+
+function Zemax.load_model(path::AbstractString)
+    filesize(path) <= 1024^2 || throw(ArgumentError("ZEMAX conversion recipe exceeds 1 MiB"))
+    document = read_zemax_yaml(path)
+    model_fields(document, ("schema_version", "catalog_order", "conversion", "branches", "assumptions"), "ZEMAX conversion recipe")
+    document["schema_version"] === 1 || throw(ArgumentError("unsupported ZEMAX conversion recipe schema_version"))
+    conversion = document["conversion"]
+    model_fields(conversion, ("first_surface", "input_lens_surface", "input_focal_parameter",
+        "focal_mask_surface", "oap_surface", "apodizer_surface"), "conversion")
+    rule = ModelSelection()
+    for key in keys(conversion)
+        rule[key] = key == "input_focal_parameter" ? model_string(conversion[key], key) :
+            model_integer(conversion[key], key)
+    end
+    first_surface = rule["first_surface"]
+    all(rule[key] >= first_surface for key in
+        ("input_lens_surface", "focal_mask_surface", "oap_surface", "apodizer_surface")) ||
+        throw(ArgumentError("conversion surface precedes first_surface"))
+    document["branches"] isa AbstractDict && 1 <= length(document["branches"]) <= 16 ||
+        throw(ArgumentError("branches must be a mapping with 1 to 16 entries"))
+    branches = Dict{String,ModelSelection}()
+    for (name, selection) in document["branches"]
+        model_string(name, "branch name")
+        occursin(r"^[a-z][a-z0-9_-]*$", name) || throw(ArgumentError("branch name must be a lower-case filename stem"))
+        model_fields(selection, ("configuration_id", "detector_surface", "lyot_surface"), "branch $name")
+        selected = ModelSelection(key => model_integer(value, key;
+            minimum=key == "configuration_id" ? 1 : 0) for (key, value) in selection)
+        first_surface <= selected["lyot_surface"] <= selected["detector_surface"] ||
+            throw(ArgumentError("Lyot surface outside selected train for $name"))
+        all(rule[key] <= selected["detector_surface"] for key in
+            ("input_lens_surface", "focal_mask_surface", "oap_surface", "apodizer_surface")) ||
+            throw(ArgumentError("conversion surface beyond detector for $name"))
+        length(unique((rule["apodizer_surface"], rule["focal_mask_surface"], selected["lyot_surface"]))) == 3 ||
+            throw(ArgumentError("apodizer, focal mask and Lyot surfaces must be distinct for $name"))
+        branches[name] = selected
+    end
+    catalogs, assumptions = document["catalog_order"], document["assumptions"]
+    catalogs isa AbstractVector && 1 <= length(catalogs) <= 64 || throw(ArgumentError("catalog_order must contain 1 to 64 entries"))
+    catalog_order = String[model_path(item, "catalog_order entry") for item in catalogs]
+    all(item -> basename(item) == item && item ∉ (".", ".."), catalog_order) ||
+        throw(ArgumentError("catalog_order entries must be catalog filenames"))
+    length(unique(catalog_order)) == length(catalog_order) || throw(ArgumentError("duplicate catalog_order entry"))
+    assumptions isa AbstractVector && length(assumptions) <= 256 ||
+        throw(ArgumentError("assumptions must be a sequence with at most 256 entries"))
+    return ModelDocument("schema_version" => 1,
+        "catalog_order" => catalog_order, "conversion" => rule, "branches" => branches,
+        "assumptions" => String[model_string(item, "assumption") for item in assumptions])
+end
+
+# Check existing symlinks as well as lexical paths. Outputs may not exist yet,
+# so resolve their closest existing ancestor before creating any directories.
+function contained_path(root, path)
+    path isa AbstractString && !isabspath(path) || throw(ArgumentError("expected a relative optical path"))
+    absolute = normpath(joinpath(root, path))
+    ".." in splitpath(relpath(absolute, root)) && throw(ArgumentError("nonlocal optical path: $path"))
+    target = optical_target(absolute)
+    ".." in splitpath(relpath(target, realpath(root))) &&
+        throw(ArgumentError("nonlocal optical target: $path"))
     return absolute
 end
 
+function optical_target(path)
+    parent = path
+    tail = String[]
+    while !ispath(parent) && !islink(parent)
+        pushfirst!(tail, basename(parent))
+        parent = dirname(parent)
+    end
+    return joinpath(realpath(parent), tail...)
+end
+
+# Authored and supplied data stay outside generated, even through symlinks.
+# The generated root itself must be a real directory, not an alias of other data.
+function optical_path(root, path; generated)
+    directory = joinpath(root, "generated")
+    islink(directory) && throw(ArgumentError("generated optical root must not be a symlink"))
+    absolute = contained_path(root, path)
+    within(path, parent) = ".." ∉ splitpath(relpath(path, parent))
+    lexical = within(absolute, directory)
+    resolved = within(optical_target(absolute), optical_target(directory))
+    (generated ? lexical && resolved : !lexical && !resolved) ||
+        throw(ArgumentError(generated ? "optical generated path must be inside generated: $path" :
+            "authored or supplied optical path must be outside generated: $path"))
+    return absolute
+end
+
+function selected_branch(resolved, selection, rule)
+    model_integer(resolved["configuration_count"], "configuration_count"; minimum=1)
+    selection["configuration_id"] <= resolved["configuration_count"] ||
+        throw(ArgumentError("unknown selected configuration"))
+    matches = filter(b -> b["configuration_id"] == selection["configuration_id"], resolved["configurations"])
+    length(matches) == 1 || throw(ArgumentError("selected configuration must have exactly one resolved branch"))
+    branch = only(matches)
+    surfaces = branch["active_surfaces"]
+    ids = Int[model_integer(s["id"], "surface id") for s in surfaces]
+    issorted(ids) && length(unique(ids)) == length(ids) || throw(ArgumentError("active surfaces must be unique and ordered"))
+    required = [rule[key] for key in ("first_surface", "input_lens_surface", "focal_mask_surface", "oap_surface", "apodizer_surface")]
+    append!(required, (selection["lyot_surface"], selection["detector_surface"]))
+    all(id -> id in ids, required) || throw(ArgumentError("missing selected active surface"))
+    input_lens = only(s for s in surfaces if s["id"] == rule["input_lens_surface"])
+    focal = get(input_lens["parameters_native"], rule["input_focal_parameter"], nothing)
+    focal isa Real && !(focal isa Bool) && isfinite(focal) && focal != 0 ||
+        throw(ArgumentError("missing or invalid input focal parameter"))
+    return branch
+end
+
+# Physical identity and routing are authoritative instrument data. Normalize the
+# consumed subset before model conversion; no YAML values reach execution state.
+function physical_reference(root, reference)
+    relative = model_path(reference["path"], "optical source path")
+    normpath(relative) == relative && all(part -> part ∉ (".", ".."), splitpath(relative)) ||
+        throw(ArgumentError("physical optical source path must be canonical and root-relative"))
+    path = optical_path(root, relative; generated=false)
+    digest = reference["sha256"]
+    digest isa String && occursin(r"^[0-9a-f]{64}$", digest) ||
+        throw(ArgumentError("invalid physical optical source hash"))
+    hashfile(path) == digest || throw(ArgumentError("physical optical source hash mismatch: $path"))
+    return path
+end
+
+function physical_inputs(root, instrument)
+    prescription = instrument["optical_prescription"]
+    model_fields(prescription, ("format", "path", "sha256", "catalog_archive"), "optical_prescription")
+    prescription["format"] == "zemax" || throw(ArgumentError("unsupported optical prescription format"))
+    source = physical_reference(root, prescription)
+    reference = prescription["catalog_archive"]
+    model_fields(reference, ("path", "sha256"), "catalog_archive")
+    archive = physical_reference(root, reference)
+    paths = instrument["optical_paths"]
+    paths isa AbstractDict && 1 <= length(paths) <= 16 ||
+        throw(ArgumentError("optical_paths must contain 1 to 16 entries"))
+    sensors = instrument["wavefront_sensors"]
+    sensors isa AbstractDict || throw(ArgumentError("wavefront_sensors must be a mapping"))
+    modes = Dict{String,String}()
+    selected_sensors = Set{String}()
+    for (name, path) in paths
+        model_string(name, "optical path name")
+        path isa AbstractDict && all(key -> key in ("sensor", "lyot_stop_port", "filters"), keys(path)) &&
+            all(key -> haskey(path, key), ("sensor", "lyot_stop_port")) ||
+            throw(ArgumentError("invalid optical path $name"))
+        sensor = model_string(path["sensor"], "optical path sensor")
+        haskey(sensors, sensor) || throw(ArgumentError("unknown optical path sensor: $sensor"))
+        sensor ∉ selected_sensors || throw(ArgumentError("optical paths must select distinct sensors"))
+        push!(selected_sensors, sensor)
+        port = path["lyot_stop_port"]
+        port in ("transmitted", "reflected") || throw(ArgumentError("invalid Lyot stop port for $name"))
+        modes[name] = port == "transmitted" ? "transmit" : "reflect"
+    end
+    return (; source, archive, modes)
+end
+
+include("zemax_masks.jl")
+include("zemax_spectra.jl")
+
+# The RTC owner validates the complete shared source schema; AOS admits the
+# preparation boundary and its exact physical instrument reference.
+function preparation_source(root)
+    definition_path = optical_path(root, "simulation/definition.yaml"; generated=false)
+    instrument_path = optical_path(root, "instrument.yaml"; generated=false)
+    definition, instrument = read_zemax_yaml(definition_path), read_zemax_yaml(instrument_path)
+    definition isa AbstractDict || throw(ArgumentError("simulation definition must be a mapping"))
+    haskey(definition, "graphs") && throw(ArgumentError("authored preparation must not declare graphs"))
+    preparation = get(definition, "preparation", nothing)
+    model_fields(preparation, ("kind", "recipe"), "simulation preparation")
+    preparation["kind"] == "zemax" || throw(ArgumentError("unsupported simulation preparation kind"))
+    recipe = model_path(preparation["recipe"], "preparation recipe")
+    recipe_path = optical_path(root, normpath(joinpath("simulation", recipe)); generated=false)
+    reference = model_path(get(definition, "instrument", nothing), "simulation instrument")
+    declared_instrument = optical_path(root, normpath(joinpath("simulation", reference)); generated=false)
+    optical_target(declared_instrument) == optical_target(instrument_path) ||
+        throw(ArgumentError("simulation instrument must identify the authoritative instrument.yaml"))
+    return (; definition_path, instrument_path, definition, instrument, recipe_path)
+end
+
+function preparation_inputs(root; catalog_dir=nothing, frozen=false, settings=Dict())
+    root = realpath(root)
+    (; definition_path, instrument_path, definition, instrument, recipe_path) = preparation_source(root)
+    definition["defaults"] = selected_settings(definition["defaults"], settings)
+    model = Zemax.load_model(recipe_path)
+    physical = physical_inputs(root, instrument)
+    Set(keys(model["branches"])) == Set(keys(physical.modes)) ||
+        throw(ArgumentError("optical path and conversion recipe branch names must match"))
+    resolved_path = optical_path(root, ZEMAX_RESOLVED_PATH; generated=true)
+    glass_path = optical_path(root, ZEMAX_GLASSES_PATH; generated=true)
+    execution_path = optical_path(root, ZEMAX_EXECUTION_PATH; generated=true)
+    source, archive = physical.source, physical.archive
+    selected_ids = sort!(unique([selection["configuration_id"] for selection in values(model["branches"])]))
+    resolved = frozen ? read_zemax_yaml(resolved_path) : Zemax.inspect(source; configurations=selected_ids)
+    get(resolved, "schema_version", nothing) === 1 || throw(ArgumentError("unsupported resolved ZEMAX schema_version"))
+    get(resolved, "selected_configuration_ids", nothing) == selected_ids ||
+        throw(ArgumentError("resolved ZMX selected configurations do not match the conversion recipe"))
+    basename(source) == resolved["source"]["basename"] || throw(ArgumentError("Resolved ZMX basename mismatch"))
+    resolved["source"]["sha256"] == instrument["optical_prescription"]["sha256"] ||
+        throw(ArgumentError("Resolved ZMX hash mismatch"))
+    catalog_dir === nothing && !isfile(glass_path) &&
+        throw(ArgumentError("missing frozen generated/optics/glasses.yaml; prepare with catalog_dir pointing to extracted AGF catalogs"))
+    catalog = catalog_dir === nothing ? read_zemax_yaml(glass_path) : read_catalogs(catalog_dir, model, archive)
+    get(catalog, "schema_version", nothing) === 1 || throw(ArgumentError("unsupported glass catalog schema_version"))
+    instrument["optical_prescription"]["catalog_archive"]["sha256"] == catalog["archive"]["sha256"] || throw(ArgumentError("Glass archive hash mismatch"))
+    if catalog_dir === nothing
+        catalogs = get(catalog, "catalogs", nothing)
+        catalogs isa AbstractVector &&
+            all(entry -> entry isa AbstractDict && get(entry, "basename", nothing) isa String, catalogs) &&
+            [entry["basename"] for entry in catalogs] == model["catalog_order"] ||
+            throw(ArgumentError("frozen glass catalog order does not match the conversion recipe; regenerate with catalog_dir (--catalog-dir) pointing to extracted AGF catalogs"))
+    end
+    graphs = Tuple{String,Zemax.TrainDocument,Dict{String,Matrix{Float64}}}[]
+    mask_sources = Set{String}()
+    needed = Set{String}()
+    graph_paths = Dict{String,String}()
+    for name in sort!(collect(keys(model["branches"])))
+        selected = model["branches"][name]
+        branch = selected_branch(resolved, selected, model["conversion"])
+        union!(needed, (s["glass_after"] for s in branch["active_surfaces"]
+            if model["conversion"]["first_surface"] <= s["id"] <= selected["detector_surface"]
+            && s["glass_after"] ∉ ("", "MIRROR", "VACUUM")))
+        prepared = spectral_train(root, branch, name, selected, model, definition["defaults"],
+            instrument, catalog["glasses"], physical.modes[name])
+        union!(mask_sources,prepared.sources)
+        graph, diagnostics = prepared.graph, prepared.diagnostics
+        graph_path = optical_path(root, "generated/$name.yaml"; generated=true)
+        graph_paths[name] = relpath(graph_path, root)
+        push!(graphs, (relpath(graph_path, root), graph, diagnostics))
+    end
+    if catalog_dir !== nothing
+        catalog["glasses"] = Dict{String,GlassDocument}(k => catalog["glasses"][k] for k in sort!(collect(needed)))
+    end
+    execution = deepcopy(definition)
+    delete!(execution, "preparation")
+    observation_sources = String[]
+    for (name, observation) in get(definition, "observations", Dict())
+        haskey(model["branches"], name) || throw(ArgumentError("observation names an unknown optical path"))
+        model_fields(observation, ("graph", "detector", "normalized_to_photon_rate"), "optical observation $name")
+        response_key = name * "_response"
+        haskey(graph_paths, response_key) && throw(ArgumentError("observation graph name collides with an optical path"))
+        response_path = optical_path(root, model_path(observation["graph"], "observation graph"); generated=false)
+        isfile(response_path) || throw(ArgumentError("observation graph must be an existing authored YAML file"))
+        graph_paths[response_key] = relpath(response_path, root)
+        push!(observation_sources, relpath(response_path, root))
+        execution["observations"][name]["graph"] = response_key
+    end
+    if !isempty(observation_sources)
+        # These are declared calibration inputs, not executable paths hidden in
+        # node configuration. RTC owns decoding and typed construction bindings.
+        for binding in values(get(definition, "bindings", Dict()))
+            get(binding, "kind", nothing) == "fits" || continue
+            path = physical_reference(root, binding)
+            push!(observation_sources, relpath(path, root))
+        end
+    end
+    execution["graphs"] = graph_paths
+    execution["optical_model"] = Dict("format"=>"zemax", "source"=>"../simulation/definition.yaml")
+    execution["instrument"] = relpath(instrument_path, dirname(execution_path))
+    sources = [relpath(path, root) for path in (source, instrument_path, definition_path, recipe_path, glass_path, resolved_path, archive)]
+    append!(sources, sort!(collect(setdiff(union(mask_sources, Set(observation_sources)), Set(sources)))))
+    sort!(sources)
+    outputs = [first(graph) for graph in graphs]
+    append!(outputs, [ZEMAX_PROVENANCE_PATH, ZEMAX_EXECUTION_PATH, ZEMAX_RESOLVED_PATH])
+    catalog_dir === nothing || push!(outputs, relpath(glass_path, root))
+    for path in outputs
+        absolute = optical_path(root, path; generated=true)
+        isdir(absolute) && throw(ArgumentError("optical output is a directory: $path"))
+        parent = dirname(absolute)
+        while !ispath(parent) && !islink(parent)
+            parent = dirname(parent)
+        end
+        isdir(parent) || throw(ArgumentError("optical output parent is not a directory: $path"))
+    end
+    # Compare resolved targets so a local symlink cannot overwrite another input.
+    target(path) = optical_target(contained_path(root, path))
+    source_targets = target.(sources)
+    output_targets = target.(outputs)
+    length(unique(source_targets)) == length(source_targets) || throw(ArgumentError("duplicate optical source path"))
+    length(unique(output_targets)) == length(output_targets) || throw(ArgumentError("duplicate optical output path"))
+    regenerated = catalog_dir === nothing ? [target(ZEMAX_RESOLVED_PATH)] : target.([ZEMAX_RESOLVED_PATH, ZEMAX_GLASSES_PATH])
+    catalog_targets = catalog_dir === nothing ? String[] :
+        [optical_target(abspath(joinpath(catalog_dir, name))) for name in model["catalog_order"]]
+    all_inputs = vcat(source_targets, catalog_targets)
+    length(unique(all_inputs)) == length(all_inputs) || throw(ArgumentError("duplicate supplied optical input path"))
+    protected = vcat(filter(path -> path ∉ regenerated, source_targets), catalog_targets)
+    isempty(intersect(protected, output_targets)) || throw(ArgumentError("optical output overlaps an input"))
+    # realpath resolves symlinks; samefile also detects existing hard links.
+    for (index, output) in enumerate(output_targets)
+        ispath(output) || continue
+        any(input -> ispath(input) && samefile(output, input), protected) &&
+            throw(ArgumentError("optical output aliases an input"))
+        any(previous -> ispath(previous) && samefile(output, previous), output_targets[1:index-1]) &&
+            throw(ArgumentError("optical outputs alias the same file"))
+    end
+    return (; root, catalog, sources, graphs, glass_path, resolved_path, resolved,
+        execution_path, execution=ordered(execution))
+end
+
+function Zemax.execution_graphs(root; settings=Dict())
+    Zemax.validate_provenance(root)
+    inputs = preparation_inputs(root; frozen=true, settings)
+    return Dict(splitext(basename(path))[1]=>graph for (path, graph, _) in inputs.graphs)
+end
+
+function Zemax.prepare(root; catalog_dir=nothing, yamlfmt=get(ENV, "YAMLFMT", "yamlfmt"), formatter_config=nothing)
+    inputs = preparation_inputs(root; catalog_dir)
+    root = inputs.root
+    regeneration = "julia --project=<validation-env> tools/prepare-proper.jl $(basename(root))"
+    catalog_dir === nothing || (regeneration *= " --catalog-dir <extracted-catalogs>")
+    guidance = join(inputs.sources, ", ") * "; " * regeneration
+    generated_yaml(inputs.resolved_path, inputs.resolved, guidance; yamlfmt, formatter_config)
+    if catalog_dir !== nothing
+        generated_yaml(inputs.glass_path, inputs.catalog, guidance; yamlfmt, formatter_config)
+    end
+    for (path, graph, diagnostics) in inputs.graphs
+        generated_yaml(joinpath(root, path), graph, guidance; yamlfmt, formatter_config)
+        for id in sort!(collect(keys(diagnostics)); by=x -> parse(Int, x))
+            println("$path surface $id ABCD = ", diagnostics[id])
+        end
+    end
+    generated_yaml(inputs.execution_path, inputs.execution, guidance; yamlfmt, formatter_config)
+    receipt = ProvenanceDocument("schema_version" => 1,
+        "sources" => [Dict("path" => p, "sha256" => hashfile(joinpath(root, p))) for p in inputs.sources],
+        "graphs" => [Dict("path" => p, "sha256" => hashfile(joinpath(root, p))) for (p, _, _) in inputs.graphs],
+        "execution" => Dict("path" => ZEMAX_EXECUTION_PATH, "sha256" => hashfile(inputs.execution_path)))
+    generated_yaml(joinpath(root, ZEMAX_PROVENANCE_PATH), receipt, guidance; yamlfmt, formatter_config)
+    return nothing
+end
+
 function Zemax.validate_provenance(root)
-    receipt = YAML.load_file(joinpath(root, "simulation", "optics", "provenance.yaml"))
+    path = optical_path(realpath(root), ZEMAX_PROVENANCE_PATH; generated=true)
+    isfile(path) || throw(ArgumentError("missing optical preparation receipt; run tools/prepare-proper.jl <instrument> to prepare the source"))
+    receipt = read_zemax_yaml(path)
     return Zemax.validate_provenance(root, receipt)
 end
 
 function Zemax.validate_provenance(root, receipt)
-    root = abspath(root)
-    provenance_fields(receipt, ("schema_version", "sources", "graphs"))
+    inputs = preparation_inputs(root; frozen=true)
+    root = inputs.root
+    model_fields(receipt, ("schema_version", "sources", "graphs", "execution"), "optical provenance")
     receipt["schema_version"] === 1 || throw(ArgumentError("unsupported optical provenance"))
-    entries = vcat(receipt["sources"], receipt["graphs"])
+    model_fields(receipt["execution"], ("path", "sha256"), "execution provenance")
+    receipt["execution"]["path"] == ZEMAX_EXECUTION_PATH || throw(ArgumentError("unexpected prepared execution path"))
     paths = String[]
-    for entry in entries
-        provenance_fields(entry, ("path", "sha256"))
-        path, digest = entry["path"], entry["sha256"]
-        absolute = local_provenance_path(root, path)
-        hashfile(absolute) == digest || throw(ArgumentError("stale optical input: $path; regenerate the optical preparation"))
-        push!(paths, path)
+    for key in ("sources", "graphs", "execution")
+        entries = key == "execution" ? (receipt[key],) : receipt[key]
+        key == "execution" || entries isa AbstractVector || throw(ArgumentError("provenance $key must be a sequence"))
+        for entry in entries
+            model_fields(entry, ("path", "sha256"), "provenance entry")
+            path, digest = entry["path"], entry["sha256"]
+            path isa String && normpath(path) == path && ".." ∉ splitpath(path) ||
+                throw(ArgumentError("noncanonical provenance path"))
+            absolute = contained_path(root, path)
+            digest isa String && occursin(r"^[0-9a-f]{64}$", digest) || throw(ArgumentError("invalid optical hash"))
+            hashfile(absolute) == digest || throw(ArgumentError("stale optical input: $path; regenerate the optical preparation"))
+            push!(paths, path)
+        end
     end
     length(unique(paths)) == length(paths) || throw(ArgumentError("duplicate optical provenance path"))
-    required = ["instrument.yaml", "simulation/definition.yaml", "simulation/optics/model.yaml",
-        "simulation/optics/glasses.yaml", "simulation/optics/resolved.yaml"]
-    issubset(required, [e["path"] for e in receipt["sources"]]) ||
-        throw(ArgumentError("missing required optical source hash"))
-    definition = YAML.load_file(joinpath(root, "simulation", "definition.yaml"))
-    selected = Set(values(definition["graphs"]))
-    selected == Set(e["path"] for e in receipt["graphs"]) ||
+    Set(inputs.sources) == Set(e["path"] for e in receipt["sources"]) ||
+        throw(ArgumentError("optical source hashes must match the declared conversion recipe sources"))
+    Set(first(graph) for graph in inputs.graphs) == Set(e["path"] for e in receipt["graphs"]) ||
         throw(ArgumentError("missing or unselected optical graph hash"))
-    resolved = YAML.load_file(joinpath(root, "simulation", "optics", "resolved.yaml"))
-    model = YAML.load_file(joinpath(root, "simulation", "optics", "model.yaml"))
-    archive = normpath(joinpath("simulation", "optics", model["source_archive"]))
-    sources = Set(e["path"] for e in receipt["sources"])
-    resolved["source"]["basename"] in sources || throw(ArgumentError("missing ZMX source hash"))
-    archive in sources || throw(ArgumentError("missing glass archive source hash"))
-    hashfile(local_provenance_path(root, resolved["source"]["basename"])) == resolved["source"]["sha256"] ||
-        throw(ArgumentError("resolved ZMX source identity mismatch"))
-    catalog = YAML.load_file(joinpath(root, "simulation", "optics", "glasses.yaml"))
-    hashfile(local_provenance_path(root, archive)) == catalog["archive"]["sha256"] ||
-        throw(ArgumentError("glass archive identity mismatch"))
     return receipt
 end

@@ -1,8 +1,8 @@
 using AdaptiveOpticsSim, Proper, Test, YAML
 using AdaptiveOpticsSim.AlgorithmGraphs
 
-function train_graph(config; opd=zeros(config.pupil_resolution,config.pupil_resolution), amplitude=ones(size(opd)), T=Float64)
-    node = proper_optical_train_node_factory(; T)(:optics,config,(;))
+function train_graph(config; opd=zeros(config.pupil_resolution,config.pupil_resolution), amplitude=ones(size(opd)), T=Float64, bindings=(;))
+    node = proper_optical_train_node_factory(; T)(:optics,config,(;),bindings)
     graph = algorithm_graph((node,);name=:train,
         inputs=(graph_input(:opd,:optics=>:pupil_opd,opd),graph_input(:amplitude,:optics=>:pupil_amplitude,amplitude)),
         outputs=(graph_output(:intensity,:optics=>:output),))
@@ -104,3 +104,7 @@ end
         @test_throws AlgorithmGraphError factory(:bad,merge(config,bad),(;))
     end
 end
+
+include("proper/sampled_masks.jl")
+
+include("proper/polychromatic_train.jl")
