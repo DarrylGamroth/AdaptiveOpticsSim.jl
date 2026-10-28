@@ -123,6 +123,20 @@ function _train_optic!(wf, step, mask, context)
     return nothing
 end
 
+function _train_optic!(wf, step, mask, context, shifted_mask)
+    if step.op === :sampled_mask
+        # Proper's planned FFT publishes its complex scratch as wf.field.
+        # Its allocating centered-map fallback would then be required for a
+        # complex mask. Retain a separate shift destination so neither the live
+        # field nor the immutable centered mask is overwritten during capture.
+        Proper.prop_shift_center!(shifted_mask, mask; inverse=true)
+        wf.field .*= shifted_mask
+    else
+        _train_optic!(wf, step, mask, context)
+    end
+    return nothing
+end
+
 
 struct OpticalTrainNode{T} end
 
@@ -173,12 +187,13 @@ function AOG.graph_node_ports(::Type{OpticalTrainNode{T}}, plan::OpticalTrainPla
         AOG.graph_port_contract(:output, :output, :data, T, output, plan.schemas[3], :column_major))
 end
 
-struct OpticalTrainWorkspace{W,C,A,M}
+struct OpticalTrainWorkspace{W,C,A,M,S}
     wavefront::W
     context::C
     padded_opd::A
     padded_amplitude::A
     masks::M
+    shifted_mask::S
 end
 
 struct OpticalTrainOwner{P,W,D,A,O}
@@ -286,10 +301,27 @@ function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, targ
     fill!(padded_opd, 0)
     fill!(padded_amplitude, 0)
     geometry = _prepare_masks(plan, target)
+    shifted_mask = any(step -> step.op === :sampled_mask, plan.steps) ?
+        Backends.allocate_device_array(target, Complex{T}, n, n) : nothing
     workspace = OpticalTrainWorkspace(wavefront, context, padded_opd, padded_amplitude,
-        geometry.masks)
+        geometry.masks, shifted_mask)
     owner = OpticalTrainOwner(plan, workspace, inputs.pupil_opd, inputs.pupil_amplitude, outputs.output)
+    _prepare_train_capture!(owner, target)
     return (; owner, geometry.sampling_m)
+end
+
+_prepare_train_capture!(owner, target) = nothing
+
+function _prepare_train_capture!(owner,
+        ::Backends.AcceleratorComputeDevice{Backends.CUDABackend})
+    # All optical geometry depends only on the immutable plan. Exercise the
+    # complete trajectory once while cold: this creates FFT plans, fills fixed
+    # workspaces and settles the live field's alias to the FFT scratch before
+    # any enclosing application capture records addresses. Reset clears only
+    # scientific buffers and leaves those plans and addresses intact.
+    AOG.step_graph_node!(owner)
+    AOG.reset_graph_node!(owner)
+    return nothing
 end
 
 function AOG.step_graph_node!(owner::OpticalTrainOwner)
@@ -308,14 +340,17 @@ function AOG.step_graph_node!(owner::OpticalTrainOwner)
     Proper.prop_multiply(wf, amplitude)
     Proper.prop_add_phase(wf, opd)
     foreach(plan.steps, workspace.masks) do step, mask
-        _train_optic!(wf, step, mask, workspace.context)
+        _train_optic!(wf, step, mask, workspace.context, workspace.shifted_mask)
     end
     Proper.prop_end(wf, owner.output)
     return nothing
 end
 
 AOG.optical_sampling_m(owner::OpticalTrainOwner) = Proper.prop_get_sampling(owner.workspace.wavefront)
-AOG.graph_node_capture_capability(::OpticalTrainOwner) = AOG.GraphNodeCaptureUnsupported()
+_optical_train_capture_capability(::Backends.AbstractComputeDevice) = AOG.GraphNodeCaptureUnsupported()
+_optical_train_capture_capability(::Backends.AcceleratorComputeDevice{Backends.CUDABackend}) = AOG.GraphNodeCaptureSafe()
+AOG.graph_node_capture_capability(owner::OpticalTrainOwner) =
+    _optical_train_capture_capability(Backends.compute_device(owner.output))
 
 function AOG.reset_graph_node!(owner::OpticalTrainOwner)
     fill!(owner.workspace.padded_opd, 0)

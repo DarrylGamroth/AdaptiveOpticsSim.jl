@@ -122,11 +122,14 @@ operations are deterministic and have no random-state configuration.
 
 Output is squared field amplitude without per-path normalization, photon-rate
 scaling or detector integration. After a graph step, `optical_sampling_m(owner)`
-returns square physical sample width in metres on both axes. For a scalar train, before the first
-step it returns entrance sampling. Detector pixel integration, exposure timing,
+returns square physical sample width in metres on both axes. For a scalar train,
+query after a completed step: this reads the retained wavefront's current sampling.
+CUDA preparation traces the train while cold to initialize FFT plans and stable
+field addresses, so its geometry may already describe the output before replay.
+Detector pixel integration, exposure timing,
 noise, throughput and photometry belong to their declared AOS components.
 
-Optional `channels` changes the node to CPU polychromatic propagation. Each of
+Optional `channels` changes the node to polychromatic propagation. Each of
 1–64 channel mappings requires `wavelength_um`, nonnegative `weight`, and its
 complete `steps`; optional `transmission` defaults to one and lies in `[0,1]`.
 Weights have a finite positive sum and are normalized as photon-number source
@@ -140,7 +143,7 @@ Optional `output_sampling_m` declares a finite positive square output-cell pitch
 in metres, overriding reference-train sampling. This keeps the physical detector
 grid fixed when the selected central wavelength changes. With this field and no
 `channels`, the node maps one channel using the top-level wavelength and steps
-with unit source weight and transmission. The mapping path requires CPU execution;
+with unit source weight and transmission. Both CPU and CUDA execute this mapping;
 without this field or channels, scalar behavior remains unchanged. The value must
 remain finite and positive at the selected Float32 or Float64 precision.
 
@@ -156,14 +159,39 @@ approximation, so sampling convergence must be checked for sharp PSFs or masks.
 Identical grids use exact direct addition. Preparation traces reference and
 channel geometry and freezes overlap coefficients; stepping performs no I/O.
 `optical_sampling_m` for this owner returns the declared fixed pitch, or reference
-output sampling when no fixed pitch is supplied, even before the first step. Polychromatic execution currently rejects accelerator devices.
+output sampling when no fixed pitch is supplied, even before the first step.
+CUDA resampling uses prepared sparse destination tables and two ordered gather
+kernels, with one writer per destination cell and no floating-point atomics.
 The existing scalar configuration and output arithmetic are unchanged.
 
 This is a centered scalar approximation. It does not infer mask
 fabrication data, global fold orientation, polarization or off-axis aberrations.
 Instrument data owns those assumptions and calibration identity. CPU numerical
-checks do not qualify GPU execution, acquisition deadlines or physical devices.
-Graph capture is not admitted for this node.
+checks do not qualify acquisition deadlines or physical devices.
+
+Fixed scalar and polychromatic trains admit CUDA `CapturedGraphExecution` through
+the normal AOS graph executor. Shape, buffer identities, wavelength samples,
+propagation steps, masks and resampling geometry remain fixed until rebuilding;
+device OPD and amplitude contents may change each frame. Cold preparation retains
+FFT plans, stable field storage and separate complex-mask shift scratch. The
+outer AOS graph captures the complete pipeline; no nested Proper capture is used.
+AMDGPU capture is not qualified by this change.
+
+The hardware selectors `test/cuda_proper_optical_train.jl` and
+`test/cuda_proper_spectrum.jl` compare CPU, streamed CUDA and captured replay on
+Float32/Float64 with changing inputs, masks, signed propagation, unequal spectral
+sampling, attenuation, clipped support and reset. They pass on Julia 1.13.3,
+CUDA 6.4.2 and an RTX 3080. They establish correctness for these software paths;
+no RTC latency or deadline claim follows from them.
+
+A focused allocation observation of public `step_graph!` on 32 × 32 grids with
+16 × 16 pupils found 0 Julia heap bytes for each of 20 warmed CUDA capture
+replays, for scalar and mapped two-channel trains in both precisions. The
+scalar case used a lens and 0.14 m propagation; the mapped case used 1.0/2.1 µm
+trains and 12 µm output cells. Measurement followed 32 warm steps and three
+measurement warmups, included the public method's completion, and excluded
+caller setup/synchronization. This result applies to those workloads and
+versions; it is not a general allocation guarantee.
 
 Run the optional CPU target with `julia --project=test/proper test/proper/runtests.jl`
 after instantiating that environment. It checks missing-dependency rejection,
@@ -174,9 +202,55 @@ response and complementary mask power.
 
 `Optics.Zemax.inspect(path; configurations=[3, 5])` reads a bounded UTF-16LE,
 MM sequential ZMX snapshot. Omit `configurations` to inspect the saved
-configuration. It applies explicit supported status-zero multi-configuration
-values and preserves raw surface records; it does not reevaluate solves or run
-a ray trace. Configuration numbers belong to the authored conversion recipe.
+configuration. It applies supported fixed multi-configuration values and linear
+numeric pickups, preserving editor row order including comments. Thermal thickness
+pickups are admitted only when a shared fixed environment and planar air endpoints
+prove zero thermal change; other solves are rejected. System operands remain
+metadata and do not turn automatic surface footprints into apertures. Inspection
+does not run a ray trace. Configuration numbers belong to the authored recipe.
+
+For a subsystem inside a larger simulation, use
+`Optics.Zemax.prepare_component(root, recipe, branch; settings, diameter_m)`.
+It returns native PROPER `config`, reduced-angle `diagnostics` matrices at the
+selected surfaces, exact input `sources` hashes and explicit `assumptions`.
+It checks the instrument's original ZMX and the recipe's AGF inputs at every cold
+preparation. It writes no files and needs YAML, without requiring Proper or RTC.
+The caller puts the configuration into an ordinary `proper_optical_train_f32` or
+`proper_optical_train_f64` node alongside its other components.
+
+Version-2 subsystem recipes have exactly these fields:
+
+```yaml
+schema_version: 2
+catalogs:
+  - path: catalogs/SCHOTT.AGF
+    sha256: <exact SHA-256>
+conversion:
+  first_surface: 48
+  initial_direction: 1
+  powered_mirrors: [50, 52, 66, 70]
+branches:
+  common_relay:
+    configuration_id: 1
+    last_surface: 77
+assumptions:
+  - Explicit design provenance and approximation choices.
+```
+
+Paths are relative to the instrument root, outside `generated/`; catalogs are
+ordered, with the first matching glass name selected. `catalog_archive` is
+optional for this mode. Settings contain `resolution`, `pupil_resolution`,
+`wavelength_um` and `temperature_c`; `diameter_m` is the incident beam diameter.
+The subsystem must start in air/vacuum. It ends before the last surface's outgoing
+thickness. Every selected curved mirror requires explicit admission. Multiple
+mirrors use unfolded reduced-angle power `−2dn c`, where `d` is incoming axial
+direction; reflection reverses `d`. Translation is `d Δz/n`. Manual circular
+apertures are retained; transverse tilts/decenters, conic aberrations and other
+aperture shapes are explicitly omitted. These are centered scalar reference
+models, requiring optical validation before scientific performance claims.
+
+The following standalone workflow remains useful when the complete authored
+definition consists of optical paths rather than importing one subsystem.
 
 With YAML loaded, `Optics.Zemax.prepare(root)` reads the authoritative
 `instrument.yaml` and authored `simulation/definition.yaml`. The source definition

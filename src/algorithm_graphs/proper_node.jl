@@ -76,7 +76,8 @@ end
 
 Return the physical sample pitch in metres on both axes of a prepared Proper
 optical train's raw output intensity. For a scalar train, read this after stepping
-the graph; before its first step the wavefront has entrance sampling. A
+the graph: it reports the retained wavefront's current sampling. CUDA cold
+preparation may already trace the output geometry before the first user step. A
 mapped train always returns the declared fixed pitch or cold-prepared reference
 output sampling.
 Obtain the owner with `prepared_graph_node(graph, node_name)`.

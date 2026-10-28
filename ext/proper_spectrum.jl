@@ -1,4 +1,4 @@
-# CPU polychromatic propagation reuses complete scalar trains. Each scalar
+# Polychromatic propagation reuses complete scalar trains. Each scalar
 # intensity carries its cell-integrated power convention onto a common grid.
 struct PolychromaticOpticalTrainNode{T} end
 
@@ -75,6 +75,64 @@ struct CellOverlap{T}
     fraction::T
 end
 
+# Destination-grouped sparse overlaps; device kernels gather each output cell
+# under a single writer. The sweep has O(n) entries, never a dense n×n map.
+struct CellOverlapGather{I,F}
+    offsets::I
+    sources::I
+    fractions::F
+end
+
+_prepare_cell_overlaps(::Nothing, n, target) = nothing
+function _prepare_cell_overlaps(overlaps::AbstractVector{CellOverlap{T}}, n, target) where {T}
+    target == Backends.HostComputeDevice() && return overlaps
+    offsets = ones(Int, n + 1)
+    for overlap in overlaps
+        offsets[overlap.destination + 1] += 1
+    end
+    for i in 2:n+1
+        offsets[i] += offsets[i - 1] - 1
+    end
+    cursor = copy(offsets)
+    sources = Vector{Int}(undef, length(overlaps))
+    fractions = Vector{T}(undef, length(overlaps))
+    for overlap in overlaps
+        i = cursor[overlap.destination]
+        sources[i] = overlap.source
+        fractions[i] = overlap.fraction
+        cursor[overlap.destination] += 1
+    end
+    device_offsets = Backends.allocate_device_array(target, Int, length(offsets))
+    device_sources = Backends.allocate_device_array(target, Int, length(sources))
+    device_fractions = Backends.allocate_device_array(target, eltype(fractions), length(fractions))
+    copyto!(device_offsets, offsets)
+    copyto!(device_sources, sources)
+    copyto!(device_fractions, fractions)
+    return CellOverlapGather(device_offsets, device_sources, device_fractions)
+end
+
+Backends.KernelAbstractions.@kernel function _cell_rows!(scratch, intensity, offsets, sources, fractions)
+    row, col = Backends.KernelAbstractions.@index(Global, NTuple)
+    if row <= size(scratch, 1) && col <= size(scratch, 2)
+        value = zero(eltype(scratch))
+        for i in offsets[row]:offsets[row + 1]-1
+            value += fractions[i] * intensity[sources[i], col]
+        end
+        scratch[row, col] = value
+    end
+end
+
+Backends.KernelAbstractions.@kernel function _cell_columns!(output, scratch, offsets, sources, fractions, weight)
+    row, col = Backends.KernelAbstractions.@index(Global, NTuple)
+    if row <= size(output, 1) && col <= size(output, 2)
+        value = output[row, col]
+        for i in offsets[col]:offsets[col + 1]-1
+            value += weight * fractions[i] * scratch[row, sources[i]]
+        end
+        output[row, col] = value
+    end
+end
+
 # A source cell is uniform over [(i-center-1/2)*pitch,(i-center+1/2)*pitch].
 # Fractions are overlap/source width; their tensor product conserves integrated
 # source-cell power wherever the reference grid covers the source support.
@@ -116,8 +174,6 @@ function AOG.prepare_graph_node(::Type{PolychromaticOpticalTrainNode{T}},
         plan::PolychromaticOpticalTrainPlan, ::NamedTuple{()},
         inputs::NamedTuple{(:pupil_opd,:pupil_amplitude)}, outputs::NamedTuple{(:output,)},
         ::NamedTuple{()}, target) where {T}
-    target == Backends.HostComputeDevice() || throw(AOG.AlgorithmGraphError(
-        "polychromatic Proper optical trains currently require the CPU host device"))
     n = plan.reference.resolution
     eltype(outputs.output) === T && size(outputs.output) == (n,n) &&
         Backends.compute_device(outputs.output) == target ||
@@ -125,13 +181,16 @@ function AOG.prepare_graph_node(::Type{PolychromaticOpticalTrainNode{T}},
     reference_sampling = _prepare_masks(plan.reference, target).sampling_m
     output_sampling = something(plan.output_sampling_m, reference_sampling)
     prepared = map(plan.channels) do channel
-        _prepare_optical_train(channel, inputs, (; output=zeros(T,n,n)), target)
+        output = Backends.allocate_device_array(target, T, n, n)
+        _prepare_optical_train(channel, inputs, (; output), target)
     end
     channels = map(p -> p.owner, prepared)
     overlaps = map(prepared) do channel
-        _cell_overlaps(n, channel.sampling_m, output_sampling)
+        _prepare_cell_overlaps(_cell_overlaps(n, channel.sampling_m, output_sampling), n, target)
     end
-    return PolychromaticOpticalTrainOwner(plan, channels, overlaps, zeros(T,n,n),
+    scratch = Backends.allocate_device_array(target, T, n, n)
+    fill!(scratch, 0)
+    return PolychromaticOpticalTrainOwner(plan, channels, overlaps, scratch,
         outputs.output, output_sampling)
 end
 
@@ -151,6 +210,15 @@ function _add_channel_intensity!(output, intensity, scratch, overlaps, weight)
     return nothing
 end
 
+function _add_channel_intensity!(output, intensity, scratch, overlaps::CellOverlapGather, weight)
+    backend = Backends.KernelAbstractions.get_backend(output)
+    _cell_rows!(backend)(scratch, intensity, overlaps.offsets, overlaps.sources,
+        overlaps.fractions; ndrange=size(output))
+    _cell_columns!(backend)(output, scratch, overlaps.offsets, overlaps.sources,
+        overlaps.fractions, weight; ndrange=size(output))
+    return nothing
+end
+
 function AOG.step_graph_node!(owner::PolychromaticOpticalTrainOwner)
     fill!(owner.output, zero(eltype(owner.output)))
     foreach(owner.channels, owner.overlaps, owner.plan.weights,
@@ -163,7 +231,10 @@ function AOG.step_graph_node!(owner::PolychromaticOpticalTrainOwner)
 end
 
 AOG.optical_sampling_m(owner::PolychromaticOpticalTrainOwner) = owner.sampling_m
-AOG.graph_node_capture_capability(::PolychromaticOpticalTrainOwner) = AOG.GraphNodeCaptureUnsupported()
+function AOG.graph_node_capture_capability(owner::PolychromaticOpticalTrainOwner)
+    return all(channel -> AOG.graph_node_capture_capability(channel) isa AOG.GraphNodeCaptureSafe,
+        owner.channels) ? AOG.GraphNodeCaptureSafe() : AOG.GraphNodeCaptureUnsupported()
+end
 
 function AOG.reset_graph_node!(owner::PolychromaticOpticalTrainOwner)
     foreach(AOG.reset_graph_node!, owner.channels)

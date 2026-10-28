@@ -54,7 +54,7 @@ const TEST_SUITE_SPECS = (
         "testsets/execution_strategies.jl",
     ),
     TestSuiteSpec("algorithm-graphs", "testsets/algorithm_graphs.jl"),
-    TestSuiteSpec("zemax", "test_zemax.jl"),
+    TestSuiteSpec("zemax", "test_zemax.jl", "test_zemax_gpi_records.jl", "test_zemax_components.jl"),
     TestSuiteSpec("second-order-response", "testsets/second_order_response.jl"),
     TestSuiteSpec("backend-prepared-multiplication", "testsets/backend_prepared_multiplication.jl"),
     TestSuiteSpec("dm-capture-admission", "testsets/dm_capture_admission.jl"),

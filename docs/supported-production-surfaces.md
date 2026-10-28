@@ -49,7 +49,12 @@ have a separate CPU target, `test/proper`, checked on Julia 1.13.3 with register
 Proper 0.4.0. Even propagation grids are required. The `zemax` selector checks
 bounded sequential inspection and paraxial preparation. These checks establish
 the software contracts in the [Proper integration guide](proper-integration-guide.md);
-they do not qualify instrument optical fidelity, GPU execution or deadlines.
+they do not qualify instrument optical fidelity or deadlines. Separate
+`test/cuda_proper_optical_train.jl` and `test/cuda_proper_spectrum.jl` selectors
+qualify fixed scalar and polychromatic PROPER graph capture on an RTX 3080,
+Julia 1.13.3 and CUDA 6.4.2, including changing pupil inputs, CPU/stream/replay
+agreement, conservative spectral resampling and reset. This does not qualify
+AMDGPU capture or an instrument's deadline performance.
 
 The CPU qualification environment (`test/cpu`) and CPU benchmark environment
 (`benchmarks`) pin KernelAbstractions 0.10.1 and registered AOC 0.17.1.

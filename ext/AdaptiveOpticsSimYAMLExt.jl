@@ -39,5 +39,6 @@ end
 _read_algorithm_graph(path::AbstractString) = _read_strict_yaml(path, AlgorithmGraphError)
 
 include("zemax_preparation.jl")
+include("zemax_components.jl")
 
 end
