@@ -1966,7 +1966,9 @@ struct PyramidRateNodeConfig{T<:AbstractFloat,TD,S,MS}
     binning::Int
     pupil_shift_x_pixels::NTuple{4,T}
     pupil_shift_y_pixels::NTuple{4,T}
+    input_quantity::Symbol
     opd_schema::String
+    field_schema::String
     photon_rate_schema::String
 end
 
@@ -1995,7 +1997,9 @@ function _pyramid_rate_config(
     source_photon_irradiance_m2_s::Union{Nothing,Real},
     source_separation_arcsec::Real,
     source_position_angle_deg::Real,
+    input_quantity::Symbol,
     opd_schema::AbstractString,
+    field_schema::AbstractString,
     photon_rate_schema::AbstractString,
 ) where {T<:AbstractFloat}
     pupil_resolution = Int(resolution)
@@ -2051,9 +2055,18 @@ function _pyramid_rate_config(
             "Pyramid modulation must be finite and nonnegative",
         ),
     )
-    isempty(opd_schema) && throw(AlgorithmGraphError(
-        "Pyramid opd_schema must not be empty",
-    ))
+    input_quantity in (:opd, :electric_field) || throw(AlgorithmGraphError(
+        "Pyramid input_quantity must be opd or electric_field"))
+    if input_quantity === :electric_field
+        isempty(field_schema) && throw(AlgorithmGraphError(
+            "Pyramid electric-field input requires field_schema"))
+        iszero(source_separation_arcsec) ||
+            throw(AlgorithmGraphError(
+                "Pyramid electric-field input must already contain source angular offsets; source offsets must be zero"))
+    else
+        isempty(opd_schema) && throw(AlgorithmGraphError(
+            "Pyramid opd_schema must not be empty"))
+    end
     isempty(photon_rate_schema) && throw(AlgorithmGraphError(
         "Pyramid photon_rate_schema must not be empty",
     ))
@@ -2099,7 +2112,9 @@ function _pyramid_rate_config(
         bin,
         shift_x,
         shift_y,
+        input_quantity,
         String(opd_schema),
+        String(field_schema),
         String(photon_rate_schema),
     )
 end
@@ -2108,9 +2123,17 @@ end
     pyramid_rate_node(name; ...)
 
 Declare one complete-frame diffractive Pyramid optics node. The node consumes
-a pupil-plane OPD map and writes the four re-imaged pupils as one
+a pupil-plane OPD map, or `input_quantity=:electric_field` with `field_schema`,
+and writes the four re-imaged pupils as one
 cell-integrated detector-plane photon-rate frame. Detector acquisition and
 external RTC processing remain separate graph operations.
+The electric-field input is dimensionless relative complex amplitude already on
+exactly the declared receiving `resolution × resolution` pupil grid, with AOS
+x/y axes and zero coordinate at sample `fld(resolution, 2) + 1`. It includes the
+pupil amplitude, aberration and source pointing. No aperture or source tilt is
+applied again. Source irradiance and telescope cell area scale its amplitude
+once to the internal photon-rate `ElectricField`; its wavelength is
+`source_wavelength_m`. Diffraction padding does not change the input dimensions.
 `pupil_shift_x_pixels` and `pupil_shift_y_pixels` accept a finite scalar or
 four per-face real displacements in native detector pixels, before `binning`.
 Fractional displacements change optical propagation without resampling a frame.
@@ -2121,7 +2144,9 @@ function pyramid_rate_node(
     telescope_diameter_m::Real,
     pupil_samples::Integer,
     source_wavelength_m::Real,
-    opd_schema::AbstractString,
+    opd_schema::AbstractString="",
+    field_schema::AbstractString="",
+    input_quantity::Symbol=:opd,
     photon_rate_schema::AbstractString,
     central_obstruction_ratio::Real=0,
     pupil_reflectivity::Real=1,
@@ -2169,7 +2194,9 @@ function pyramid_rate_node(
         source_photon_irradiance_m2_s,
         source_separation_arcsec,
         source_position_angle_deg,
+        input_quantity,
         opd_schema,
+        field_schema,
         photon_rate_schema,
     )
     return algorithm_node(
@@ -2204,12 +2231,12 @@ function graph_node_ports(
     output_extent = _pyramid_rate_output_extent(config)
     return (
         graph_port_contract(
-            :opd,
+            config.input_quantity,
             :input,
             :data,
-            T,
+            config.input_quantity === :opd ? T : Complex{T},
             (config.telescope.resolution, config.telescope.resolution),
-            config.opd_schema,
+            config.input_quantity === :opd ? config.opd_schema : config.field_schema,
             :column_major,
         ),
         graph_port_contract(
@@ -2224,21 +2251,57 @@ function graph_node_ports(
     )
 end
 
-struct _PyramidRateOwner{P}
+struct _PyramidRateOwner{P,I,T}
     prepared::P
+    field_input::I
+    amplitude_scale::T
+end
+
+@kernel function _pyramid_input_field_kernel!(output, input, scale)
+    i, j = @index(Global, NTuple)
+    if i <= size(output, 1) && j <= size(output, 2)
+        @inbounds output[i, j] = scale * input[i, j]
+    end
+end
+
+@inline _scale_pyramid_rate_field!(::Nothing, prepared, scale) = nothing
+@inline function _scale_pyramid_rate_field!(input, prepared, scale)
+    values = prepared.input.values
+    _scale_pyramid_rate_field!(execution_style(values), values, input, scale)
+    return nothing
+end
+
+@inline function _scale_pyramid_rate_field!(::ScalarCPUStyle, values, input, scale)
+    @. values = scale * input
+    return nothing
+end
+
+@inline function _scale_pyramid_rate_field!(style::AcceleratorStyle, values, input, scale)
+    launch_kernel!(style, _pyramid_input_field_kernel!,
+        values, input, scale; ndrange=size(values))
+    return nothing
+end
+
+@inline _enqueue_pyramid_rate_field!(::Nothing, prepared, scale) = nothing
+@inline function _enqueue_pyramid_rate_field!(input, prepared, scale)
+    values = prepared.input.values
+    launch_kernel_async!(execution_style(values), _pyramid_input_field_kernel!,
+        values, input, scale; ndrange=size(values))
+    return nothing
 end
 
 function prepare_graph_node(
     ::Type{PyramidRateNode{T}},
     config::PyramidRateNodeConfig{T},
     ::NamedTuple{()},
-    inputs::NamedTuple{(:opd,)},
+    inputs::Union{NamedTuple{(:opd,)},NamedTuple{(:electric_field,)}},
     outputs::NamedTuple{(:photon_rate,)},
     ::NamedTuple{()},
     target,
 ) where {T}
     telescope = prepare_telescope(config.telescope, target)
-    pupil = PupilFunction(telescope, inputs.opd)
+    pupil = config.input_quantity === :opd ?
+        PupilFunction(telescope, inputs.opd) : PupilFunction(telescope)
     sensor = PyramidWFS(
         telescope;
         pupil_samples=config.pupil_samples,
@@ -2256,14 +2319,24 @@ function prepare_graph_node(
         T=T,
         backend=compute_device_backend(target),
     )
+    if config.input_quantity === :electric_field
+        field = Optics.ElectricField(pupil, config.source; zero_padding=1, T=T)
+        front_end = PyramidOpticalFrontEnd(sensor, nothing)
+        photon_rate = pyramid_rate_map(front_end, field, outputs.photon_rate)
+        prepared = prepare_wfs_optics(front_end, field, photon_rate)
+        scale = sqrt(T(photon_irradiance(config.source))) *
+            T(config.telescope.diameter) / T(config.telescope.resolution)
+        return _PyramidRateOwner(prepared, inputs.electric_field, scale)
+    end
     front_end = PyramidOpticalFrontEnd(sensor, config.source)
     photon_rate = pyramid_rate_map(front_end, pupil, outputs.photon_rate)
     prepared = prepare_wfs_optics(front_end, pupil, photon_rate)
-    return _PyramidRateOwner(prepared)
+    return _PyramidRateOwner(prepared, nothing, one(T))
 end
 
 @inline function step_graph_node!(owner::_PyramidRateOwner)
     prepared = owner.prepared
+    _scale_pyramid_rate_field!(owner.field_input, prepared, owner.amplitude_scale)
     form_wfs_optical_products!(
         prepared.output,
         prepared.input,
@@ -2277,6 +2350,7 @@ end
     owner::_PyramidRateOwner,
 )
     prepared = owner.prepared
+    _enqueue_pyramid_rate_field!(owner.field_input, prepared, owner.amplitude_scale)
     enqueue_wfs_optical_products!(
         prepared.output,
         prepared.input,
@@ -2303,7 +2377,7 @@ end
 
 @inline function _pyramid_rate_capture_capability(
     ::AcceleratorComputeDevice,
-    ::Source,
+    ::Union{Source,Nothing},
     ::NoPreparedFourPupilLGS,
     ::PyramidModulationBatchWorkspace,
 )

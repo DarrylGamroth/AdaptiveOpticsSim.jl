@@ -314,7 +314,7 @@ const REVIEWED_SUPPORTED_API = (
             :graph_step_pending, :graph_step_sequence,
             :grid_gaussian_deformable_mirror_surface_node,
             :ingaas_detector_acquisition_node, :hgcdte_avalanche_detector_acquisition_node,
-            :pixel_mtf_node, :hil_boundary_status,
+            :pixel_mtf_node, :hil_boundary_status, :ideal_pupil_relay_node,
             :hil_command_buffer, :hil_frame_buffer, :link, :load_algorithm_graph,
             :modal_opd_expansion_node, :model_duration_seconds, :model_nanoseconds,
             :model_time_exhausted, :model_time_provenance, :model_time_seconds,

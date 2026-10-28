@@ -21,6 +21,7 @@ export gaussian_deformable_mirror_surface_node
 export grid_gaussian_deformable_mirror_surface_node
 export pupil_opd_composition_node
 export shack_hartmann_rate_node
+export ideal_pupil_relay_node
 export pyramid_rate_node
 export ccd_detector_acquisition_node
 export cmos_detector_acquisition_node
