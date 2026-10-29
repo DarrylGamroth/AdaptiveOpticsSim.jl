@@ -4,6 +4,7 @@ export GeometricAtmosphericPropagation, LayeredFresnelAtmosphericPropagation
 export AtmosphericFieldPropagation
 export propagate_atmosphere_field!, atmospheric_intensity!
 export KolmogorovAtmosphere, MultiLayerAtmosphere
+export SpatialAORejection
 export InfinitePhaseScreen, InfiniteMultiLayerAtmosphere
 export AtmosphereLayerID
 export AtmosphereEpoch, epoch_time, epoch_sequence, current_epoch

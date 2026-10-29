@@ -300,6 +300,7 @@ or construct the same definition directly in Julia.
 Factory functions include:
 
 - `multilayer_atmosphere_opd_node`
+- `spatial_ao_residual_node` with `Atmospheres.SpatialAORejection`
 - `deformable_mirror_surface_node`
 - `gaussian_deformable_mirror_surface_node`
 - `grid_gaussian_deformable_mirror_surface_node`

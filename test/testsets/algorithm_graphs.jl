@@ -2248,6 +2248,7 @@ end
         :modal_opd_expansion_f32,
         :second_order_response_f32,
         :multilayer_atmosphere_opd_f32,
+        :spatial_ao_residual_f32,
         :pupil_opd_composition_f32,
         :pyramid_rate_f32,
         :ideal_pupil_relay_f32,

@@ -358,7 +358,7 @@ end
 _prepare_train_capture!(owner, target) = nothing
 
 function _prepare_train_capture!(owner,
-        ::Backends.AcceleratorComputeDevice{Backends.CUDABackend})
+        ::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}})
     # All optical geometry depends only on the immutable plan. Exercise the
     # complete trajectory once while cold: this creates FFT plans, fills fixed
     # workspaces and settles the live field's alias to the FFT scratch before
@@ -376,8 +376,8 @@ function _begin_optical_train!(owner::OpticalTrainOwner)
     fill!(amplitude, 0)
     offset = fld(plan.resolution,2)-fld(plan.pupil_resolution,2)
     indices = (1:plan.pupil_resolution) .+ offset
-    copyto!(view(opd, indices, indices), owner.pupil_opd)
-    copyto!(view(amplitude, indices, indices), owner.pupil_amplitude)
+    Backends.copyto_backend_async!(view(opd, indices, indices), owner.pupil_opd)
+    Backends.copyto_backend_async!(view(amplitude, indices, indices), owner.pupil_amplitude)
     wf = workspace.wavefront
     Proper.prop_begin!(wf, plan.diameter_m,
         plan.wavelength_um*oftype(plan.wavelength_um, 1e-6);
@@ -403,7 +403,7 @@ AOG.optical_sampling_m(plan::OpticalTrainPlan) =
 
 AOG.optical_sampling_m(owner::OpticalTrainOwner) = owner.sampling_m
 _optical_train_capture_capability(::Backends.AbstractComputeDevice) = AOG.GraphNodeCaptureUnsupported()
-_optical_train_capture_capability(::Backends.AcceleratorComputeDevice{Backends.CUDABackend}) = AOG.GraphNodeCaptureSafe()
+_optical_train_capture_capability(::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}}) = AOG.GraphNodeCaptureSafe()
 AOG.graph_node_capture_capability(owner::OpticalTrainOwner) =
     _optical_train_capture_capability(Backends.compute_device(owner.output))
 

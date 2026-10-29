@@ -1375,6 +1375,47 @@ end
             vec(sum(expected_lgs_stack; dims=(1, 2))))
     end
 
+    @testset "Ideal pupil relay and Pyramid input field kernels" begin
+        for T in (Float32, Float64), permutation in ((1, 2), (2, 1))
+            input = Complex{T}[complex(10i + j, i - 2j) for i in 1:8, j in 1:10]
+            original = copy(input)
+            node = ideal_pupil_relay_node(:relay;
+                input_size=(8, 10), output_size=(5, 6), axes=permutation,
+                input_sampling_m=(0.002, 0.003),
+                output_sampling_m=permutation == (1, 2) ? (0.004, 0.006) : (0.006, 0.004),
+                wavelength_m=750e-9,
+                input_schema="test.relative-field/1", output_schema="test.pupil-field/1", T)
+            expected = permutation == (1, 2) ? input[3:7, 3:8] :
+                permutedims(input[2:7, 4:8], (2, 1))
+            scalar_output = Matrix{Complex{T}}(undef, 5, 6)
+            ka_output = similar(scalar_output)
+            AlgorithmGraphs._copy_pupil_relay!(SCALAR_CPU_STYLE,
+                scalar_output, input, node.config)
+            AlgorithmGraphs._copy_pupil_relay!(KA_CPU_STYLE,
+                ka_output, input, node.config)
+            Backends.synchronize_backend!(KA_CPU_STYLE)
+            @test scalar_output == expected
+            @test ka_output == expected
+            @test input == original
+        end
+        mark_ka_cpu_kernel!(:_pupil_relay_kernel!)
+
+        for T in (Float32, Float64), scale in (zero(T), T(0.37))
+            input = Complex{T}[complex(i - j, 2i + j) for i in 1:5, j in 1:7]
+            original = copy(input)
+            scalar_output = similar(input)
+            ka_output = similar(input)
+            AlgorithmGraphs._scale_pyramid_rate_field!(SCALAR_CPU_STYLE,
+                scalar_output, input, scale)
+            AlgorithmGraphs._scale_pyramid_rate_field!(KA_CPU_STYLE,
+                ka_output, input, scale)
+            @test scalar_output == scale .* input
+            @test ka_output == scalar_output
+            @test input == original
+        end
+        mark_ka_cpu_kernel!(:_pyramid_input_field_kernel!)
+    end
+
     @testset "KA CPU kernel inventory" begin
         # Deferred kernels are still accounted for: most require larger
         # end-to-end wfs/tomography fixtures. Accelerator-only publication,
