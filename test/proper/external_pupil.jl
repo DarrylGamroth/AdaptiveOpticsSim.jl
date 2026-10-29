@@ -51,9 +51,9 @@ end
 exposure_state(exposure) = (exposure.start_ns,exposure.covered_ns,exposure.next_ns,
     copy(exposure.integrated),copy(exposure.image),exposure.sequence,exposure.incomplete)
 
-function external_test_graph(; opd=zeros(4,4), amplitude=zeros(4,4))
-    config = (resolution=4,pupil_resolution=4,diameter_m=0.004,wavelength_um=1.55,steps=())
-    node = proper_optical_train_node_factory()(:optics,config,(;))
+function external_test_graph(; T=Float64, opd=zeros(T,4,4), amplitude=zeros(T,4,4), steps=())
+    config = (resolution=4,pupil_resolution=4,diameter_m=0.004,wavelength_um=1.55,steps)
+    node = proper_optical_train_node_factory(; T)(:optics,config,(;))
     return prepare_algorithm_graph(algorithm_graph((node,); name=:external_test,
         inputs=(graph_input(:pupil_opd,:optics=>:pupil_opd,opd),
             graph_input(:pupil_amplitude,:optics=>:pupil_amplitude,amplitude)),

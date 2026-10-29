@@ -412,6 +412,16 @@ prepared definition. The ordinary shared runtime loader consumes the prepared
 definition. Full source instrument validation belongs to the RTC tooling; AOS
 checks the preparation contract without requiring RTC as a dependency.
 
+Standalone definitions may select `defaults.precision: Float32` or `Float64`.
+Omitting it retains Float64 and the existing generated graph bytes. Preparation
+selects `proper_optical_train_f32` or `proper_optical_train_f64`; declared
+`pupil_opd` and `pupil_amplitude` bindings must explicitly use the matching
+`type`. Mismatches and variants with a different precision reject before writes.
+Other authored Proper components continue to select precision through their
+existing node type. Precision changes require matching calibration identity and
+validation of image, flux and modal-response accuracy; they do not change grid,
+masks, timing, gain or physical detector geometry.
+
 `Optics.Zemax.load_model(path)` loads the strict version-1 conversion recipe
 without loading Proper. Its exact top-level fields are `schema_version`,
 `catalog_order`, `conversion`, `branches`, and `assumptions`. `conversion` contains
@@ -490,8 +500,11 @@ integration; a complete exposure mean is the duration-weighted sum over its
 covered model interval. Missing coverage, sample loss or a newer generation
 invalidates partial exposures; duplicates and overlaps are rejected. Exposure
 origins currently share model time zero. Optical graph input buffers are
-Float64. Retained host staging validates incoming samples before uploading to
-each device graph. Propagation, Float64 exposure accumulation and optional
+uniformly Float32 or Float64 across every optical branch and chopping variant.
+Mixed pupil precisions reject during preparation. Retained host staging uses the
+selected type and rejects nonfinite conversions before changing exposure or
+sequence state. Blocked OPD remains sanitized to zero. Propagation, Float64
+exposure accumulation (including duration weighting) and optional
 detector response use the selected device; emitted images are borrowed arrays
 on that device. Graph stepping and completed exposure publication synchronize
 before a consumer can use another stream or copy to the host. No physical
