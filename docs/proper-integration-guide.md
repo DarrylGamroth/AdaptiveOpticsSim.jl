@@ -290,6 +290,8 @@ The AMDGPU selector `test/amdgpu_proper_capture.jl` compares CPU, streamed
 AMDGPU and captured HIP replay in Float32/Float64, including changing pupil
 inputs, sampled masks, signed propagation, unequal spectral sampling,
 attenuation, clipped support, reset and retained FFT storage and plans.
+These AMDGPU checks use Julia 1.13.3, Proper 0.4.1 and AMDGPU 2.9.2 on a
+Radeon 680M, with `HSA_OVERRIDE_GFX_VERSION=10.3.0`.
 Entrance OPD and amplitude copies use the asynchronous backend kernel path,
 including when the pupil fills the optical array: AMDGPU's contiguous device
 `copyto!` uses a memory-copy operation that HIP stream capture rejects.
