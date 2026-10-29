@@ -423,7 +423,8 @@ prepared definition. The ordinary shared runtime loader consumes the prepared
 definition. Full source instrument validation belongs to the RTC tooling; AOS
 checks the preparation contract without requiring RTC as a dependency.
 
-Standalone definitions may select `defaults.precision: Float32` or `Float64`.
+From AOS 0.3.16, standalone definitions may select
+`defaults.precision: Float32` or `Float64`.
 Omitting it retains Float64 and the existing generated graph bytes. Preparation
 selects `proper_optical_train_f32` or `proper_optical_train_f64`; declared
 `pupil_opd` and `pupil_amplitude` bindings must explicitly use the matching
