@@ -53,8 +53,12 @@ they do not qualify instrument optical fidelity or deadlines. Separate
 `test/cuda_proper_optical_train.jl` and `test/cuda_proper_spectrum.jl` selectors
 qualify fixed scalar and polychromatic PROPER graph capture on an RTX 3080,
 Julia 1.13.3 and CUDA 6.4.2, including changing pupil inputs, CPU/stream/replay
-agreement, conservative spectral resampling and reset. This does not qualify
-AMDGPU capture or an instrument's deadline performance.
+agreement, conservative spectral resampling and reset. The separate
+`test/amdgpu_proper_capture.jl` selector qualifies scalar and polychromatic HIP
+capture with registered Proper 0.4.1 and AMDGPU 2.9.2 in both precisions,
+including changing inputs, fixed output sampling, retained plans and reset.
+Runtime OPD steps and explicit entrance grids remain host/CUDA only.
+These checks do not qualify an instrument's deadline performance.
 
 Scalar Proper trains also support planar-reference complex-field output. The
 matched-grid ideal pupil relay and field-input Pyramid preserve that amplitude

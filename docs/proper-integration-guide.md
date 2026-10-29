@@ -279,12 +279,21 @@ checks do not qualify acquisition deadlines or physical devices.
 
 Scalar trains, including runtime OPD steps and explicit entrance grids, and
 polychromatic trains admit CUDA `CapturedGraphExecution` through
-the normal AOS graph executor. Shape, buffer identities, wavelength samples,
+the normal AOS graph executor. Scalar trains without runtime OPD steps or
+explicit entrance grids, and polychromatic trains, also admit AMDGPU HIP capture.
+Shape, buffer identities, wavelength samples,
 propagation steps, masks and resampling geometry remain fixed until rebuilding;
 device OPD and amplitude contents may change each frame. Cold preparation retains
 FFT plans, stable field storage and separate complex-mask shift scratch. The
 outer AOS graph captures the complete pipeline; no nested Proper capture is used.
-AMDGPU capture is not qualified by this change.
+The AMDGPU selector `test/amdgpu_proper_capture.jl` compares CPU, streamed
+AMDGPU and captured HIP replay in Float32/Float64, including changing pupil
+inputs, sampled masks, signed propagation, unequal spectral sampling,
+attenuation, clipped support, reset and retained FFT storage and plans.
+Entrance OPD and amplitude copies use the asynchronous backend kernel path,
+including when the pupil fills the optical array: AMDGPU's contiguous device
+`copyto!` uses a memory-copy operation that HIP stream capture rejects.
+Runtime OPD steps and explicit entrance grids remain host/CUDA only.
 
 The hardware selectors `test/cuda_proper_optical_train.jl` and
 `test/cuda_proper_spectrum.jl` compare CPU, streamed CUDA and captured replay on
