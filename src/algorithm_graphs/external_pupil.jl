@@ -157,7 +157,7 @@ function _integrate_intensity!(emit,exposure,intensity,timestamp,duration)
         boundary=Base.checked_add(exposure.start_ns,exposure.duration_ns)
         overlap=min(finish,boundary)-cursor
         overlap>0 || throw(AlgorithmGraphError("nonmonotonic exposure input"))
-        exposure.integrated .+= intensity .* overlap
+        exposure.integrated .+= Float64.(intensity) .* overlap
         exposure.covered_ns+=overlap;cursor+=overlap
         exposure.next_ns=cursor
         if cursor==boundary
@@ -311,7 +311,8 @@ Bind a nonempty named tuple of prepared AOS graphs to independent intensity
 exposures. `exposure_durations` contains `ModelDuration` values. Each observation
 is `(output=:intensity,sampling_node=:optics)`, with caller-selected identifiers.
 All optical and response graphs must use the same compute device. Pupil ports
-must be equally shaped Float64 matrices. Validated external host samples are
+must be equally shaped Float32 or Float64 matrices, with one common precision
+across every optical branch and chopping variant. Validated external host samples are
 staged into each graph; propagation, integration and detector response remain
 on its compute device. Emitted images are borrowed arrays on that device.
 No detector sampling,
@@ -371,8 +372,9 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
     opd=graph_input(first(values(graphs)),input_names.opd)
     amplitude=graph_input(first(values(graphs)),input_names.amplitude)
     target=compute_device(first(values(graphs)))
-    opd isa AbstractMatrix{Float64} && amplitude isa AbstractMatrix{Float64} && size(opd)==size(amplitude) ||
-        throw(AlgorithmGraphError("external pupil requires equally shaped Float64 OPD and amplitude matrices"))
+    T = eltype(opd)
+    T in (Float32,Float64) && opd isa AbstractMatrix{T} && amplitude isa AbstractMatrix{T} && size(opd)==size(amplitude) ||
+        throw(AlgorithmGraphError("external pupil requires equally shaped Float32 or Float64 OPD and amplitude matrices with matching precision"))
     for opd_graph in all_graphs,amplitude_graph in all_graphs
         Base.mightalias(graph_input(opd_graph,input_names.opd),graph_input(amplitude_graph,input_names.amplitude)) &&
             throw(AlgorithmGraphError("external pupil OPD and amplitude buffers must not alias"))
@@ -393,7 +395,7 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
         compute_device(graph)==target || throw(AlgorithmGraphError("external pupil graphs must use the same compute device"))
         for input in values(input_names)
             input_buffer=graph_input(graph,input)
-            input_buffer isa AbstractMatrix{Float64} && size(input_buffer)==size(opd) || throw(AlgorithmGraphError("external pupil graph inputs differ"))
+            input_buffer isa AbstractMatrix{T} && size(input_buffer)==size(opd) || throw(AlgorithmGraphError("external pupil graph inputs differ in shape or precision"))
         end
         intensity=graph_output(graph,getproperty(observations,name).output)
         ndims(intensity)==2 || throw(AlgorithmGraphError("intensity observation must be a matrix"))
@@ -432,7 +434,7 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
     # PipeWire packets are host-owned. Keep validation and sanitation outside
     # accelerator scalar indexing, with one retained staging pair per owner.
     if target!=HostComputeDevice()
-        opd=zeros(Float64,size(opd));amplitude=zeros(Float64,size(amplitude))
+        opd=zeros(T,size(opd));amplitude=zeros(T,size(amplitude))
     end
     return PreparedExternalPupil(graphs,exposures,opd,amplitude,observations,input_names,
         _ExternalPupilState(-1,0,0,nothing,0,0,0))
@@ -475,7 +477,9 @@ end
         domain, generation, sequence, lost_samples=0)
 
 Validate/copy a coherent external host pupil, propagate every ordinary AOS graph,
-then integrate intensity. The sample is piecewise constant over its declared
+then integrate intensity. Validate that host values convert to finite values at
+the prepared pupil precision before changing exposure or sequence state; blocked
+OPD is sanitized to zero. The sample is piecewise constant over its declared
 model interval and cannot exceed the shortest exposure. Sequence/time/loss gaps
 or a newer generation invalidate partial exposures. Duplicate/overlapping and
 older-generation samples are rejected with `false`. Different domains require
@@ -503,11 +507,12 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
             (generation==state.generation && (sequence<=state.sequence || start<state.last_end_ns)))
         state.rejected+=1;return false
     end
+    T = eltype(prepared.pupil_opd)
     all(eachindex(opd,amplitude)) do index
         a=amplitude[index]
-        a isa Real && opd[index] isa Real && isfinite(a) && isfinite(Float64(a)) && a>=0 &&
-            (a==0 || (isfinite(opd[index]) && isfinite(Float64(opd[index]))))
-    end || throw(AlgorithmGraphError("invalid pupil amplitude or transmitting OPD"))
+        a isa Real && opd[index] isa Real && isfinite(a) && isfinite(T(a)) && a>=0 &&
+            (a==0 || (isfinite(opd[index]) && isfinite(T(opd[index]))))
+    end || throw(AlgorithmGraphError("pupil amplitude or transmitting OPD is invalid at the selected optical precision"))
     changed=generation!=state.generation
     if changed || start!=state.last_end_ns || sequence!=state.sequence+1 || lost_samples!=state.lost_samples
         state.discontinuities+=1

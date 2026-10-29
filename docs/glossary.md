@@ -17,6 +17,11 @@ use `[x,y]`; publication transposes the spatial axes. A grey pupil supplies the
 same OPD and amplitude to every wavelength. Provisional registration describes
 an assumed normalized pupil correspondence, not a measured relay transform.
 
+An **optical precision** selects `Float32` or `Float64` arithmetic and pupil,
+field and intensity array elements for an optical train. It does not change physical sampling,
+wavelength, model time or transport precision. Exposure accumulation can use
+Float64 independently of the selected optical precision.
+
 - Do not combine a plane location and an assumed physical quantity in one type
   name. Use, for example, an `IntensityMap` whose metadata says `FocalPlane()`.
 - State coordinate domain and units explicitly. Do not infer metres or radians

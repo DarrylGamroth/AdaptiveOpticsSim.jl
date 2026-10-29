@@ -361,6 +361,15 @@ function ideal_lyot_mask(masks, mode)
         circles=CircleDocument[CircleDocument(circle) for circle in circles])
 end
 
+# Keep numerical precision separate from the physical conversion coefficients.
+# Omission preserves the original Float64 graph and its generated identity.
+function optical_precision(settings)
+    selected = get(settings, "precision", "Float64")
+    selected isa String && selected in ("Float32", "Float64") ||
+        throw(ArgumentError("optical precision must be Float32 or Float64"))
+    return selected == "Float32" ? Float32 : Float64
+end
+
 """
     train(branch, name, selection, model, settings, masks, glasses, diameter; lyot_mode, instrument_id="")
 
@@ -371,6 +380,8 @@ The authored conversion rules select idealized input-lens and OAP surfaces and
 masks. `selection = model["branches"][name]` supplies the configuration, detector
 and Lyot surface; `lyot_mode` explicitly selects `transmit` or `reflect`.
 `prepare` maps the physical Lyot stop port and validates the complete selection.
+`settings["precision"]` selects `Float32` or `Float64` graph arithmetic; omission
+preserves Float64. Physical conversion coefficients and diagnostics use Float64.
 Its `mask_steps` keyword supplies sampled-mask steps and their ordinary cold
 construction bindings when physical FITS maps replace the ideal masks.
 Other surfaces must be STANDARD, COORDBRK, or zero-curvature TILTSURF;
@@ -382,6 +393,7 @@ by this centered conversion.
 function train(branch, name, selection, model, settings, masks, glasses, diameter;
         lyot_mode, instrument_id="", mask_steps=Dict{String,StepDocument}())
     lyot_mode in ("transmit", "reflect") || throw(ArgumentError("invalid lyot_mode"))
+    T = optical_precision(settings)
     rule = model["conversion"]
     surfaces = filter(s -> rule["first_surface"] <= s["id"] <= selection["detector_surface"], branch["active_surfaces"])
     isempty(surfaces) && error("Empty selected train")
@@ -447,7 +459,8 @@ function train(branch, name, selection, model, settings, masks, glasses, diamete
     end
     config = TrainConfiguration("resolution" => settings["resolution"], "pupil_resolution" => settings["pupil_resolution"],
         "wavelength_um" => settings["wavelength_um"], "diameter_m" => diameter, "steps" => steps)
-    node = TrainNode("type" => "proper_optical_train_f64", "name" => "optics", "config" => config)
+    node = TrainNode("type" => T === Float32 ? "proper_optical_train_f32" : "proper_optical_train_f64",
+        "name" => "optics", "config" => config)
     if !isempty(mask_steps)
         bindings = PortDocument()
         for mask in values(mask_steps), field in ("amplitude","phase")

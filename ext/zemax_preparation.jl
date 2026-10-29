@@ -296,6 +296,18 @@ function preparation_source(root)
     return (; definition_path, instrument_path, definition, instrument, recipe_path)
 end
 
+function validate_pupil_precision(definition)
+    T = Zemax.optical_precision(definition["defaults"])
+    bindings = get(definition, "bindings", Dict())
+    for name in ("pupil_opd", "pupil_amplitude")
+        haskey(bindings, name) || continue
+        binding = bindings[name]
+        binding isa AbstractDict && get(binding, "type", nothing) == string(T) ||
+            throw(ArgumentError("$name binding type must match optical precision $T"))
+    end
+    return nothing
+end
+
 # Variants belong to simulation authoring, not the physical conversion recipe.
 # Retain the selected physical branch for filter and sampled-mask routing.
 function preparation_variants(definition, model)
@@ -315,6 +327,8 @@ function preparation_variants(definition, model)
         branch = model_string(selection["branch"], "variant branch")
         haskey(model["branches"], branch) || throw(ArgumentError("variant names an unknown physical branch: $branch"))
         settings = selected_settings(definition["defaults"], selection["settings"])
+        Zemax.optical_precision(settings) === Zemax.optical_precision(definition["defaults"]) ||
+            throw(ArgumentError("optical variants must match the base pupil precision"))
         (; name, branch, settings)
     end
 end
@@ -325,6 +339,7 @@ function preparation_inputs(root; catalog_dir=nothing, frozen=false, settings=Di
     recipe_path === nothing && return component_preparation_inputs(root,
         definition_path, instrument_path, definition, instrument; catalog_dir, frozen)
     definition["defaults"] = selected_settings(definition["defaults"], settings)
+    validate_pupil_precision(definition)
     model = Zemax.load_model(recipe_path)
     variants = preparation_variants(definition, model)
     physical = physical_inputs(root, instrument)
