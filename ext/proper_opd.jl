@@ -127,7 +127,7 @@ function _interpolation_device_array(source, target)
 end
 
 function _prepare_grid_interpolation(plan::BilinearInterpolationPlan,
-        target::Backends.AcceleratorComputeDevice{Backends.CUDABackend})
+        target::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}})
     return BilinearInterpolationPlan(_interpolation_device_array(plan.row_indices, target),
         _interpolation_device_array(plan.column_indices, target),
         _interpolation_device_array(plan.row_weights, target),
@@ -142,9 +142,9 @@ struct RuntimeOPDTrainOwner{O,P,I,G}
 end
 
 _require_sampled_train_target(::Backends.HostComputeDevice) = nothing
-_require_sampled_train_target(::Backends.AcceleratorComputeDevice{Backends.CUDABackend}) = nothing
+_require_sampled_train_target(::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}}) = nothing
 _require_sampled_train_target(target) =
-    throw(AOG.AlgorithmGraphError("runtime OPD steps and pupil_grid currently support host and CUDA compute devices only"))
+    throw(AOG.AlgorithmGraphError("runtime OPD steps and pupil_grid support host, CUDA and AMDGPU compute devices only"))
 
 function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs, target) where {T}
     _require_sampled_train_target(target)

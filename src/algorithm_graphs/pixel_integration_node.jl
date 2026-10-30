@@ -54,8 +54,10 @@ schemas must state the caller's quantity and coordinates. This operation adds
 no exposure, optical magnification, detector response or noise.
 
 Preparation builds compact separable overlap maps using Float64 geometry and
-binds distinct one-based CPU buffers. Execution accepts finite nonnegative
-Float32 or Float64 flux, uses preallocated storage, and rejects accelerators.
+binds distinct one-based buffers on the selected CPU, CUDA or AMDGPU device.
+Execution accepts finite nonnegative Float32 or Float64 flux and uses prepared
+storage. Captured accelerator execution checks the full input before publishing
+a completed graph step; invalid values require a graph reset before reuse.
 `optical_sampling_m` reports the output pitch only for square output pixels.
 """
 function pixel_integration_node(name::Symbol; input_shape, output_shape,
@@ -107,10 +109,10 @@ function graph_node_ports(::Type{PixelIntegrationNode{T}}, config::PixelIntegrat
             config.output_schema, :column_major))
 end
 
-struct _PixelIntegrationAxis{T}
-    offsets::FixedSizeVectorDefault{Int}
-    indices::FixedSizeVectorDefault{Int}
-    weights::FixedSizeVectorDefault{T}
+struct _PixelIntegrationAxis{Offsets,Indices,Weights}
+    offsets::Offsets
+    indices::Indices
+    weights::Weights
 end
 
 function _pixel_integration_axis(::Type{T}, config, axis) where {T}
@@ -145,22 +147,51 @@ function _pixel_integration_axis(::Type{T}, config, axis) where {T}
         FixedSizeVectorDefault{Int}(indices), FixedSizeVectorDefault{T}(weights))
 end
 
-struct _PixelIntegrationPlan{T}
+struct _PixelIntegrationPlan{R,C}
     config::PixelIntegrationNodeConfig
-    rows::_PixelIntegrationAxis{T}
-    columns::_PixelIntegrationAxis{T}
+    rows::R
+    columns::C
 end
 
-struct _PixelIntegrationOwner{P,I,O}
+struct _PixelIntegrationValidation{D,H}
+    device::D
+    host::H
+end
+
+struct _PixelIntegrationOwner{P,I,O,V}
     plan::P
     input::I
     output::O
+    validation::V
+end
+
+_pixel_integration_axis(target::HostComputeDevice, axis::_PixelIntegrationAxis) = axis
+function _pixel_integration_axis(target::AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}},
+        axis::_PixelIntegrationAxis)
+    arrays = map((axis.offsets, axis.indices, axis.weights)) do values
+        result = allocate_device_array(target, eltype(values), length(values))
+        copyto!(result, collect(values))
+        result
+    end
+    return _PixelIntegrationAxis(arrays...)
+end
+_pixel_integration_axis(target, axis::_PixelIntegrationAxis) =
+    throw(AlgorithmGraphError("pixel integration requires CPU, CUDA or AMDGPU execution"))
+
+_pixel_integration_validation(::HostComputeDevice) = nothing
+function _pixel_integration_validation(target::AcceleratorComputeDevice)
+    device = allocate_device_array(target, UInt32, 1)
+    fill!(device, UInt32(0))
+    # A fixed owner with Vector backing permits the backend's ordinary bulk
+    # device-to-host copy without a new allocation or a scalar device read.
+    host = FixedSizeVector{UInt32,Vector{UInt32}}(undef, 1)
+    fill!(host, UInt32(0))
+    return _PixelIntegrationValidation(device, host)
 end
 
 function prepare_graph_node(::Type{PixelIntegrationNode{T}}, config::PixelIntegrationNodeConfig,
         ::NamedTuple{()}, inputs::NamedTuple{(:input,)}, outputs::NamedTuple{(:output,)},
         ::NamedTuple{()}, target) where {T}
-    target == HostComputeDevice() || throw(AlgorithmGraphError("pixel integration supports CPU execution only"))
     for (array, shape) in ((inputs.input, config.input_shape), (outputs.output, config.output_shape))
         size(array) == shape && eltype(array) === T && !Base.has_offset_axes(array) &&
             compute_device(array) == target ||
@@ -168,12 +199,14 @@ function prepare_graph_node(::Type{PixelIntegrationNode{T}}, config::PixelIntegr
     end
     Base.mightalias(inputs.input, outputs.output) &&
         throw(AlgorithmGraphError("pixel integration requires distinct input and output storage"))
-    plan = _PixelIntegrationPlan(config, _pixel_integration_axis(T, config, 1),
-        _pixel_integration_axis(T, config, 2))
-    return _PixelIntegrationOwner(plan, inputs.input, outputs.output)
+    plan = _PixelIntegrationPlan(config,
+        _pixel_integration_axis(target, _pixel_integration_axis(T, config, 1)),
+        _pixel_integration_axis(target, _pixel_integration_axis(T, config, 2)))
+    return _PixelIntegrationOwner(plan, inputs.input, outputs.output,
+        _pixel_integration_validation(target))
 end
 
-function step_graph_node!(owner::_PixelIntegrationOwner)
+function _integrate_pixels!(::ScalarCPUStyle, owner::_PixelIntegrationOwner)
     input, output = owner.input, owner.output
     all(x -> isfinite(x) && x >= 0, input) || throw(AlgorithmGraphError(
         "pixel integration requires finite nonnegative cell-integrated flux"))
@@ -189,10 +222,76 @@ function step_graph_node!(owner::_PixelIntegrationOwner)
     return nothing
 end
 
-graph_node_capture_capability(::_PixelIntegrationOwner) = GraphNodeCaptureUnsupported()
+@kernel function _validate_pixel_integration_kernel!(failure, input)
+    index = @index(Global, Linear)
+    if index <= length(input)
+        value = input[index]
+        if !isfinite(value) || value < 0
+            KernelAbstractions.@atomic failure[1] = UInt32(1)
+        end
+    end
+end
+
+@kernel function _pixel_integration_kernel!(output, input, row_offsets, row_indices,
+        row_weights, column_offsets, column_indices, column_weights)
+    row, column = @index(Global, NTuple)
+    if row <= size(output,1) && column <= size(output,2)
+        flux = zero(eltype(output))
+        for x in column_offsets[column]:(column_offsets[column+1]-1),
+                y in row_offsets[row]:(row_offsets[row+1]-1)
+            flux += input[row_indices[y],column_indices[x]] * row_weights[y] * column_weights[x]
+        end
+        output[row,column] = flux
+    end
+end
+
+function _enqueue_pixel_integration!(style::AcceleratorStyle, owner)
+    fill!(owner.validation.device, UInt32(0))
+    launch_kernel_async!(style, _validate_pixel_integration_kernel!,
+        owner.validation.device, owner.input; ndrange=length(owner.input))
+    rows, columns = owner.plan.rows, owner.plan.columns
+    launch_kernel_async!(style, _pixel_integration_kernel!, owner.output, owner.input,
+        rows.offsets, rows.indices, rows.weights,
+        columns.offsets, columns.indices, columns.weights; ndrange=size(owner.output))
+    return nothing
+end
+
+function _check_pixel_integration!(validation::_PixelIntegrationValidation)
+    copyto!(parent(validation.host), validation.device)
+    iszero(only(validation.host)) || throw(AlgorithmGraphError(
+        "pixel integration requires finite nonnegative cell-integrated flux"))
+    return nothing
+end
+_check_pixel_integration!(::Nothing) = nothing
+
+function _integrate_pixels!(style::AcceleratorStyle, owner::_PixelIntegrationOwner)
+    _enqueue_pixel_integration!(style, owner)
+    _check_pixel_integration!(owner.validation)
+    return nothing
+end
+
+step_graph_node!(owner::_PixelIntegrationOwner) =
+    _integrate_pixels!(execution_style(owner.output), owner)
+enqueue_captured_graph_node!(owner::_PixelIntegrationOwner) =
+    _enqueue_pixel_integration!(execution_style(owner.output), owner)
+_complete_captured_graph_node!(owner::_PixelIntegrationOwner) =
+    _check_pixel_integration!(owner.validation)
+
+_pixel_integration_capture_capability(::AbstractComputeDevice) = GraphNodeCaptureUnsupported()
+_pixel_integration_capture_capability(
+    ::AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}}) = GraphNodeCaptureSafe()
+graph_node_capture_capability(owner::_PixelIntegrationOwner) =
+    _pixel_integration_capture_capability(compute_device(owner.output))
 
 function reset_graph_node!(owner::_PixelIntegrationOwner)
     fill!(owner.output, zero(eltype(owner.output)))
+    _reset_pixel_integration_validation!(owner.validation)
+    return nothing
+end
+_reset_pixel_integration_validation!(::Nothing) = nothing
+function _reset_pixel_integration_validation!(validation::_PixelIntegrationValidation)
+    fill!(validation.device, UInt32(0))
+    fill!(validation.host, UInt32(0))
     return nothing
 end
 
