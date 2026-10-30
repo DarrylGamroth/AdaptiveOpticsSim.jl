@@ -1,5 +1,6 @@
 # Generic artifact adapter for the lowered multi-path Fresnel executor. Its live
 # input grids are independent of propagation and fitted-screen sample counts.
+using FixedSizeArrays: FixedSizeVector
 struct CompiledPathsNode{T} end
 struct CompiledPathsConfiguration{D,P,R,T}
     path::String
@@ -46,9 +47,14 @@ function AOG.graph_node_ports(::Type{CompiledPathsNode{T}},c::CompiledPathsConfi
         AOG.graph_port_contract(:pupil_opd,:input,:data,T,c.pupil_grid.size,c.schemas[2],:column_major),
         AOG.graph_port_contract(:pupil_amplitude,:input,:data,T,c.pupil_grid.size,c.schemas[3],:column_major),outputs...)
 end
-struct CompiledPathsInputWorkspace{A}
+struct CompiledPathsInputValidation{D,H}
+    device::D
+    host::H
+end
+struct CompiledPathsInputWorkspace{A,V}
     amplitude::A
     reference::A
+    validation::V
 end
 struct CompiledPathsOwner{P,I,O,M,W,R,T}
     propagation::P
@@ -78,67 +84,114 @@ end
 function AOG.prepare_graph_node(::Type{CompiledPathsNode{T}},c::CompiledPathsConfiguration,
         ::NamedTuple{()},inputs::NamedTuple,outputs::NamedTuple,::NamedTuple{()},target) where {T}
     _require_compiled_input_target(target)
+    for (array,shape,role) in ((inputs.dm_opd,c.dm_grid.size,"DM OPD"),
+            (inputs.pupil_opd,c.pupil_grid.size,"entrance OPD"),
+            (inputs.pupil_amplitude,c.pupil_grid.size,"entrance amplitude"),
+            ((getproperty(outputs,name),(c.output_size,c.output_size),String(name))
+                for name in (:fringed,:unfringed,:reference))...)
+        Base.has_offset_axes(array) && throw(AOG.AlgorithmGraphError("compiled optical $role requires one-based storage"))
+        _validate_compiled_paths_buffer(target,array,T,shape,"compiled optical $role")
+    end
     metadata,read_array=AOG._read_compiled_optical_model(c.path,c.sha256)
     live=metadata["live"]
     ndm=Int(live["dm_size"])
     nentrance=Int(live["entrance_size"])
-    dm=zeros(T,ndm,ndm)
-    entrance=zeros(T,nentrance,nentrance)
-    attenuation=similar(entrance);fill!(attenuation,0)
+    dm=_compiled_paths_array(target,T,ndm,ndm)
+    entrance=_compiled_paths_array(target,T,nentrance,nentrance)
+    attenuation=_compiled_paths_array(target,T,nentrance,nentrance)
     propagation=_prepare_compiled_paths(metadata,read_array,nothing;T,target,dm_opd=dm,
         entrance_opd=entrance,entrance_attenuation=attenuation,summation=c.summation)
-    dm_mapping=_bilinear_interpolation_plan(c.dm_grid,ndm,T(live["dm_pitch"]),zero(T))
-    pupil_mapping=c.mode===:sky ? _bilinear_interpolation_plan(c.pupil_grid,nentrance,T(live["entrance_pitch"]),zero(T)) : nothing
-    native_reference=similar(entrance)
-    native_amplitude=similar(entrance)
-    if c.mode===:sky && c.reference!==nothing
-        _interpolate_grid!(native_reference,c.reference,pupil_mapping)
+    dm_mapping=_prepare_grid_interpolation(
+        _bilinear_interpolation_plan(c.dm_grid,ndm,T(live["dm_pitch"]),zero(T)),target)
+    pupil_mapping=c.mode===:sky ? _prepare_grid_interpolation(
+        _bilinear_interpolation_plan(c.pupil_grid,nentrance,T(live["entrance_pitch"]),zero(T)),target) : nothing
+    reference=_compiled_paths_input_reference(c.reference,target,T)
+    native_reference=_compiled_paths_array(target,T,nentrance,nentrance)
+    native_amplitude=_compiled_paths_array(target,T,nentrance,nentrance)
+    if c.mode===:sky && reference!==nothing
+        _interpolate_grid!(native_reference,reference,pupil_mapping)
     else
         fill!(native_reference,1)
     end
     owner=CompiledPathsOwner(propagation,inputs,outputs,(dm=dm_mapping,pupil=pupil_mapping),
-        CompiledPathsInputWorkspace(native_amplitude,native_reference),c.reference,c.sampling_m)
+        CompiledPathsInputWorkspace(native_amplitude,native_reference,
+            _compiled_paths_input_validation(target)),reference,c.sampling_m)
     return owner
 end
-function AOG.step_graph_node!(owner::CompiledPathsOwner)
+_compiled_paths_input_reference(::Nothing,target,T)=nothing
+_compiled_paths_input_reference(reference,target,T)=
+    _compiled_paths_resident(target,Matrix(reference),T)
+
+_compiled_paths_input_validation(::Backends.HostComputeDevice)=nothing
+function _compiled_paths_input_validation(target)
+    device=_compiled_paths_array(target,UInt32,6)
+    # Vector backing supports the backend's ordinary bulk device-to-host copy.
+    host=FixedSizeVector{UInt32,Vector{UInt32}}(undef,6)
+    fill!(host,UInt32(0))
+    return CompiledPathsInputValidation(device,host)
+end
+
+function _enqueue_compiled_paths_node!(owner)
     p=owner.propagation
-    _compiled_paths_validate_inputs!(owner,owner.reference)
     _interpolate_grid!(p.inputs.dm_opd,owner.inputs.dm_opd,owner.mapping.dm)
     _compiled_paths_entrance!(owner,owner.mapping.pupil)
     products=_enqueue_compiled_paths!(p)
     for name in (:fringed,:unfringed,:reference)
-        copyto!(getproperty(owner.outputs,name),getproperty(products,name))
+        Backends.copyto_backend_async!(getproperty(owner.outputs,name),getproperty(products,name))
     end
     return nothing
 end
+function _step_compiled_paths_node!(::Backends.ScalarCPUStyle,owner)
+    _compiled_paths_validate_inputs!(owner,owner.reference)
+    return _enqueue_compiled_paths_node!(owner)
+end
+function _step_compiled_paths_node!(style::Backends.AcceleratorStyle,owner)
+    _enqueue_compiled_paths_inputs!(style,owner)
+    _enqueue_compiled_paths_node!(owner)
+    _check_compiled_paths_inputs!(owner.workspace.validation)
+    return nothing
+end
+AOG.step_graph_node!(owner::CompiledPathsOwner)=
+    _step_compiled_paths_node!(Backends.execution_style(owner.inputs.dm_opd),owner)
+function AOG.enqueue_captured_graph_node!(owner::CompiledPathsOwner)
+    _enqueue_compiled_paths_inputs!(Backends.execution_style(owner.inputs.dm_opd),owner)
+    return _enqueue_compiled_paths_node!(owner)
+end
+AOG._complete_captured_graph_node!(owner::CompiledPathsOwner)=
+    _check_compiled_paths_inputs!(owner.workspace.validation)
 _compiled_paths_entrance!(owner,::Nothing)=nothing
 function _compiled_paths_entrance!(owner,mapping::BilinearInterpolationPlan)
     inputs,p=owner.inputs,owner.propagation
-    all(isfinite,inputs.pupil_opd) || throw(ArgumentError("entrance OPD must be finite"))
     _interpolate_grid!(p.inputs.entrance_opd,inputs.pupil_opd,mapping)
     _compiled_paths_amplitude!(owner,owner.reference,mapping)
     return nothing
 end
 function _compiled_paths_amplitude!(owner,::Nothing,mapping)
     a=owner.inputs.pupil_amplitude
-    all(isfinite,a) || throw(ArgumentError("entrance log attenuation must be finite"))
     _interpolate_grid!(owner.propagation.inputs.entrance_attenuation,a,mapping)
     return nothing
 end
 function _compiled_paths_amplitude!(owner,reference::AbstractMatrix,mapping)
     a=owner.inputs.pupil_amplitude
     _interpolate_grid!(owner.workspace.amplitude,a,mapping)
-    _compiled_paths_ratio!(owner.propagation.inputs.entrance_attenuation,owner.workspace.amplitude,owner.workspace.reference)
+    _compiled_paths_ratio!(Backends.execution_style(owner.workspace.amplitude),
+        owner.propagation.inputs.entrance_attenuation,owner.workspace.amplitude,
+        owner.workspace.reference,owner.workspace.validation)
     return nothing
 end
 function AOG.reset_graph_node!(owner::CompiledPathsOwner)
     for name in (:fringed,:unfringed,:reference)
         fill!(getproperty(owner.outputs,name),0)
     end
+    _reset_compiled_paths_validation!(owner.workspace.validation)
     return nothing
 end
 AOG.optical_sampling_m(owner::CompiledPathsOwner)=owner.sampling_m
-AOG.graph_node_capture_capability(owner::CompiledPathsOwner)=AOG.GraphNodeCaptureUnsupported()
+_compiled_paths_capture_capability(target)=AOG.GraphNodeCaptureUnsupported()
+_compiled_paths_capture_capability(::Backends.AcceleratorComputeDevice{<:Backends.AMDGPUBackend})=
+    AOG.GraphNodeCaptureSafe()
+AOG.graph_node_capture_capability(owner::CompiledPathsOwner)=
+    _compiled_paths_capture_capability(Backends.compute_device(owner.inputs.dm_opd))
 
 function _compiled_paths_validate_inputs!(owner,reference)
     all(isfinite,owner.inputs.dm_opd) || throw(ArgumentError("DM OPD must be finite"))
@@ -164,4 +217,95 @@ function _compiled_paths_validate_amplitude!(amplitude,reference::AbstractMatrix
 end
 
 _require_compiled_input_target(::Backends.HostComputeDevice)=nothing
-_require_compiled_input_target(target)=throw(AOG.AlgorithmGraphError("compiled optical input-grid adapter currently supports CPU execution"))
+_require_compiled_input_target(::Backends.AcceleratorComputeDevice{<:Backends.AMDGPUBackend})=nothing
+_require_compiled_input_target(target)=throw(AOG.AlgorithmGraphError("compiled optical input-grid adapter requires CPU or AMDGPU execution"))
+
+KernelAbstractions.@kernel function _compiled_paths_validate_finite_kernel!(failure,input,slot)
+    index=KernelAbstractions.@index(Global,Linear)
+    if index <= length(input) && !isfinite(input[index])
+        KernelAbstractions.@atomic failure[slot]=UInt32(1)
+    end
+end
+@inline _compiled_paths_amplitude_failure(amplitude,::Nothing,index)=
+    isfinite(amplitude) ? 0 : 3
+@inline function _compiled_paths_amplitude_failure(amplitude,reference,index)
+    isfinite(amplitude) && amplitude >= 0 || return 3
+    r=reference[index]
+    iszero(r) && !iszero(amplitude) && return 4
+    !iszero(r) && iszero(amplitude) && return 5
+    return 0
+end
+KernelAbstractions.@kernel function _compiled_paths_validate_amplitude_kernel!(failure,amplitude,reference)
+    index=KernelAbstractions.@index(Global,Linear)
+    if index <= length(amplitude)
+        slot=_compiled_paths_amplitude_failure(amplitude[index],reference,index)
+        if !iszero(slot)
+            KernelAbstractions.@atomic failure[slot]=UInt32(1)
+        end
+    end
+end
+function _enqueue_compiled_paths_inputs!(style,owner)
+    failure=owner.workspace.validation.device
+    fill!(failure,UInt32(0))
+    for (input,slot) in ((owner.inputs.dm_opd,1),(owner.inputs.pupil_opd,2))
+        Backends.launch_kernel_async!(style,_compiled_paths_validate_finite_kernel!,
+            failure,input,slot;ndrange=length(input))
+    end
+    Backends.launch_kernel_async!(style,_compiled_paths_validate_amplitude_kernel!,
+        failure,owner.inputs.pupil_amplitude,owner.reference;
+        ndrange=length(owner.inputs.pupil_amplitude))
+    return nothing
+end
+
+_compiled_paths_ratio!(::Backends.ScalarCPUStyle,attenuation,amplitude,reference,validation)=
+    _compiled_paths_ratio!(attenuation,amplitude,reference)
+KernelAbstractions.@kernel function _compiled_paths_ratio_kernel!(attenuation,amplitude,reference,failure)
+    index=KernelAbstractions.@index(Global,Linear)
+    if index <= length(attenuation)
+        a,r=amplitude[index],reference[index]
+        value=zero(a)
+        slot=0
+        if !isfinite(a) || a < 0 || !isfinite(r) || r < 0
+            slot=6
+        elseif iszero(r)
+            !iszero(a) && (slot=4)
+        elseif iszero(a)
+            slot=5
+        else
+            logratio=log(a)-log(r)
+            if !isfinite(exp(logratio))
+                slot=6
+            else
+                value=-logratio
+            end
+        end
+        if !iszero(slot)
+            KernelAbstractions.@atomic failure[slot]=UInt32(1)
+        end
+        attenuation[index]=value
+    end
+end
+function _compiled_paths_ratio!(style::Backends.AcceleratorStyle,attenuation,amplitude,reference,validation)
+    Backends.launch_kernel_async!(style,_compiled_paths_ratio_kernel!,
+        attenuation,amplitude,reference,validation.device;ndrange=length(attenuation))
+    return nothing
+end
+
+function _check_compiled_paths_inputs!(validation::CompiledPathsInputValidation)
+    copyto!(parent(validation.host),validation.device)
+    failure=validation.host
+    iszero(failure[1]) || throw(ArgumentError("DM OPD must be finite"))
+    iszero(failure[2]) || throw(ArgumentError("entrance OPD must be finite"))
+    iszero(failure[3]) || throw(ArgumentError("entrance amplitude must be finite and nonnegative in reference-ratio mode"))
+    iszero(failure[4]) || throw(ArgumentError("nonzero entrance amplitude where its reference is opaque"))
+    iszero(failure[5]) || throw(ArgumentError("new opaque entrance samples inside reference support are unsupported; regenerate the optical model for changed pupil support"))
+    iszero(failure[6]) || throw(ArgumentError("entrance amplitude ratio is not representable"))
+    return nothing
+end
+_check_compiled_paths_inputs!(::Nothing)=nothing
+_reset_compiled_paths_validation!(::Nothing)=nothing
+function _reset_compiled_paths_validation!(validation::CompiledPathsInputValidation)
+    fill!(validation.device,UInt32(0))
+    fill!(validation.host,UInt32(0))
+    return nothing
+end
