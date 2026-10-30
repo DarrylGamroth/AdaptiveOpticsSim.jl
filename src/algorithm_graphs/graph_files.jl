@@ -859,24 +859,24 @@ function _pyramid_rate_f32_node(
             config.modulation_points,
             "$context.modulation_points",
         ) : nothing
-    modulation_propagation_strategy = if hasproperty(
+    strategy_name = if hasproperty(
         config,
         :modulation_propagation_strategy,
     )
-        strategy_name = _file_identifier(
+        _file_identifier(
             config.modulation_propagation_strategy,
             "$context.modulation_propagation_strategy",
         )
-        if strategy_name === :pupil_tilt
-            PyramidPupilTiltStrategy()
-        else
-            throw(AlgorithmGraphError(
-                "$context.modulation_propagation_strategy must be " *
-                "'pupil_tilt'",
-            ))
-        end
     else
+        Symbol(_NODE_DEFAULTS.pyramid.modulation_propagation_strategy)
+    end
+    modulation_propagation_strategy = if strategy_name === :pupil_tilt
         PyramidPupilTiltStrategy()
+    else
+        throw(AlgorithmGraphError(
+            "$context.modulation_propagation_strategy must be " *
+            "'pupil_tilt'",
+        ))
     end
     diffraction_padding = hasproperty(config, :diffraction_padding) ?
         _file_integer(
@@ -895,7 +895,7 @@ function _pyramid_rate_f32_node(
     binning = hasproperty(config, :binning) ?
         _file_integer(config.binning, "$context.binning") : 1
     pupil_shifts = map((:pupil_shift_x_pixels, :pupil_shift_y_pixels)) do field
-        hasproperty(config, field) || return 0
+        hasproperty(config, field) || return getproperty(_NODE_DEFAULTS.pyramid, field)
         value = getproperty(config, field)
         field_context = "$context.$field"
         return value isa Real ? _file_real(value, field_context) :
@@ -1109,7 +1109,7 @@ function _cmos_detector_acquisition_f32_node(
     binning = hasproperty(config, :binning) ? _file_integer(
         config.binning,
         "$context.binning",
-    ) : 1
+    ) : _NODE_DEFAULTS.cmos.binning
     gain = hasproperty(config, :gain) ?
         _file_real(config.gain, "$context.gain") : 1.0
     dark_current = hasproperty(config, :dark_current_e_per_pixel_s) ?
@@ -1122,7 +1122,7 @@ function _cmos_detector_acquisition_f32_node(
     full_well = hasproperty(config, :full_well_e) ?
         _file_real(config.full_well_e, "$context.full_well_e") : nothing
     photon_noise = hasproperty(config, :photon_noise) ?
-        _file_bool(config.photon_noise, "$context.photon_noise") : true
+        _file_bool(config.photon_noise, "$context.photon_noise") : _NODE_DEFAULTS.cmos.photon_noise
     readout_noise = hasproperty(config, :readout_noise) ?
         _file_bool(config.readout_noise, "$context.readout_noise") : false
     readout_noise_e = hasproperty(config, :readout_noise_e) ?
@@ -1131,12 +1131,12 @@ function _cmos_detector_acquisition_f32_node(
         _file_real(
             config.column_readout_noise_e,
             "$context.column_readout_noise_e",
-        ) : 0.0
+        ) : _NODE_DEFAULTS.cmos.column_readout_noise_e
     row_readout_noise = hasproperty(config, :row_readout_noise_e) ?
         _file_real(
             config.row_readout_noise_e,
             "$context.row_readout_noise_e",
-        ) : 0.0
+        ) : _NODE_DEFAULTS.cmos.row_readout_noise_e
 
     return cmos_detector_acquisition_node(
         name;
@@ -1235,13 +1235,13 @@ function _emccd_detector_acquisition_f32_node(
         _file_real(
             config.dark_current_e_per_pixel_s,
             "$context.dark_current_e_per_pixel_s",
-        ) : 0.0
+        ) : _NODE_DEFAULTS.emccd.dark_current_e_per_pixel_s
     bits = hasproperty(config, :bits) ?
         _file_integer(config.bits, "$context.bits") : nothing
     full_well = hasproperty(config, :full_well_e) ?
         _file_real(config.full_well_e, "$context.full_well_e") : nothing
     photon_noise = hasproperty(config, :photon_noise) ?
-        _file_bool(config.photon_noise, "$context.photon_noise") : true
+        _file_bool(config.photon_noise, "$context.photon_noise") : _NODE_DEFAULTS.emccd.photon_noise
     readout_noise = hasproperty(config, :readout_noise) ?
         _file_bool(config.readout_noise, "$context.readout_noise") : false
     readout_noise_e = hasproperty(config, :readout_noise_e) ?
