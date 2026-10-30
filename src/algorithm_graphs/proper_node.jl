@@ -103,6 +103,8 @@ train's raw output intensity or complex electric field. A prepared scalar
 owner reports its frozen native output pitch, including before the first step.
 A mapped train reports its declared fixed pitch or cold-prepared reference
 output pitch. Obtain an owner with `prepared_graph_node(graph, node_name)`.
+Pixel-integration owners and configurations instead report their declared output
+pitch, and require equal pitches on both axes for this scalar interface.
 
 For a scalar train's run-immutable plan, obtained as `node.config` from the
 Proper node factory, perform the geometry traversal on the host during cold

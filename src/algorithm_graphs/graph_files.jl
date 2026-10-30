@@ -1583,6 +1583,8 @@ function builtin_graph_node_types()
         compiled_optical_paths_f64=compiled_optical_paths_node_factory(; T=Float64),
         detector=_detector_node,
         pixel_mtf=_pixel_mtf_f32_node,
+        pixel_integration_f32=_pixel_integration_f32_node,
+        pixel_integration_f64=_pixel_integration_f64_node,
         deformable_mirror_surface_f32=
             _deformable_mirror_surface_f32_node,
         gaussian_deformable_mirror_surface_f32=

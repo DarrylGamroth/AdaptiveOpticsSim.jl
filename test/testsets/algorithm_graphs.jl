@@ -2240,8 +2240,12 @@ end
     @test keys(builtin_graph_node_types()) == (
         :proper_optical_train_f64,
         :proper_optical_train_f32,
+        :compiled_optical_paths_f32,
+        :compiled_optical_paths_f64,
         :detector,
         :pixel_mtf,
+        :pixel_integration_f32,
+        :pixel_integration_f64,
         :deformable_mirror_surface_f32,
         :gaussian_deformable_mirror_surface_f32,
         :grid_gaussian_deformable_mirror_surface_f32,

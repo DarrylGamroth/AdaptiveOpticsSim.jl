@@ -311,6 +311,12 @@ Factory functions include:
 - `ingaas_detector_acquisition_node` for complete-frame acquisition on an
   explicit metric pixel grid and integrated spectral channel
 - `pixel_mtf_node` for a caller-calibrated response on exact image buffers
+- `pixel_integration_node` for CPU rectangular overlap integration from
+  cell-integrated flux to an explicitly registered detector grid. Both shapes,
+  `(y,x)` metre pitches, fractional one-based center pixels and quantity schemas
+  are required. YAML types are `pixel_integration_f32` and
+  `pixel_integration_f64`. No cropped flux is renormalized. Its
+  `optical_sampling_m` method requires square output pixels.
 - `modal_opd_expansion_node`
 - `second_order_response_node` for an explicit unity-static-gain mechanical
   response before modal expansion or other physical coordinate use

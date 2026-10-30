@@ -108,6 +108,7 @@ const REVIEWED_SUPPORTED_API = (
             :direct_imaging_batch_inputs, :direct_imaging_batch_products,
             :direct_imaging_batch_sources, :direct_imaging_plan, :microlens_propagation_plan,
             :prepare_spectral_synthesis, :synthesize_spectrum!,
+            :prepare_compiled_optical_paths, :propagate_compiled_optical_paths!,
             :prepare_telescope, :propagation_input_metadata, :propagation_output_metadata,
             :propagation_plan, :spatial_filter_output, :spatial_filter_plan,
             :validate_direct_imaging_batch,
@@ -314,7 +315,7 @@ const REVIEWED_SUPPORTED_API = (
             :graph_step_pending, :graph_step_sequence,
             :grid_gaussian_deformable_mirror_surface_node,
             :ingaas_detector_acquisition_node, :hgcdte_avalanche_detector_acquisition_node,
-            :pixel_mtf_node, :hil_boundary_status, :ideal_pupil_relay_node,
+            :pixel_mtf_node, :pixel_integration_node, :hil_boundary_status, :ideal_pupil_relay_node,
             :hil_command_buffer, :hil_frame_buffer, :link, :load_algorithm_graph,
             :modal_opd_expansion_node, :model_duration_seconds, :model_nanoseconds,
             :model_time_exhausted, :model_time_provenance, :model_time_seconds,
@@ -354,6 +355,7 @@ const REVIEWED_SUPPORTED_API = (
             :SpatialAOResidualNodeConfig, :PupilOPDCompositionNode,
             :PupilOPDCompositionNodeConfig, :PyramidRateNode, :PyramidRateNodeConfig,
             :PixelMTFNode, :PixelMTFNodeConfig,
+            :PixelIntegrationNode, :PixelIntegrationNodeConfig,
             :ShackHartmannRateNode,
             :ShackHartmannRateNodeConfig, :prepared_graph_node,
             :PreparedGraphOutputSnapshot, :prepare_graph_output_snapshot,
@@ -361,6 +363,7 @@ const REVIEWED_SUPPORTED_API = (
             :snapshot_values, :snapshot_metadata, :release_graph_output_snapshot!,
             :reset_graph_output_snapshot!,
             :graph_node_configuration,
+            :compiled_optical_paths_node_factory,
         ),
         public_extension =
         (
