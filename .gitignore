@@ -1,3 +1,6 @@
 Manifest.toml
 /deps/cudacore-6.5.0/
 
+
+# Local caches from optional cold optical compilation tools.
+__pycache__/

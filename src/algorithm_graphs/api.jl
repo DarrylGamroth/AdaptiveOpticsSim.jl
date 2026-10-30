@@ -79,3 +79,5 @@ public PixelMTFNode, PixelMTFNodeConfig
 export IntensityExposure, reset_intensity_exposure!, integrate_intensity!
 export PreparedExternalPupil, prepare_external_pupil, step_external_pupil!, reset_external_pupil!
 public external_pupil_contract
+
+public compiled_optical_paths_node_factory

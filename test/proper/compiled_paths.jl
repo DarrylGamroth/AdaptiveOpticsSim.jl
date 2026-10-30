@@ -1,0 +1,384 @@
+# Adapted from SPIDERSSim b479871 test/physical15.jl. The oracle is the
+# centred Fresnel equation and does not call the copied numerical executor.
+using AdaptiveOpticsSim,Proper,Test,LinearAlgebra,FITSIO,YAML
+using AdaptiveOpticsSim.AlgorithmGraphs
+const CP=Base.get_extension(AdaptiveOpticsSim,:AdaptiveOpticsSimProperExt)
+using FFTW
+using SHA
+
+# Redistributable compiler-contract fixture. The oracle uses the defining
+# centred Fresnel equations, independently of PROPER and the prepared runtime.
+function compiled_paths_synthetic_fixture(; forward=true, from_waist=true)
+    n, m = 8, 5
+    lambda, dx, dz = 1.6e-6, 4e-5, forward ? 0.013 : -0.013
+    q = collect(0:n-1) .- n÷2
+    entrance = ComplexF64[exp(-0.07*(x*x+y*y))*cis(0.2x+0.03y*y) for y in q, x in q]
+    edge = ComplexF64[exp(-0.012*(x*x+y*y)^2) for y in q, x in q]
+    mask = ComplexF64[0.65+0.02x+0.01y for y in q, x in q]
+    phase = ComplexF64[cis(0.07x*y) for y in -2:2, x in -2:2]
+    output_coords = collect(-2:2)
+    output_freq = FFTW.fftshift(FFTW.fftfreq(m))
+    kernel = exp.(2im*pi .* (output_coords * transpose(output_freq)))
+    arrays = Dict{String,Matrix{ComplexF64}}(
+        "entrance"=>entrance, "identity"=>Matrix{ComplexF64}(I,n,n),
+        "edge"=>edge, "mask"=>mask, "resample"=>kernel,
+        "phase"=>phase, "one"=>ones(ComplexF64,m,m),
+        "scalar"=>ones(ComplexF64,1,1), "pixel"=>ones(ComplexF64,m+2,m+2))
+    mult(name) = Dict("kind"=>"mult","array"=>name)
+    screen(name) = Dict("kind"=>"live_screen", "input"=>(name=="DM" ? "dm_opd" : "pupil_opd"),
+        "kernel"=>"identity", "size"=>n, "dx"=>dx, "lam"=>lambda)
+    prefix = [screen("Subaru_Pupil"), Dict("kind"=>"normalize"), screen("DM"),
+        Dict("kind"=>"tf","dx"=>dx,"dz"=>0.004,"lam"=>lambda,"edge"=>"edge"),
+        Dict("kind"=>"ft","dx"=>dx,"dz"=>dz,"lam"=>lambda,"edge"=>"edge",
+            "from_waist"=>from_waist,"forward"=>forward,
+            "gouy_real"=>0.0,"gouy_imag"=>forward ? -1.0 : 1.0)]
+    metadata = Dict(
+        "schema_version"=>1, "array_orientation"=>"yx", "grid"=>n,
+        "image_size"=>m, "crop_start"=>1, "n_env"=>1,
+        "wavelengths"=>[lambda], "channels"=>[lambda],
+        "propagations"=>[Dict("path_index"=>0,"anchor_index"=>0,
+            "entrance"=>"entrance","prefix"=>prefix,
+            "closed"=>[mult("mask")],"only"=>[])],
+        "fast"=>Dict("resample_kernel"=>"resample","main_phase"=>"phase",
+            "basis"=>"scalar","coefficient"=>"scalar","visibility"=>["scalar"],
+            "pinhole_gain_real"=>[0.3],"pinhole_gain_imag"=>[-0.2],
+            "phantom_pad"=>1,"pixel_pad"=>1,"pixel_mtf"=>"pixel",
+            "apply_pixel_mtf"=>false),
+        "fast_paths"=>[Dict("source_index"=>0,"shift_transfer"=>"one",
+            "phase_multiplier"=>["one"])])
+    return (; metadata, arrays, n, m, lambda, dx, dz, forward, from_waist)
+end
+
+function compiled_paths_synthetic_oracle(fixture, dm, entrance_opd, attenuation)
+    f = fixture
+    fftc(a) = FFTW.fftshift(FFTW.fft(FFTW.ifftshift(a)))
+    ifftc(a) = FFTW.fftshift(FFTW.ifft(FFTW.ifftshift(a)))
+    field = f.arrays["entrance"] .* exp.(-attenuation) .* cis.(2pi/f.lambda .* entrance_opd)
+    field ./= sqrt(sum(abs2,field))
+    field .*= cis.(2pi/f.lambda .* dm)
+    freq = FFTW.fftshift(FFTW.fftfreq(f.n,inv(f.dx)))
+    rho2 = freq.^2 .+ transpose(freq.^2)
+    field = ifftc(fftc(field .* f.arrays["edge"]) .* cis.(-pi*f.lambda*0.004 .* rho2))
+    field .*= f.arrays["edge"]
+    dx_out = f.lambda*abs(f.dz)/(f.n*f.dx)
+    function chirp(dx)
+        q = (collect(0:f.n-1) .- f.n÷2) .* dx
+        cis.(pi/(f.lambda*f.dz) .* (q.^2 .+ transpose(q.^2)))
+    end
+    f.from_waist && (field .*= chirp(f.dx))
+    field = f.forward ? fftc(field)/f.n : ifftc(field)*f.n
+    field .*= f.forward ? -im : im
+    !f.from_waist && (field .*= chirp(dx_out))
+    closed = (field .* f.arrays["mask"])[2:6,2:6] .* f.arrays["phase"]
+    only = field[2:6,2:6] .* f.arrays["phase"]
+    return (fringed=abs2.(closed .+ (0.3-0.2im).*only),
+        unfringed=abs2.(closed), reference=abs2.(only))
+end
+
+function compiled_paths_allocated(owner)
+    AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
+    return @allocated AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
+end
+
+@testset "Frozen compiled_paths native execution" begin
+    for forward in (true,false), from_waist in (true,false)
+        fixture = compiled_paths_synthetic_fixture(;forward,from_waist)
+        dm = [1e-8*sin(0.7x+0.3y) for y in 1:fixture.n,x in 1:fixture.n]
+        entrance_opd = [2e-8*cos(0.2x-0.4y) for y in 1:fixture.n,x in 1:fixture.n]
+        attenuation = [0.01x+0.005y for y in 1:fixture.n,x in 1:fixture.n]
+        owner = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata, ref->fixture.arrays[ref];
+            dm_opd=dm, entrance_opd, entrance_attenuation=attenuation)
+        @test owner.inputs.dm_opd === dm
+        @test owner.inputs.entrance_opd === entrance_opd
+        @test owner.inputs.entrance_attenuation === attenuation
+        @test all(iszero,owner.products.fringed)
+        products = AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
+        expected = compiled_paths_synthetic_oracle(fixture,dm,entrance_opd,attenuation)
+        for name in (:fringed,:unfringed,:reference)
+            @test getproperty(products,name) ≈ getproperty(expected,name) rtol=2e-12 atol=1e-15
+            @test all(isfinite,getproperty(products,name))
+        end
+        before = copy(products.fringed)
+        dm[3,5] += 2e-7
+        AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
+        expected = compiled_paths_synthetic_oracle(fixture,dm,entrance_opd,attenuation)
+        @test products.fringed ≈ expected.fringed rtol=2e-12 atol=1e-15
+        @test norm(products.fringed-before) > 1e-5
+        @test compiled_paths_allocated(owner) == 0
+    end
+    fixture = compiled_paths_synthetic_fixture()
+    caller_owned = CP._prepare_compiled_paths(fixture.metadata,
+        ref->fixture.arrays[ref], nothing)
+    @test caller_owned.execution_context === nothing
+    @test_throws ArgumentError AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(caller_owned)
+    @test CP._enqueue_compiled_paths!(caller_owned) === caller_owned.products
+    standalone = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata, ref->fixture.arrays[ref])
+    AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(standalone)
+    @test caller_owned.products.fringed ≈ standalone.products.fringed
+    @test compiled_paths_allocated(standalone) == 0
+    dark=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,ref->fixture.arrays[ref];
+        entrance_attenuation=fill(1000.0,fixture.n,fixture.n))
+    @test all(iszero,AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(dark).fringed)
+    # Execute the exact device reduction kernels on KA's CPU backend. This
+    # checks fixed-block padding, deterministic tree order and dynamic power
+    # without requiring an accelerator in ordinary package tests.
+    ka = CP.KernelAbstractions
+    # Run the accelerator copy kernels on irregular CPU grids. KA masks the
+    # extra lanes in the final workgroup; the prepared shape and padding
+    # contracts prove each explicitly inbounds source access.
+    for shape in ((1,1), (3,5), (4,6), (17,19))
+        input = reshape(Float64.(1:prod(shape)), shape)
+        out = similar(input)
+        for inverse in (false,true)
+            sy = inverse ? fld(shape[1],2) : cld(shape[1],2)
+            sx = inverse ? fld(shape[2],2) : cld(shape[2],2)
+            CP._compiled_paths_shift_kernel!(ka.CPU(),(4,4))(
+                out,input,sy,sx; ndrange=shape)
+            ka.synchronize(ka.CPU())
+            @test out == (inverse ? FFTW.ifftshift(input) : FFTW.fftshift(input))
+        end
+        crop_shape = max.(1,shape .- 1)
+        cropped = zeros(crop_shape)
+        for start in (0,minimum(shape .- crop_shape))
+            CP._compiled_paths_crop_kernel!(ka.CPU(),(4,4))(
+                cropped,input,start; ndrange=crop_shape)
+            ka.synchronize(ka.CPU())
+            @test cropped == input[1+start:crop_shape[1]+start,1+start:crop_shape[2]+start]
+        end
+        for pad in (0,2)
+            padded = zeros(shape .+ 2pad)
+            CP._compiled_paths_pad_kernel!(ka.CPU(),(4,4))(
+                padded,input,pad; ndrange=size(padded))
+            ka.synchronize(ka.CPU())
+            expected = zeros(size(padded))
+            expected[1+pad:shape[1]+pad,1+pad:shape[2]+pad] .= input
+            @test padded == expected
+        end
+    end
+    # The largest case has more than 256 partials, exercising each lane's
+    # repeated addition in the second reduction stage.
+    for shape in ((3,3), (16,17), (33,35), (257,259))
+        field = ComplexF64[cis(0.17x+0.21y)*(1+0.002x*y) for y in 1:shape[1], x in 1:shape[2]]
+        partials = zeros(Float64,cld(length(field),256))
+        power = zeros(Float64,1)
+        expected = sum(abs2,field)
+        first_run = copy(field)
+        for _ in 1:2
+            copyto!(field,first_run)
+            CP._compiled_paths_power_partials_kernel!(ka.CPU(),256)(
+                partials,field,length(field); ndrange=256length(partials))
+            CP._compiled_paths_power_finalize_kernel!(ka.CPU(),256)(
+                power,partials,length(partials); ndrange=256)
+            ka.synchronize(ka.CPU())
+            @test power[1] ≈ expected rtol=8eps(Float64)
+            CP._compiled_paths_normalize_kernel!(ka.CPU(),256)(
+                field,power,length(field); ndrange=length(field))
+            ka.synchronize(ka.CPU())
+            @test sum(abs2,field) ≈ 1 rtol=8eps(Float64)
+        end
+    end
+    # The compiler calibration is centred; the shared AOS detector filter
+    # consumes corner-order frequencies. Use a nonseparable anisotropic MTF
+    # on an odd padded grid to expose shift or axis mistakes.
+    mtf_metadata = deepcopy(fixture.metadata)
+    mtf_metadata["fast"]["apply_pixel_mtf"] = true
+    mtf_arrays = deepcopy(fixture.arrays)
+    f = FFTW.fftshift(FFTW.fftfreq(7))
+    mtf_arrays["pixel"] = ComplexF64[
+        exp(-3fy^2-2fx^2)*(1+0.15sin(2pi*fy)*sin(2pi*fx)) for fy in f,fx in f]
+    filtered = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(mtf_metadata, ref->mtf_arrays[ref])
+    AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(filtered)
+    @test standalone.workspace.pixel_mtf === nothing
+    @test !hasproperty(filtered.workspace,:pixel_fft)
+    for (mtf_owner,name) in zip(filtered.workspace.pixel_mtf,(:fringed,:unfringed,:reference))
+        @test mtf_owner.input === getproperty(filtered.products,name)
+        @test !Base.mightalias(mtf_owner.input,mtf_owner.products.output)
+        @test mtf_owner.plan.transfer == real.(FFTW.ifftshift(mtf_arrays["pixel"]))
+        raw = getproperty(standalone.products,name)
+        padded = zeros(7,7)
+        padded[2:6,2:6] .= raw
+        expected = real.(FFTW.ifft(FFTW.fft(padded) .* real.(FFTW.ifftshift(mtf_arrays["pixel"]))))[2:6,2:6]
+        @test getproperty(filtered.products,name) ≈ expected rtol=2e-12 atol=1e-15
+    end
+    @test compiled_paths_allocated(filtered) == 0
+    mtf_arrays["pixel"][1,1] += 0.01im
+    @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(mtf_metadata, ref->mtf_arrays[ref])
+    for name in ("phantom_pad","pixel_pad")
+        bad = deepcopy(fixture.metadata)
+        bad["fast"][name] = -1
+        @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(bad, ref->fixture.arrays[ref])
+        max_pad = (typemax(Int) - fixture.m) ÷ 2
+        for oversized in (max_pad + 1, typemax(Int))
+            bad["fast"][name] = oversized
+            @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(bad, ref->fixture.arrays[ref])
+        end
+    end
+    # typemax padding previously wrapped the padded size to 3, permitting a
+    # matching defocus transfer and an unsafe crop from an undersized buffer.
+    bad = deepcopy(fixture.metadata)
+    bad_arrays = deepcopy(fixture.arrays)
+    bad["fast"]["phantom_pad"] = typemax(Int)
+    bad["fast_paths"][1]["defocus_transfer"] = ["wrapped_defocus"]
+    bad_arrays["wrapped_defocus"] = ones(ComplexF64,3,3)
+    @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(bad, ref->bad_arrays[ref])
+    bad = deepcopy(fixture.metadata)
+    bad["schema_version"] = 99
+    @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(bad, ref->fixture.arrays[ref])
+    bad = deepcopy(fixture.metadata)
+    bad["array_orientation"] = "xy"
+    @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(bad, ref->fixture.arrays[ref])
+    bad = deepcopy(fixture.metadata)
+    bad["propagations"][1]["prefix"][1]["input"] = "unknown"
+    @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(bad, ref->fixture.arrays[ref])
+    @test_throws DimensionMismatch AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->fixture.arrays[ref]; dm_opd=zeros(3,3))
+    for value in (NaN, Inf)
+        bad_arrays = deepcopy(fixture.arrays)
+        bad_arrays["entrance"][1,1] = value
+        @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata, ref->bad_arrays[ref])
+        for role in ("basis", "coefficient", "visibility")
+            bad_metadata = deepcopy(fixture.metadata)
+            bad_arrays = deepcopy(fixture.arrays)
+            bad_arrays["nonfinite"] = fill(ComplexF64(value), 1, 1)
+            bad_metadata["fast"][role] = role == "visibility" ? ["nonfinite"] : "nonfinite"
+            @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(bad_metadata, ref->bad_arrays[ref])
+        end
+    end
+    overflow_arrays = deepcopy(fixture.arrays)
+    overflow_arrays["entrance"][1,1] = 1e100
+    @test_throws ArgumentError AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->overflow_arrays[ref]; T=Float32)
+end
+
+function compiled_paths_yaml_fixture(directory;source_mode=false)
+    fixture=compiled_paths_synthetic_fixture()
+    source_mode || (fixture.arrays["entrance"][2,3]=0) # Frozen opaque sky entrance sample.
+    metadata=deepcopy(fixture.metadata)
+    metadata["mode"]=source_mode ? "source" : "sky"
+    metadata["dx_output"]=0.001
+    metadata["live"]=Dict("dm_size"=>fixture.n,"dm_pitch"=>fixture.dx,
+        "entrance_size"=>fixture.n,"entrance_pitch"=>fixture.dx)
+    if source_mode
+        popfirst!(metadata["propagations"][1]["prefix"])
+        metadata["live"]["entrance_size"]=0
+        metadata["live"]["entrance_pitch"]=0.0
+    end
+    metadata["arrays"]=Dict{String,Any}()
+    for (name,values) in fixture.arrays
+        path=joinpath(directory,name)
+        header=FITSHeader(["GENERATE","SOURCE"],["compiled_paths.jl test fixture","synthetic Fresnel equations"],["Generated fixture","Regenerate by running tests"])
+        FITS(path,"w") do file
+            write(file,permutedims(real.(values));header)
+            write(file,permutedims(imag.(values));header)
+        end
+        metadata["arrays"][name]=Dict("path"=>name,"sha256"=>bytes2hex(sha256(read(path))),
+            "shape"=>collect(size(values)),"type"=>"ComplexF64","axes"=>[2,1],"real_hdu"=>1,"imag_hdu"=>2)
+    end
+    path=joinpath(directory,"model.yaml")
+    write(path,YAML.write(metadata))
+    return (;fixture,metadata,path,sha256=bytes2hex(sha256(read(path))))
+end
+function compiled_paths_test_graph(model;mode="log_attenuation",reference=nothing,
+        dm=zeros(8,8),opd=zeros(8,8),amplitude=zeros(8,8),grid=nothing)
+    if grid===nothing
+        grid=(size=(8,8),axes=(1,2),sampling_m=(model.fixture.dx,model.fixture.dx),center_pixel=(5.0,5.0))
+    end
+    config=(model_path=model.path,model_sha256=model.sha256,dm_grid=grid,pupil_grid=grid,
+        entrance_amplitude_mode=mode)
+    bindings=NamedTuple()
+    if mode=="reference_ratio"
+        config=merge(config,(entrance_reference_amplitude="pupil_reference",))
+        bindings=(pupil_reference=reference,)
+    end
+    node=AlgorithmGraphs.compiled_optical_paths_node_factory()(:optics,config,(;),bindings)
+    definition=algorithm_graph((node,);name=:compiled_paths,
+        inputs=(graph_input(:dm,:optics=>:dm_opd,dm),graph_input(:opd,:optics=>:pupil_opd,opd),
+            graph_input(:amplitude,:optics=>:pupil_amplitude,amplitude)),
+        outputs=(graph_output(:fringed,:optics=>:fringed),graph_output(:unfringed,:optics=>:unfringed),
+            graph_output(:reference,:optics=>:reference)))
+    return prepare_algorithm_graph(definition)
+end
+@testset "Compiled optical path artifact and live grids" begin
+    mktempdir() do directory
+        model=compiled_paths_yaml_fixture(directory)
+        f=model.fixture
+        dm=[1e-8*sin(0.7x+0.3y) for y in 1:8,x in 1:8]
+        opd=[2e-8*cos(0.2x-0.4y) for y in 1:8,x in 1:8]
+        attenuation=[0.01x+0.005y for y in 1:8,x in 1:8]
+        graph=compiled_paths_test_graph(model;dm,opd,amplitude=attenuation)
+        step_graph!(graph)
+        expected=compiled_paths_synthetic_oracle(f,dm,opd,attenuation)
+        @test graph_output(graph,:fringed)≈expected.fringed rtol=2e-12 atol=1e-15
+        @test optical_sampling_m(AlgorithmGraphs.prepared_graph_node(graph,:optics))==0.001
+        # Different physical pitch and support despite a familiar square shape.
+        coarse=(size=(4,4),axes=(1,2),sampling_m=(2f.dx,2f.dx),center_pixel=(3.0,3.0))
+        dm4=[1e-7*(2y-x) for y in 1:4,x in 1:4]
+        coarse_graph=compiled_paths_test_graph(model;dm=dm4,opd=zeros(4,4),amplitude=zeros(4,4),grid=coarse)
+        step_graph!(coarse_graph)
+        native=AlgorithmGraphs.prepared_graph_node(coarse_graph,:optics).propagation.inputs.dm_opd
+        expected_native=[sum(max(0,1-abs((y-5)/2+3-i))*max(0,1-abs((x-5)/2+3-j))*dm4[i,j]
+            for i in 1:4,j in 1:4) for y in 1:8,x in 1:8]
+        @test native≈expected_native
+        native_graph=compiled_paths_test_graph(model;dm=expected_native)
+        step_graph!(native_graph)
+        @test graph_output(coarse_graph,:fringed)≈graph_output(native_graph,:fringed)
+        # A reference-zero sample owns baked opacity; additional gain there is rejected.
+        reference=ones(8,8);reference[2,3]=0
+        amplitude=copy(reference)
+        ratio_graph=compiled_paths_test_graph(model;mode="reference_ratio",reference,dm,opd,amplitude)
+        step_graph!(ratio_graph)
+        @test graph_output(ratio_graph,:fringed)≈compiled_paths_synthetic_oracle(f,dm,opd,zeros(8,8)).fringed
+        ratio_owner=AlgorithmGraphs.prepared_graph_node(ratio_graph,:optics)
+        @test all(iszero,ratio_owner.propagation.inputs.entrance_attenuation)
+        @test !hasproperty(ratio_owner.propagation.inputs,:entrance_opacity)
+        # Changed support is rejected rather than encoded through an unqualified
+        # product of independently interpolated opacity and attenuation.
+        amplitude[3,4]=0
+        @test_throws ArgumentError step_graph!(ratio_graph)
+        amplitude[3,4]=reference[3,4]
+        reset_graph!(ratio_graph);step_graph!(ratio_graph)
+        @test all(isfinite,graph_output(ratio_graph,:fringed))
+        amplitude[2,3]=0.5
+        @test_throws ArgumentError step_graph!(ratio_graph)
+        amplitude.=reference
+        reset_graph!(ratio_graph);step_graph!(ratio_graph)
+        @test graph_output(ratio_graph,:fringed)≈compiled_paths_synthetic_oracle(f,dm,opd,zeros(8,8)).fringed
+        # Cold I/O rejects altered hashes, shape contracts and escaping assets.
+        @test_throws ArgumentError AlgorithmGraphs._read_compiled_optical_model(model.path,"0"^64)
+        metadata=deepcopy(model.metadata)
+        metadata["arrays"]["entrance"]["path"]="../outside"
+        path=joinpath(directory,"escape.yaml");write(path,YAML.write(metadata))
+        _,reader=AlgorithmGraphs._read_compiled_optical_model(path,bytes2hex(sha256(read(path))))
+        @test_throws ArgumentError reader("entrance")
+        FITS(joinpath(directory,"entrance"),"r+") do file
+            write(file[1],ones(8,8))
+        end
+        @test_throws ArgumentError compiled_paths_test_graph(model)
+    end
+end
+
+@testset "Compiled source-mode live input contract" begin
+    mktempdir() do directory
+        model=compiled_paths_yaml_fixture(directory;source_mode=true)
+        dm=zeros(8,8);opd=zeros(8,8);amplitude=ones(8,8);reference=ones(8,8)
+        graph=compiled_paths_test_graph(model;mode="reference_ratio",reference,dm,opd,amplitude)
+        step_graph!(graph)
+        baseline=copy(graph_output(graph,:fringed))
+        opd.=[1e-7sin(i+2j) for i in 1:8,j in 1:8]
+        amplitude.=0.8
+        step_graph!(graph)
+        @test graph_output(graph,:fringed)==baseline # Frozen internal-source entrance.
+        for input in (opd,amplitude)
+            saved=input[1,1]
+            input[1,1]=NaN
+            @test_throws ArgumentError step_graph!(graph)
+            input[1,1]=saved
+            reset_graph!(graph)
+        end
+        amplitude[1,1]=-0.1
+        @test_throws ArgumentError step_graph!(graph)
+        amplitude[1,1]=0.8
+        reset_graph!(graph);step_graph!(graph)
+        @test graph_output(graph,:fringed)==baseline
+    end
+end

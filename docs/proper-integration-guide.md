@@ -873,3 +873,94 @@ is direct photon-arrival-rate image formation or detector simulation already
 covered by the package.
 Use `Proper.jl` when the science prescription needs PROPER-compatible
 propagation, coronagraph masks, or a model already written in PROPER style.
+
+
+## Compiled Multi-Path Models
+
+The optional `compiled_optical_paths_f32` and `compiled_optical_paths_f64`
+factories execute a frozen multi-path Fresnel model. Load `Proper`, `YAML` and
+`FITSIO`; FITSIO remains a weak dependency. Model YAML binds every real or complex
+matrix by SHA-256, logical shape, numeric type, FITS HDUs and axis permutation.
+Asset paths are contained within the model directory. A changed file requires a
+new model hash. Parsing and all file reads happen during cold preparation;
+execution retains concrete plans, arrays, scratch and exact live input bindings.
+
+```yaml
+type: compiled_optical_paths_f32
+bindings:
+  entrance_reference_amplitude: pupil_reference
+config:
+  model_path: model/sky.yaml
+  model_sha256: <sha256 of sky.yaml>
+  dm_grid:
+    size: [128, 128]
+    axes: [1, 2]
+    sampling_m: [0.0002578125, 0.0002578125]
+    center_pixel: [65, 65]
+  pupil_grid:
+    size: [102, 102]
+    axes: [1, 2]
+    sampling_m: [0.07764705882352942, 0.07764705882352942]
+    center_pixel: [52, 52]
+  entrance_amplitude_mode: reference_ratio
+  summation: coherent_modes
+```
+
+`model_path` is resolved by the calling application; the factory does not infer an
+instrument root. Live ports are `dm_opd` and `pupil_opd` in metres and
+`pupil_amplitude` in field-amplitude units. Grid axes are integer permutations
+into logical `[y,x]`; pitches and centers describe that permuted grid. Bilinear
+metric maps use zero OPD and zero full amplitude outside input support. Their
+input sample counts need not equal the compiled screen dimensions. The current
+graph input adapter is CPU-only; the lower-level executor retains its prepared
+backend implementations without claiming additional graph target qualification.
+
+A sky model already contains its static pupil. `reference_ratio` therefore maps
+input and reference amplitudes first and applies only their ratio. Equal maps
+add no attenuation, including reference-zero samples. Nonzero input at a
+reference-zero sample is rejected. A newly opaque sample inside transmitting
+support is rejected. Regenerate the optical model for changed pupil support; the
+adapter does not invent a separately interpolated opacity field or use `log(0)`.
+The model's entrance normalization is preserved. Native log-attenuation
+execution keeps a zero incident field zero; `reference_ratio` instead rejects
+new opaque support as described above. A source/bench model retains its frozen internal entrance and ignores the
+common live pupil ports. These are separate cold model selections.
+
+`entrance_amplitude_mode: log_attenuation` instead interprets `pupil_amplitude`
+as the legacy additional logarithmic attenuation `a` in `exp(−a)` and requires
+no reference binding. The native API
+`Optics.prepare_compiled_optical_paths(metadata, read_array; ...)` accepts
+`entrance_attenuation` directly on the compiled screen grid. Its metadata and
+reader are cold inputs and are not retained in execution ownership. Call
+`Optics.propagate_compiled_optical_paths!` on the returned standalone owner.
+
+The three outputs are simultaneous deterministic relative intensities:
+`fringed`, `unfringed` and `reference`. They do not implement temporal chopping,
+exposure cadence, detector noise or physical radiometry. Select an output as a
+graph's ordinary intensity product and let the acquisition owner select complete
+exposures. `summation: path_pairs` preserves the source arithmetic;
+`coherent_modes` uses shared nonnegative coherent-mode synthesis. A fitted
+signed pixel-MTF filter can reintroduce signed output, so photon acquisition
+requires a no-MTF model and an explicitly qualified downstream detector response.
+
+The cold compiler `tools/export_optical_paths.py` is derived from SPIDERSSim
+b479871's physical15 exporter and imports pinned spectre/spiders-sim only during
+preparation. Cold tools require Python3.11+, NumPy, Astropy, PyYAML and the pinned
+spectre environment. Python/JAX are absent from Julia execution. It emits portable YAML,
+typed content-addressed FITS arrays with generated headers and source hashes.
+`tools/import_compiled_optical_model.py` auto-detects typed `model.yaml` or a
+historical `manifest.toml` export (an explicit YAML filename is also accepted),
+retaining frozen FITS bytes and recording their original identity; `--link` is
+for validation storage only. Deployments copy their immutable artifacts normally.
+Bench and sky profiles may share identical array files in one model directory.
+The importer removes origin workstation paths from generated execution metadata
+while retaining hashes of the original provenance. Existing source checkouts and
+raw fitted files remain untouched.
+
+Validate the numerical executor with `test/proper/compiled_paths.jl`; it includes
+an independent centered Fresnel-equation fixture, artifact integrity and metric
+mapping checks, opaque-reference admission, changed-support rejection and prepared allocation checks. The
+optional `tools/compare_compiled_optical_paths.jl MODEL.yaml FROZEN_EXPORT`
+compares a compiled model against the original compiler's hash-bound products.
+Such agreement is a regression check between models with shared ancestry; it
+does not establish independent physical truth or convergence.

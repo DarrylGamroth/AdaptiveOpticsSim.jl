@@ -7,6 +7,29 @@ sampled NCPA, controllable optics, and reusable physical WFS components.
 """
 module Optics
 
+# Optional Proper implementation; data readers are separate optional extensions.
+"""
+    prepare_compiled_optical_paths(metadata, read_array; target, T=Float64,
+        dm_opd=nothing, entrance_opd=nothing, entrance_attenuation=nothing,
+        summation=:path_pairs)
+
+Prepare a frozen multi-path Fresnel and spectral model. Load Proper.jl to
+activate execution. `read_array(reference)` supplies canonical logical[y,x]
+matrices during cold preparation; execution retains no metadata dictionary or
+reader. OPD inputs are metres; entrance attenuation is the finite additional
+log-amplitude quantity `a` in `exp(-a)` on the compiled native input grid.
+"""
+function prepare_compiled_optical_paths end
+"""
+    propagate_compiled_optical_paths!(owner)
+
+Update a standalone compiled optical model's fringed, unfringed and reference
+relative-intensity products using its bound native-grid live inputs. Returns the
+retained products after completion. Exposure timing, detector acquisition and
+physical radiometry remain the caller's responsibility. Requires Proper.jl.
+"""
+function propagate_compiled_optical_paths! end
+
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault, FixedSizeMatrixDefault
 using KernelAbstractions
 using LinearAlgebra

@@ -468,5 +468,7 @@ end
 
 include("proper_opd.jl")
 include("proper_spectrum.jl")
+include("compiled_paths.jl")
+include("compiled_paths_node.jl")
 
 end

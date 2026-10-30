@@ -1579,6 +1579,8 @@ function builtin_graph_node_types()
     return (
         proper_optical_train_f64=proper_optical_train_node_factory(; T=Float64),
         proper_optical_train_f32=proper_optical_train_node_factory(; T=Float32),
+        compiled_optical_paths_f32=compiled_optical_paths_node_factory(; T=Float32),
+        compiled_optical_paths_f64=compiled_optical_paths_node_factory(; T=Float64),
         detector=_detector_node,
         pixel_mtf=_pixel_mtf_f32_node,
         deformable_mirror_surface_f32=

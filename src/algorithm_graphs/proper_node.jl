@@ -110,3 +110,45 @@ composition. This validates the selected output reference and returns its
 native pitch without binding execution inputs, outputs or an accelerator.
 """
 function optical_sampling_m end
+
+# Model parsing is cold I/O, owned by the optional YAML/FITSIO extension.
+function _read_compiled_optical_model(path,hash)
+    throw(AlgorithmGraphError("compiled optical model reading requires YAML.jl and FITSIO.jl; load both before preparation"))
+end
+
+struct CompiledOpticalPathsNodeFactory{T<:Union{Float32,Float64}} end
+
+"""
+    compiled_optical_paths_node_factory(; T=Float64)
+
+Return the cold factory for a hash-bound compiled multi-path Fresnel model.
+Proper supplies execution; YAML and FITSIO supply optional model artifact I/O.
+"""
+compiled_optical_paths_node_factory(; T::Type{<:Union{Float32,Float64}}=Float64) =
+    CompiledOpticalPathsNodeFactory{T}()
+
+const _COMPILED_PATHS_FIELDS = (:model_path, :model_sha256, :dm_grid, :pupil_grid,
+    :dm_opd_schema, :pupil_opd_schema, :pupil_amplitude_schema, :output_schema,
+    :summation, :entrance_amplitude_mode, :entrance_reference_amplitude)
+
+function graph_node_bindings(::CompiledOpticalPathsNodeFactory, config::NamedTuple)
+    _require_named_fields(config, _COMPILED_PATHS_FIELDS,
+        (:model_path, :model_sha256, :dm_grid, :pupil_grid), "compiled optical paths config")
+    mode = hasproperty(config,:entrance_amplitude_mode) ? config.entrance_amplitude_mode : "reference_ratio"
+    mode in ("reference_ratio","log_attenuation") || throw(AlgorithmGraphError("invalid entrance_amplitude_mode"))
+    if mode == "reference_ratio"
+        hasproperty(config,:entrance_reference_amplitude) || throw(AlgorithmGraphError("reference_ratio requires entrance_reference_amplitude binding"))
+        return (_file_identifier(config.entrance_reference_amplitude,"entrance reference amplitude binding"),)
+    end
+    hasproperty(config,:entrance_reference_amplitude) && throw(AlgorithmGraphError("log_attenuation does not use an entrance reference amplitude"))
+    return ()
+end
+
+function (factory::CompiledOpticalPathsNodeFactory{T})(name::Symbol,config::NamedTuple,
+        props::NamedTuple,bindings::NamedTuple=NamedTuple()) where {T}
+    return _compiled_optical_paths_node(T,name,config,props,bindings)
+end
+
+function _compiled_optical_paths_node(::Type,name,config,props,bindings)
+    throw(AlgorithmGraphError("compiled optical paths require Proper.jl"))
+end
