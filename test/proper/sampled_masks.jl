@@ -175,3 +175,80 @@ Base.axes(::OffsetMaskForTest) = (0:1,0:1)
     @test_throws AlgorithmGraphError proper_optical_train_node_factory(T=Float32)(:bad,
         config,(;),(calibration=amplitude,phase_calibration=fill(1e100,size(amplitude))))
 end
+
+@testset "Sampled optical path difference and band-limited masks" begin
+    base = (resolution=8,pupil_resolution=8,diameter_m=0.008,wavelength_um=1.55)
+    step = (op="sampled_mask",name="reflective FPM",amplitude="transmission",opd="fpm_opd",
+        sampling_m=(0.001,0.001),center_pixel=(5.0,5.0),outside_amplitude=1.0,outside_phase_rad=0.0)
+    amplitude = ones(8,8)
+    opd = [2e-7*cos(2pi*(i-1)/8)*sin(2pi*(j-1)/8) for i in 1:8,j in 1:8]
+    for T in (Float32,Float64), wavelength in (1.55,1.7)
+        config = merge(base,(wavelength_um=wavelength,steps=(step,),transmission="a",fpm_opd="d"))
+        g = train_graph(config;T,opd=zeros(T,8,8),amplitude=ones(T,8,8),bindings=(a=amplitude,d=opd))
+        mask = AlgorithmGraphs.prepared_graph_node(g,:optics).workspace.masks[1]
+        @test mask ≈ cis.(T(2pi)/(T(wavelength)*T(1e-6)) .* T.(opd))
+        @test AlgorithmGraphs.graph_node_bindings(proper_optical_train_node_factory(),config) == (:a,:d)
+    end
+    config = merge(base,(steps=(merge(step,(phase="retardance",)),),transmission="a",fpm_opd="d",retardance="p"))
+    @test_throws AlgorithmGraphError train_graph(config;bindings=(a=amplitude,d=opd,p=zeros(8,8)))
+    for invalid in (fill(NaN,8,8),zeros(2,2))
+        @test_throws AlgorithmGraphError train_graph(merge(base,(steps=(step,),transmission="a",fpm_opd="d"));
+            bindings=(a=amplitude,d=invalid))
+    end
+    # Each spectral channel converts the same physical OPD at its own wavelength.
+    spectral_config = merge(base,(steps=(step,),transmission="a",fpm_opd="d",
+        channels=((wavelength_um=1.4,weight=1.0,steps=(step,)),
+            (wavelength_um=1.8,weight=1.0,steps=(step,)))))
+    spectral_graph = train_graph(spectral_config;bindings=(a=amplitude,d=opd))
+    spectral_owner = AlgorithmGraphs.prepared_graph_node(spectral_graph,:optics)
+    for (channel,wavelength) in zip(spectral_owner.plan.channels,(1.4,1.8))
+        @test channel.steps[1].phase ≈ (2pi/(wavelength*1e-6)) .* opd
+    end
+    # Independent explicit Fourier-series sum, including a rectangular grid,
+    # unequal source pitches and fractional optical-axis registration.
+    amplitude = [0.5+0.1sin(i+2j) for i in 1:6,j in 1:8]
+    phase = [0.4cos(2i-j) for i in 1:6,j in 1:8]
+    spectral_step = (op="sampled_mask",name="band-limited",amplitude="transmission",phase="retardance",
+        resampling="band_limited",sampling_m=(0.0012,0.0009),center_pixel=(3.25,5.4),
+        outside_amplitude=0.2,outside_phase_rad=0.3)
+    outside = 0.2cis(0.3)
+    for T in (Float32,Float64)
+        config = merge(base,(steps=(spectral_step,),transmission="a",retardance="p"))
+        graph = train_graph(config;T,opd=zeros(T,8,8),amplitude=ones(T,8,8),bindings=(a=amplitude,p=phase))
+        actual = AlgorithmGraphs.prepared_graph_node(graph,:optics).workspace.masks[1]
+        expected = fill(outside,8,8)
+        for j in 1:8,i in 1:8
+            y = (i-5)*0.001+(3.25-4)*0.0012
+            x = (j-5)*0.001+(5.4-5)*0.0009
+            abs(y) <= 6*0.0012/2 && abs(x) <= 8*0.0009/2 || continue
+            for l in -4:3,k in -3:2
+                fy,fx = k/(6*0.0012),l/(8*0.0009)
+                cutoff = 0.9/(2*0.001)
+                abs(fy) < 1.5cutoff && abs(fx) < 1.5cutoff || continue
+                coefficient = sum((amplitude[a,b]*cis(phase[a,b])-outside)*
+                    cis(-2pi*(k*(a-4)/6+l*(b-5)/8)) for a in 1:6,b in 1:8)/(6*8)
+                expected[i,j] += coefficient*exp(-((fy^2+fx^2)/cutoff^2)^20)*cis(2pi*(y*fy+x*fx))
+            end
+        end
+        @test actual ≈ expected rtol=1e-5 atol=1e-6
+        step_graph!(graph)
+        @test graph_output(graph,:intensity) ≈ abs2.(expected) rtol=1e-5 atol=1e-6
+    end
+end
+
+@testset "Propagation to instantaneous focus" begin
+    config = (resolution=16,pupil_resolution=8,diameter_m=0.008,wavelength_um=1.55,
+        steps=((op="lens",focal_length_m=0.2),
+            (op="propagate_to_focus",offset_m=0.01,name="past focus"),))
+    graph = train_graph(config)
+    step_graph!(graph)
+    context = Proper.RunContext(Matrix{ComplexF64})
+    wf = prop_begin(0.008,1.55e-6,16;beam_diam_fraction=0.5,context)
+    pupil = zeros(16,16); pupil[5:12,5:12] .= 1
+    prop_multiply(wf,pupil)
+    prop_lens(wf,0.2,context,"lens")
+    prop_propagate(wf,prop_get_distancetofocus(wf)+0.01,context,"past focus")
+    direct,_ = prop_end(wf)
+    @test graph_output(graph,:intensity) ≈ direct
+    @test optical_sampling_m(AlgorithmGraphs.prepared_graph_node(graph,:optics)) ≈ prop_get_sampling(wf)
+end

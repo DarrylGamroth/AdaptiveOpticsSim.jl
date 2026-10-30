@@ -73,7 +73,7 @@ function _proper_mask_roles(config::NamedTuple)
         hasproperty(step, :op) || throw(AlgorithmGraphError("optical step is missing op"))
         _file_string(step.op, "optical step op") == "sampled_mask" || continue
         hasproperty(step, :amplitude) || throw(AlgorithmGraphError("sampled mask is missing amplitude role"))
-        for key in (:amplitude, :phase)
+        for key in (:amplitude, :phase, :opd)
             hasproperty(step, key) || continue
             role = _file_identifier(getproperty(step, key), "sampled mask $key role")
             role in _PROPER_CONFIG_FIELDS && throw(AlgorithmGraphError("sampled mask role '$role' collides with optical train configuration"))

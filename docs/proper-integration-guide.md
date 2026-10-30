@@ -118,11 +118,12 @@ Each scalar operation optionally accepts
 | Operation | Required parameters |
 | --- | --- |
 | `propagate` | signed `distance_m` |
+| `propagate_to_focus` | signed `offset_m` added to the instantaneous distance to focus |
 | `lens` | nonzero signed `focal_length_m` |
 | `circular_aperture`, `circular_obscuration` | positive `radius_m` |
 | `multiply` | field `amplitude` in [0,1] |
 | `circular_mask` | `mode: transmit` or `reflect`; `circles` containing positive `radius_m`, `x_m`, `y_m` |
-| `sampled_mask` | Cold `amplitude` binding role, optional `phase` role in radians, `sampling_m: [dy,dx]`, `center_pixel: [row,column]`, `outside_amplitude`, and `outside_phase_rad` |
+| `sampled_mask` | Cold `amplitude` binding role, optional mutually exclusive `phase` (radians) or `opd` (metres) role, optional `resampling: bilinear` or `band_limited`, `sampling_m: [dy,dx]`, `center_pixel: [row,column]`, `outside_amplitude`, and `outside_phase_rad` |
 | `add_opd` | Runtime `input` port name, `name`, `size`, `axes`, `sampling_m`, `center_pixel`, `schema`, and `outside_opd_m`; see below |
 
 Circle coordinates are in metres in the current optical plane: x increases
@@ -134,11 +135,21 @@ Preparation traces scalar geometry to create masks at each plane's sampling.
 Sampled masks use ordinary node construction bindings, not filenames in the
 propagation node. The node's `bindings` maps each role to an application-loaded
 array. The cold factory validates and snapshots real amplitude in `[0,1]` and
-optional phase in radians into fixed-size storage. Logical axes are row=y,
+optional phase in radians or OPD in metres into fixed-size storage. OPD becomes
+`cis(2π·OPD/λ)` at each train or spectral-channel wavelength. The caller applies
+any mirror surface-to-OPD factor and sign before binding; the node adds none.
+Logical axes are row=y,
 column=x; `center_pixel` is the one-based optical-axis location in that array.
 Preparation performs bilinear interpolation of complex transmission at the
 actual plane sampling, with the explicit outside field contributing per neighbor.
-It does not interpolate phase angles or apply antialias filtering. Source
+It does not interpolate phase angles. Optional `resampling: band_limited`
+filters the Fourier transform of the complex multiplier minus its outside field
+with `exp(−(f²/fc²)²⁰)`, where `fc = 0.9/(2·output_pitch)`, then evaluates the
+retained Fourier series on the output grid. Frequencies at or beyond `1.5fc` on
+either axis are omitted; samples outside the source footprint use the declared
+outside field. This cold phasor resampling follows spectre masks.py at commit
+336ba8db23a14b75e500c95f1472f102b1257b87 (also used by SPIDERSSim physical15).
+It has no wavelength-independent phase approximation. Source
 arrays and files can be released after construction. Stepping performs no I/O.
 
 Runtime sampled OPD steps add changing real OPD maps in metres at explicit

@@ -2,6 +2,7 @@ module AdaptiveOpticsSimProperExt
 
 using AdaptiveOpticsSim
 using Proper
+using FFTW: fft, fftshift, ifftshift
 using FixedSizeArrays: FixedSizeMatrixDefault, FixedSizeVectorDefault
 import AdaptiveOpticsSim.AlgorithmGraphs as AOG
 import AdaptiveOpticsSim.Backends
@@ -43,6 +44,8 @@ function _train_step(step::NamedTuple, ::Type{T}, config, bindings) where {T}
     op == "add_opd" && return _runtime_opd_step(step, T)
     fields = if op == "propagate"
         (:distance_m,)
+    elseif op == "propagate_to_focus"
+        (:offset_m,)
     elseif op == "lens"
         (:focal_length_m,)
     elseif op in ("circular_aperture", "circular_obscuration")
@@ -56,7 +59,7 @@ function _train_step(step::NamedTuple, ::Type{T}, config, bindings) where {T}
     else
         throw(AOG.AlgorithmGraphError("unsupported optical operation '$op'"))
     end
-    allowed = op == "sampled_mask" ? (:op, :name, fields..., :phase) : (:op, :name, fields...)
+    allowed = op == "sampled_mask" ? (:op, :name, fields..., :phase, :opd, :resampling) : (:op, :name, fields...)
     required = op == "sampled_mask" ? (:name, fields...) : fields
     AOG._require_named_fields(step, allowed, required, "optical step")
     name = hasproperty(step, :name) ? AOG._file_string(step.name, "optical step name") : op
@@ -64,7 +67,19 @@ function _train_step(step::NamedTuple, ::Type{T}, config, bindings) where {T}
         amplitude_role = AOG._file_identifier(step.amplitude, "sampled mask amplitude role")
         amplitude = _mask_snapshot(AOG._require_binding(bindings,
             getproperty(config, amplitude_role), "sampled mask amplitude"), T, :amplitude)
-        phase = if hasproperty(step, :phase)
+        hasproperty(step, :phase) && hasproperty(step, :opd) &&
+            throw(AOG.AlgorithmGraphError("sampled mask phase and opd are mutually exclusive"))
+        phase = if hasproperty(step, :opd)
+            opd_role = AOG._file_identifier(step.opd, "sampled mask OPD role")
+            opd = _mask_snapshot(AOG._require_binding(bindings,
+                getproperty(config, opd_role), "sampled mask OPD"), T, :opd)
+            wavelength_m = T(AOG._file_real(config.wavelength_um, "wavelength_um"))*T(1e-6)
+            isfinite(wavelength_m) && wavelength_m > 0 ||
+                throw(AOG.AlgorithmGraphError("sampled mask wavelength must be finite and positive"))
+            converted = (T(2pi)/wavelength_m) .* opd
+            all(isfinite, converted) || throw(AOG.AlgorithmGraphError("sampled mask OPD phase is not representable"))
+            FixedSizeMatrixDefault{T}(converted)
+        elseif hasproperty(step, :phase)
             phase_role = AOG._file_identifier(step.phase, "sampled mask phase role")
             _mask_snapshot(AOG._require_binding(bindings,
                 getproperty(config, phase_role), "sampled mask phase"), T, :phase)
@@ -81,7 +96,11 @@ function _train_step(step::NamedTuple, ::Type{T}, config, bindings) where {T}
             throw(AOG.AlgorithmGraphError("outside_amplitude must be in [0,1]"))
         outside_phase_rad = T(AOG._file_real(step.outside_phase_rad, "outside_phase_rad"))
         isfinite(outside_phase_rad) || throw(AOG.AlgorithmGraphError("outside_phase_rad is not representable"))
-        return (; op=:sampled_mask, name, amplitude, phase, sampling_m, center_pixel,
+        resampling = hasproperty(step, :resampling) ?
+            Symbol(AOG._file_string(step.resampling, "sampled mask resampling")) : :bilinear
+        resampling in (:bilinear, :band_limited) ||
+            throw(AOG.AlgorithmGraphError("sampled mask resampling must be bilinear or band_limited"))
+        return (; op=:sampled_mask, name, amplitude, phase, sampling_m, center_pixel, resampling,
             outside=outside_amplitude*cis(outside_phase_rad))
     end
     if op == "circular_mask"
@@ -137,6 +156,8 @@ end
 function _train_optic!(wf, step, mask, context)
     if step.op === :propagate
         Proper.prop_propagate(wf, step.distance_m, context, step.name)
+    elseif step.op === :propagate_to_focus
+        Proper.prop_propagate(wf, Proper.prop_get_distancetofocus(wf)+step.offset_m, context, step.name)
     elseif step.op === :lens
         Proper.prop_lens(wf, step.focal_length_m, context, step.name)
     elseif step.op === :circular_aperture
@@ -256,6 +277,7 @@ end
 function _resample_mask(step, n, sampling::T) where {T}
     isfinite(sampling) && sampling > 0 ||
         throw(AOG.AlgorithmGraphError("sampled mask has invalid plane sampling"))
+    step.resampling === :band_limited && return _band_limited_mask(step, n, sampling)
     mask = Matrix{Complex{T}}(undef, n, n)
     center = fld(n, 2)+1
     for col in 1:n, row in 1:n
@@ -274,6 +296,36 @@ function _resample_mask(step, n, sampling::T) where {T}
             dy*((1-dx)*_mask_sample(step, i+1, j)+dx*_mask_sample(step, i+1, j+1))
     end
     return mask
+end
+
+# Cold phasor resampling adopted from spectre masks.py (336ba8db), as used
+# by SPIDERSSim physical15_masks.jl. Filter the complex multiplier relative to
+# its outside field, never a wrapped phase angle or an interpolated sag.
+function _band_limited_mask(step, n, sampling::T) where {T}
+    rows, columns = size(step.amplitude)
+    source = [_mask_sample(step, i, j)-step.outside for i in 1:rows, j in 1:columns]
+    spectrum = fftshift(fft(ifftshift(source)))
+    fy = ((0:rows-1) .- fld(rows,2)) ./ (rows*step.sampling_m[1])
+    fx = ((0:columns-1) .- fld(columns,2)) ./ (columns*step.sampling_m[2])
+    cutoff = T(0.9)/(2sampling)
+    iy = findall(f -> abs(f) < T(1.5)*cutoff, fy)
+    ix = findall(f -> abs(f) < T(1.5)*cutoff, fx)
+    filtered = spectrum[iy,ix]
+    for j in eachindex(ix), i in eachindex(iy)
+        radial = (fy[iy[i]]^2+fx[ix[j]]^2)/cutoff^2
+        filtered[i,j] *= exp(-(radial^20))
+    end
+    y = ((1:n) .- (fld(n,2)+1)) .* sampling .+
+        (step.center_pixel[1]-(fld(rows,2)+1))*step.sampling_m[1]
+    x = ((1:n) .- (fld(n,2)+1)) .* sampling .+
+        (step.center_pixel[2]-(fld(columns,2)+1))*step.sampling_m[2]
+    inside_y = findall(v -> abs(v) <= rows*step.sampling_m[1]/2, y)
+    inside_x = findall(v -> abs(v) <= columns*step.sampling_m[2]/2, x)
+    ky = cis.(T(2pi) .* (y[inside_y] * transpose(fy[iy])))
+    kx = cis.(T(2pi) .* (x[inside_x] * transpose(fx[ix])))
+    output = fill(Complex{T}(step.outside),n,n)
+    output[inside_y,inside_x] .+= ((ky * filtered) * transpose(kx)) ./ (rows*columns)
+    return output
 end
 
 function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}

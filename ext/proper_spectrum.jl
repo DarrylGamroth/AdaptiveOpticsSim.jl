@@ -54,7 +54,7 @@ function _polychromatic_optical_train_node(::Type{T}, name, reference, config, b
     plans = map(channels, wavelengths) do channel, wavelength
         steps = map(AOG._file_tuple(channel.steps, "channel steps")) do step
             step isa NamedTuple || throw(AOG.AlgorithmGraphError("step must be a mapping"))
-            _train_step(step, T, config, bindings)
+            _train_step(step, T, merge(config, (;wavelength_um=wavelength)), bindings)
         end
         OpticalTrainPlan(steps, reference.resolution, reference.pupil_resolution,
             reference.diameter_m, wavelength, reference.schemas, nothing, reference.output_quantity)
