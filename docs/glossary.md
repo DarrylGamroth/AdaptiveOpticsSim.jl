@@ -22,6 +22,16 @@ field and intensity array elements for an optical train. It does not change phys
 wavelength, model time or transport precision. Exposure accumulation can use
 Float64 independently of the selected optical precision.
 
+A **shared optical prefix** is an exactly equal initial sequence of scalar
+optical operations in independently declared paths, including its entrance
+geometry, wavelength, precision and sampled masks. A prepared external-pupil
+owner can propagate this prefix once per input sample and continue each path
+from a private copy of the complex field and full optical geometry. Branch
+intensities, exposures and detector responses remain independent. The
+`AlgorithmGraphs.optical_execution_graph` query identifies the actual graph
+whose execution policy, capture coverage, sequence and failure state govern
+that propagation.
+
 - Do not combine a plane location and an assumed physical quantity in one type
   name. Use, for example, an `IntensityMap` whose metadata says `FocalPlane()`.
 - State coordinate domain and units explicitly. Do not infer metres or radians

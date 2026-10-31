@@ -195,14 +195,65 @@ one intensity output and sampling node per graph; input names bind the two
 pupil quantities explicitly. Transport adapters retain ownership of packet
 formats and convert their metadata to model timestamps/durations.
 """
-struct PreparedExternalPupil{G,E,A,O,I}
+struct PreparedExternalPupil{G,E,A,O,I,P}
     graphs::G
     exposures::E
     pupil_opd::A
     pupil_amplitude::A
     observations::O
     input_names::I
+    propagation::P
     state::_ExternalPupilState
+end
+
+# Optional numerical extensions may prepare coordinated propagation for a
+# bounded compatible topology. Ordinary graph owners remain the fallback.
+_prepare_external_pupil_propagation(owners::Tuple, graphs, observations) = nothing
+function _shared_prefix_inputs_match end
+
+mutable struct _ExternalPupilPropagationState
+    shared::Bool
+end
+
+function _prepare_external_pupil_propagation(graphs::NamedTuple, observations, input_names)
+    branches = Tuple(variant for (name, graph) in pairs(graphs)
+        for variant in _observation_graphs(graph, getproperty(observations, name)))
+    all(graph -> 1 <= length(graph.nodes) <= 2 && isempty(graph.delayed_links), branches) || return nothing
+    # Boundary names may be renamed, but coordinated pupil staging must target
+    # the scalar root's actual pupil ports rather than another runtime screen.
+    all(branches) do graph
+        inputs = first(values(graph.nodes)).inputs
+        haskey(inputs,:pupil_opd) && haskey(inputs,:pupil_amplitude) &&
+            graph_input(graph,input_names.opd) === inputs.pupil_opd &&
+            graph_input(graph,input_names.amplitude) === inputs.pupil_amplitude
+    end || return nothing
+    owners = map(graph -> first(values(graph.nodes)).owner, branches)
+    return _prepare_external_pupil_propagation(owners, branches, observations)
+end
+
+"""
+    optical_execution_graph(prepared, name; unfringed=false)
+
+Return the graph that actually propagates this observation. Compatible scalar
+Proper paths may share one captured graph; their original graphs retain their
+standalone input/output bindings but are not stepped by the coordinated owner.
+Use this graph for execution-policy, capture-coverage and failure queries.
+`unfringed=true` selects the alternate graph when propagation is independent.
+Cold preparation and reset select the shared graph. An admitted sample with
+unequal prefix inputs selects the original independent graphs for that sample.
+Metadata snapshotted before input processing describes prepared execution;
+query after an admitted sample to describe its selected execution instead.
+"""
+function optical_execution_graph(prepared::PreparedExternalPupil, name::Symbol;
+        unfringed=false)
+    graph = getproperty(prepared.graphs, name)
+    if unfringed
+        observation = getproperty(prepared.observations, name)
+        haskey(observation, :chopping) || throw(ArgumentError("observation has no unfringed graph"))
+        graph = observation.chopping.unfringed
+    end
+    propagation = prepared.propagation
+    return propagation === nothing || !propagation.state.shared ? graph : propagation.graph
 end
 
 _observation_response(observation) = get(observation, :response, nothing)
@@ -342,6 +393,17 @@ metadata as `chopped_image_kind`. It is not electrical trigger polarity or pair
 completion. A sample crossing a boundary uses the corresponding graph on each
 side before integration; other observations retain their original sampling.
 One shared detector response runs once per completed chopped exposure.
+
+Compatible scalar Proper paths, optionally followed by terminal rectangular
+pixel integration, can share an exactly equal optical
+prefix. Preparation retains independent branch outputs and one coordinated
+execution graph; every suffix is computed for each admitted sample. Runtime
+inputs used by the prefix, including separately staged physical OPD inputs, are
+compared before propagation. Unequal values select the retained independent
+graphs for that sample. Inputs used only by suffixes remain branch-specific.
+Unsupported topologies retain independent execution. Query
+[`optical_execution_graph`](@ref) for the graph that actually propagates a path;
+original branch graph sequences describe only their standalone use.
 """
 function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTuple,
         observations::NamedTuple,input_names=(opd=:pupil_opd,amplitude=:pupil_amplitude))
@@ -436,15 +498,67 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
     if target!=HostComputeDevice()
         opd=zeros(T,size(opd));amplitude=zeros(T,size(amplitude))
     end
-    return PreparedExternalPupil(graphs,exposures,opd,amplitude,observations,input_names,
+    propagation = _prepare_external_pupil_propagation(graphs, observations, input_names)
+    return PreparedExternalPupil(graphs,exposures,opd,amplitude,observations,input_names,propagation,
         _ExternalPupilState(-1,0,0,nothing,0,0,0))
 end
 
 function _reset_observation_graphs!(prepared)
+    if prepared.propagation !== nothing
+        reset_graph!(prepared.propagation.graph)
+        prepared.propagation.state.shared = true
+    end
     for (name, graph) in pairs(prepared.graphs),
             variant in _observation_graphs(graph, getproperty(prepared.observations, name))
         reset_graph!(variant)
     end
+    return nothing
+end
+
+function _propagate_external_pupil!(prepared)
+    propagation = prepared.propagation
+    # A sample may use either execution mode. Neither mode may bypass a
+    # failure or an outstanding standalone step in the other retained owner.
+    _require_external_pupil_graph_ready(propagation.graph)
+    for (name, graph) in pairs(prepared.graphs),
+            variant in _observation_graphs(graph, getproperty(prepared.observations, name))
+        _require_external_pupil_graph_ready(variant)
+    end
+    for (name, base_graph) in pairs(prepared.graphs), graph in
+            _observation_graphs(base_graph, getproperty(prepared.observations, name))
+        _with_prepared_device_execution_context(graph.context) do
+            copyto!(graph_input(graph,prepared.input_names.opd),prepared.pupil_opd)
+            copyto!(graph_input(graph,prepared.input_names.amplitude),prepared.pupil_amplitude)
+        end
+    end
+    owner = prepared_graph_node(propagation.graph, :propagation)
+    # Pupil quantities were just staged identically by this sole owner. The
+    # exposed joint graph still checks every prefix input on direct submission.
+    propagation.state.shared = _shared_prefix_inputs_match(owner, false)
+    propagation.state.shared || return false
+    # Every other runtime input (including physical DM OPD) remains bound
+    # explicitly to the original branch input. The coordinated node checks
+    # matching values before executing its shared prefix.
+    ticket = step_graph_async!(propagation.graph)
+    _wait_graph_step!(ticket, () -> _publish_external_pupil_propagation!(propagation))
+    return true
+end
+
+function _publish_external_pupil_propagation!(propagation)
+    _with_prepared_device_execution_context(propagation.graph.context) do
+        for (source, destination) in propagation.outputs
+            copyto_backend_async!(destination, source)
+        end
+    end
+    _synchronize_prepared_device_execution_context!(propagation.graph.context)
+    return nothing
+end
+
+function _require_external_pupil_graph_ready(graph)
+    graph_failed(graph) && throw(AlgorithmGraphError(
+        "external pupil propagation is stopped after a failed graph step; reset it before reuse"))
+    graph_step_pending(graph) && throw(AlgorithmGraphError(
+        "external pupil propagation has an outstanding graph step"))
     return nothing
 end
 
@@ -531,14 +645,17 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
         prepared.pupil_amplitude[index]=a
         prepared.pupil_opd[index]=a==0 ? 0 : opd[index]
     end
+    shared = prepared.propagation !== nothing && _propagate_external_pupil!(prepared)
     for (name,base_graph) in pairs(prepared.graphs), graph in _active_observation_graphs(
             base_graph,getproperty(prepared.observations,name),start,finish,
             getproperty(prepared.exposures,name).duration_ns)
-        _with_prepared_device_execution_context(graph.context) do
-            copyto!(graph_input(graph,prepared.input_names.opd),prepared.pupil_opd)
-            copyto!(graph_input(graph,prepared.input_names.amplitude),prepared.pupil_amplitude)
+        if !shared
+            _with_prepared_device_execution_context(graph.context) do
+                copyto!(graph_input(graph,prepared.input_names.opd),prepared.pupil_opd)
+                copyto!(graph_input(graph,prepared.input_names.amplitude),prepared.pupil_amplitude)
+            end
+            step_graph!(graph)
         end
-        step_graph!(graph)
         intensity=graph_output(graph,getproperty(prepared.observations,name).output)
         _with_prepared_device_execution_context(graph.context) do
             _validate_intensity(intensity)

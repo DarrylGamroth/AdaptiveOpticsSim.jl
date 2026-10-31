@@ -138,6 +138,13 @@ graph's mutable execution storage. A ticket is single-use. An asynchronous
 device failure makes the graph fail-stop until [`reset_graph!`](@ref).
 """
 function wait_graph_step!(ticket::GraphStepTicket)
+    return _wait_graph_step!(ticket, nothing)
+end
+
+# Composed owners may finish publication into their exact borrowed buffers
+# before the graph sequence commits. Publication shares the graph's existing
+# failure boundary; it cannot leave an advanced, healthy graph after failure.
+function _wait_graph_step!(ticket::GraphStepTicket, complete)
     graph = ticket.graph
     state = graph.state
     state.pending || _throw_stale_graph_step_ticket(ticket.sequence)
@@ -153,6 +160,7 @@ function wait_graph_step!(ticket::GraphStepTicket)
             )
         end
         _complete_prepared_graph_execution!(graph.execution, graph.nodes)
+        complete === nothing || complete()
     catch
         state.failed = true
         state.pending = false

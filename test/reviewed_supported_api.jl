@@ -341,6 +341,7 @@ const REVIEWED_SUPPORTED_API = (
         (
             :CCDDetectorAcquisitionNode, :CCDDetectorAcquisitionNodeConfig,
             :external_pupil_contract,
+            :optical_execution_graph,
             :CMOSDetectorAcquisitionNode, :CMOSDetectorAcquisitionNodeConfig,
             :DeformableMirrorSurfaceNode, :DeformableMirrorSurfaceNodeConfig,
             :EMCCDDetectorAcquisitionNode, :EMCCDDetectorAcquisitionNodeConfig,

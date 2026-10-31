@@ -534,6 +534,25 @@ before a consumer can use another stream or copy to the host. No physical
 photometry or detector response is inferred.
 Cross-quantity and input/output aliasing are rejected before execution.
 
+Compatible scalar Proper paths can share an exactly equal optical prefix,
+including a path followed by ordinary terminal pixel integration. Preparation
+compares entrance geometry, wavelength, precision, ordered operations and mask
+contents. One ordinary graph propagates the prefix and every private suffix;
+branch products, exposures, chopping and detector cadence remain independent.
+Unsupported topologies or aliases that would change staging order retain their
+original execution. Unequal runtime prefix inputs also select the retained
+independent graphs for that sample; suffix-only inputs stay branch-specific.
+Both execution choices retain the requested stream or captured policy.
+
+`AlgorithmGraphs.optical_execution_graph(prepared, name; unfringed=false)`
+identifies the selected propagation graph. Before input processing and after
+reset it returns the prepared shared graph when available. Metadata collected
+then describes prepared coverage; a query after an admitted sample describes
+its selected execution. Original branch graph sequences describe standalone
+execution. Failed or pending steps in either retained execution choice block
+further propagation until completion or reset, and product copies finish before
+the shared graph publishes its sequence.
+
 An observation can additionally bind a prepared response graph, with explicit
 input/output names, `normalized_to_photon_rate`, metric `pixel_sampling_m`,
 `exposure_duration_s` and `frame_schema`. The scale maps each mean relative
