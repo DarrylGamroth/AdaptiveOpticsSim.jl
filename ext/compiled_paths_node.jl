@@ -2,7 +2,7 @@
 # input grids are independent of propagation and fitted-screen sample counts.
 using FixedSizeArrays: FixedSizeVector
 struct CompiledPathsNode{T} end
-struct CompiledPathsConfiguration{D,P,R,T}
+struct CompiledPathsConfiguration{D,P,R,T,C}
     path::String
     sha256::String
     dm_grid::D
@@ -14,6 +14,7 @@ struct CompiledPathsConfiguration{D,P,R,T}
     summation::Symbol
     output_size::Int
     sampling_m::T
+    output_sampling_calibration::C
 end
 function AOG._compiled_optical_paths_node(::Type{T},name,config,props,bindings) where {T<:Union{Float32,Float64}}
     AOG.graph_node_bindings(AOG.CompiledOpticalPathsNodeFactory{T}(),config)
@@ -35,8 +36,10 @@ function AOG._compiled_optical_paths_node(::Type{T},name,config,props,bindings) 
         ("org.adaptiveopticssim.dm-opd/1",DEFAULT_OPD_SCHEMA,DEFAULT_AMPLITUDE_SCHEMA,DEFAULT_INTENSITY_SCHEMA)) do key,default
         hasproperty(config,key) ? AOG._file_string(getproperty(config,key),"compiled paths $key") : default
     end
+    calibration=AOG._compiled_output_sampling_calibration(config,T)
+    sampling=calibration===nothing ? T(metadata["dx_output"]) : calibration.sampling_m
     c=CompiledPathsConfiguration(path,hash,dm_grid,pupil_grid,reference,schemas,mode,amplitude_mode,
-        summation,Int(metadata["image_size"]),T(metadata["dx_output"]))
+        summation,Int(metadata["image_size"]),sampling,calibration)
     return AOG.algorithm_node(name,CompiledPathsNode{T},c;props=NamedTuple())
 end
 function AOG.graph_node_ports(::Type{CompiledPathsNode{T}},c::CompiledPathsConfiguration) where {T}
@@ -56,7 +59,7 @@ struct CompiledPathsInputWorkspace{A,V}
     reference::A
     validation::V
 end
-struct CompiledPathsOwner{P,I,O,M,W,R,T}
+struct CompiledPathsOwner{P,I,O,M,W,R,T,C}
     propagation::P
     inputs::I
     outputs::O
@@ -64,6 +67,7 @@ struct CompiledPathsOwner{P,I,O,M,W,R,T}
     workspace::W
     reference::R
     sampling_m::T
+    output_sampling_calibration::C
 end
 function _compiled_paths_ratio!(attenuation,amplitude,reference)
     for i in eachindex(attenuation,amplitude,reference)
@@ -115,7 +119,7 @@ function AOG.prepare_graph_node(::Type{CompiledPathsNode{T}},c::CompiledPathsCon
     end
     owner=CompiledPathsOwner(propagation,inputs,outputs,(dm=dm_mapping,pupil=pupil_mapping),
         CompiledPathsInputWorkspace(native_amplitude,native_reference,
-            _compiled_paths_input_validation(target)),reference,c.sampling_m)
+            _compiled_paths_input_validation(target)),reference,c.sampling_m,c.output_sampling_calibration)
     return owner
 end
 _compiled_paths_input_reference(::Nothing,target,T)=nothing

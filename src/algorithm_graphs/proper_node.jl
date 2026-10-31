@@ -105,6 +105,9 @@ A mapped train reports its declared fixed pitch or cold-prepared reference
 output pitch. Obtain an owner with `prepared_graph_node(graph, node_name)`.
 Pixel-integration owners and configurations instead report their declared output
 pitch, and require equal pitches on both axes for this scalar interface.
+Compiled-path owners report the artifact pitch unless an explicit
+`output_sampling_calibration` declares detector coordinates for its existing
+samples. That calibration changes coordinates only, without resampling values.
 
 For a scalar train's run-immutable plan, obtained as `node.config` from the
 Proper node factory, perform the geometry traversal on the host during cold
@@ -125,17 +128,39 @@ struct CompiledOpticalPathsNodeFactory{T<:Union{Float32,Float64}} end
 
 Return the cold factory for a hash-bound compiled multi-path Fresnel model.
 Proper supplies execution; YAML and FITSIO supply optional model artifact I/O.
+Optional `output_sampling_calibration=(sampling_m=..., provenance="...")`
+declares the physical pitch of existing output samples in detector coordinates.
+It requires a finite positive square-pixel pitch and nonempty application-owned
+calibration provenance. It changes no intensities, dimensions, propagation,
+radiometry or detector response, and supplies no absolute detector ROI origin.
 """
 compiled_optical_paths_node_factory(; T::Type{<:Union{Float32,Float64}}=Float64) =
     CompiledOpticalPathsNodeFactory{T}()
 
 const _COMPILED_PATHS_FIELDS = (:model_path, :model_sha256, :dm_grid, :pupil_grid,
     :dm_opd_schema, :pupil_opd_schema, :pupil_amplitude_schema, :output_schema,
-    :summation, :entrance_amplitude_mode, :entrance_reference_amplitude)
+    :summation, :entrance_amplitude_mode, :entrance_reference_amplitude,
+    :output_sampling_calibration)
 
-function graph_node_bindings(::CompiledOpticalPathsNodeFactory, config::NamedTuple)
+function _compiled_output_sampling_calibration(config, ::Type{T}) where {T}
+    hasproperty(config, :output_sampling_calibration) || return nothing
+    calibration = config.output_sampling_calibration
+    context = "compiled output_sampling_calibration"
+    calibration isa NamedTuple || throw(_file_error(context, "expected a table"))
+    _require_named_fields(calibration, (:sampling_m, :provenance),
+        (:sampling_m, :provenance), context)
+    sampling = T(_file_real(calibration.sampling_m, "$context.sampling_m"))
+    isfinite(sampling) && sampling > zero(T) || throw(_file_error(
+        context, "sampling_m must be finite and positive in the node numeric type"))
+    provenance = _file_string(calibration.provenance, "$context.provenance")
+    isempty(strip(provenance)) && throw(_file_error(context, "provenance must not be empty"))
+    return (sampling_m=sampling, provenance=provenance)
+end
+
+function graph_node_bindings(::CompiledOpticalPathsNodeFactory{T}, config::NamedTuple) where {T}
     _require_named_fields(config, _COMPILED_PATHS_FIELDS,
         (:model_path, :model_sha256, :dm_grid, :pupil_grid), "compiled optical paths config")
+    _compiled_output_sampling_calibration(config, T)
     mode = hasproperty(config,:entrance_amplitude_mode) ? config.entrance_amplitude_mode : "reference_ratio"
     mode in ("reference_ratio","log_attenuation") || throw(AlgorithmGraphError("invalid entrance_amplitude_mode"))
     if mode == "reference_ratio"

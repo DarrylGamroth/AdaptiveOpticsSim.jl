@@ -110,12 +110,16 @@ function compiled_paths_yaml_fixture(directory;source_mode=false)
 end
 function compiled_paths_test_graph(model;mode="log_attenuation",reference=nothing,
         dm=zeros(8,8),opd=zeros(8,8),amplitude=zeros(8,8),grid=nothing,
-        target=AdaptiveOpticsSim.Backends.compute_device(dm),execution=StreamGraphExecution())
+        target=AdaptiveOpticsSim.Backends.compute_device(dm),execution=StreamGraphExecution(),
+        output_sampling_calibration=nothing)
     if grid===nothing
         grid=(size=(8,8),axes=(1,2),sampling_m=(model.fixture.dx,model.fixture.dx),center_pixel=(5.0,5.0))
     end
     config=(model_path=model.path,model_sha256=model.sha256,dm_grid=grid,pupil_grid=grid,
         entrance_amplitude_mode=mode)
+    if output_sampling_calibration!==nothing
+        config=merge(config,(;output_sampling_calibration))
+    end
     bindings=NamedTuple()
     if mode=="reference_ratio"
         config=merge(config,(entrance_reference_amplitude="pupil_reference",))

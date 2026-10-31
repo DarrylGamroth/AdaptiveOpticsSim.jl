@@ -947,6 +947,28 @@ exposures. `summation: path_pairs` preserves the source arithmetic;
 signed pixel-MTF filter can reintroduce signed output, so photon acquisition
 requires a no-MTF model and an explicitly qualified downstream detector response.
 
+A fitted model may already sample a calibrated detector ROI even when its
+internal propagation metric differs from the detector's manufactured pixel
+pitch. In that case declare the existing samples' detector coordinates explicitly:
+
+```yaml
+output_sampling_calibration:
+  sampling_m: 0.000015
+  provenance: "Application calibration record identifying this fitted ROI and its plate scale"
+```
+
+The calibration requires a finite positive square-pixel pitch representable in
+the node's numeric type and nonempty provenance. `optical_sampling_m` then
+reports this pitch for observation/detector validation. The prepared node retains
+the declaration as `output_sampling_calibration`. Every output value and shape
+remains unchanged; the compiled propagation and resampling operations still use
+the hash-bound artifact metric. This differs from a Proper train's
+`output_sampling_m`, which performs numerical grid mapping. Omit the calibration
+to retain the artifact's `dx_output` pitch. The declaration establishes neither
+absolute full-sensor ROI origin nor physical radiometry or detector response.
+The application must record the empirical plate-scale evidence supporting its
+coordinate calibration; matching pixel counts alone is insufficient.
+
 The cold compiler `tools/export_optical_paths.py` is derived from SPIDERSSim
 b479871's physical15 exporter and imports pinned spectre/spiders-sim only during
 preparation. Cold tools require Python3.11+, NumPy, Astropy, PyYAML and the pinned

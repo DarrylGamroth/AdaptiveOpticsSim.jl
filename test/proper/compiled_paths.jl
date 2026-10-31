@@ -229,6 +229,78 @@ end
     end
 end
 
+@testset "Compiled output sampling calibration preserves samples" begin
+    mktempdir() do directory
+        model=compiled_paths_yaml_fixture(directory)
+        for T in (Float32,Float64)
+            dm=T[1e-8*sin(x+2y) for y in 1:8,x in 1:8]
+            opd=zeros(T,8,8)
+            amplitude=zeros(T,8,8)
+            native=compiled_paths_test_graph(model;dm,opd,amplitude)
+            calibration=(sampling_m=15e-6,provenance="synthetic detector coordinate calibration")
+            calibrated=compiled_paths_test_graph(model;dm,opd,amplitude,
+                output_sampling_calibration=calibration)
+            owner=AlgorithmGraphs.prepared_graph_node(calibrated,:optics)
+            @test optical_sampling_m(owner)===T(calibration.sampling_m)
+            @test owner.output_sampling_calibration.provenance==calibration.provenance
+            @test AlgorithmGraphs.prepared_graph_node(native,:optics).output_sampling_calibration===nothing
+            step_graph!(native);step_graph!(calibrated)
+            for name in (:fringed,:unfringed,:reference)
+                @test graph_output(calibrated,name)==graph_output(native,name)
+                @test size(graph_output(calibrated,name))==(5,5)
+            end
+        end
+        for calibration in ((sampling_m=0,provenance="source"),
+                (sampling_m=-1e-6,provenance="source"),
+                (sampling_m=Inf,provenance="source"),
+                (sampling_m=NaN,provenance="source"),
+                (sampling_m=true,provenance="source"),
+                (sampling_m=(15e-6,15e-6),provenance="source"),
+                (sampling_m=15e-6,provenance=" "),
+                (sampling_m=15e-6,provenance=17),
+                (sampling_m=15e-6,), (provenance="source",),
+                (sampling_m=15e-6,provenance="source",roi_origin=(1,1)), 15e-6)
+            @test_throws AlgorithmGraphError compiled_paths_test_graph(model;
+                output_sampling_calibration=calibration)
+        end
+        for pitch in (1e-300,1e300)
+            @test_throws AlgorithmGraphError compiled_paths_test_graph(model;
+                dm=zeros(Float32,8,8),opd=zeros(Float32,8,8),amplitude=zeros(Float32,8,8),
+                output_sampling_calibration=(sampling_m=pitch,provenance="source"))
+        end
+
+        # The ordinary observation validator consumes the calibrated coordinates;
+        # matching dimensions alone cannot admit a mismatched detector grid.
+        detector=ingaas_detector_acquisition_node(:detector;rows=5,columns=5,
+            pixel_sampling_m=(15e-6,15e-6),spectral_channel=:synthetic,
+            exposure_duration_s=1e-3,quantum_efficiency=0.5,photon_noise=false,
+            readout_noise=false,rng_seed=17,photon_rate_schema="test.rate/1",
+            frame_schema="test.frame/1",T=Float64)
+        response=prepare_algorithm_graph(algorithm_graph((detector,);
+            inputs=(graph_input(:photon_rate,:detector=>:photon_rate,zeros(5,5)),),
+            outputs=(graph_output(:frame,:detector=>:frame),)))
+        specification=(graph=response,input=:photon_rate,output=:frame,
+            normalized_to_photon_rate=1e6,pixel_sampling_m=(15e-6,15e-6),
+            exposure_duration_s=1e-3,frame_schema="test.frame/1")
+        native=compiled_paths_test_graph(model)
+        observations=(sensor=(output=:fringed,sampling_node=:optics,response=specification),)
+        @test_throws AlgorithmGraphError prepare_external_pupil((sensor=native,);
+            exposure_durations=(sensor=ModelDuration(1_000_000),),observations,
+            input_names=(opd=:opd,amplitude=:amplitude))
+        calibrated=compiled_paths_test_graph(model;output_sampling_calibration=(
+            sampling_m=15e-6,provenance="synthetic detector coordinate calibration"))
+        prepared=prepare_external_pupil((sensor=calibrated,);
+            exposure_durations=(sensor=ModelDuration(1_000_000),),observations,
+            input_names=(opd=:opd,amplitude=:amplitude))
+        images=Matrix{Float64}[]
+        emit(name,image,metadata)=push!(images,copy(image))
+        @test step_external_pupil!(emit,prepared,zeros(8,8),zeros(8,8),
+            ModelTimestamp(0),ModelDuration(1_000_000);domain=ntuple(_->UInt8(1),16),
+            generation=UInt64(1),sequence=UInt64(1))
+        @test only(images)≈500 .* graph_output(calibrated,:fringed)
+    end
+end
+
 @testset "Compiled source-mode live input contract" begin
     mktempdir() do directory
         model=compiled_paths_yaml_fixture(directory;source_mode=true)
