@@ -364,6 +364,7 @@ const REVIEWED_SUPPORTED_API = (
             :snapshot_values, :snapshot_metadata, :release_graph_output_snapshot!,
             :reset_graph_output_snapshot!,
             :graph_node_configuration,
+            :compose_proper_camera_graph,
             :compiled_optical_paths_node_factory,
         ),
         public_extension =

@@ -534,6 +534,28 @@ before a consumer can use another stream or copy to the host. No physical
 photometry or detector response is inferred.
 Cross-quantity and input/output aliasing are rejected before execution.
 
+`AlgorithmGraphs.compose_proper_camera_graph` returns an application-serializable
+graph with terminal `pixel_integration_f32` after one scalar Float32 Proper
+intensity node. Supply construction mask arrays through `bindings`; frame input
+entries are copied without loading their arrays. Native optical pitch comes from
+the factory plan rather than an instrument-specific sampling formula:
+
+```julia
+camera = AlgorithmGraphs.compose_proper_camera_graph(optical_graph;
+    bindings=(; apodizer, lyot_stop), name="science_camera",
+    output_shape=(221, 221), output_sampling_m=(15e-6, 15e-6),
+    array_center_m=(0.0, 0.0), output_schema="example.relative-pixel-flux/1")
+```
+
+ROI shape, physical pitches and array center use logical `(row, column)` order.
+The explicit `array_center_m` is the geometric ROI center relative to the optical
+axis. Zero aligns those centers; even pixel counts then place the optical axis
+at a half-integer pixel coordinate. A nonzero center shifts that coordinate by
+`-array_center_m/output_sampling_m`. This composition assigns no measured ROI
+origin, flux normalization, detector response or exposure. It preserves the
+source graph, its bindings, and the `intensity` output name, and rejects existing
+links or additional nodes and outputs.
+
 Compatible scalar Proper paths can share an exactly equal optical prefix,
 including a path followed by ordinary terminal pixel integration. Preparation
 compares entrance geometry, wavelength, precision, ordered operations and mask

@@ -298,6 +298,23 @@ end
             ModelTimestamp(0),ModelDuration(1_000_000);domain=ntuple(_->UInt8(1),16),
             generation=UInt64(1),sequence=UInt64(1))
         @test only(images)≈500 .* graph_output(calibrated,:fringed)
+
+        # Shared scalar Proper prefixes must never replace compiled/fitted
+        # propagation, even when multiple calibrated paths are observed.
+        other=compiled_paths_test_graph(model;output_sampling_calibration=(
+            sampling_m=15e-6,provenance="synthetic detector coordinate calibration"))
+        compiled=prepare_external_pupil((;calibrated,other);
+            exposure_durations=(calibrated=ModelDuration(1_000_000),other=ModelDuration(1_000_000)),
+            observations=(calibrated=(output=:fringed,sampling_node=:optics),
+                other=(output=:reference,sampling_node=:optics)),
+            input_names=(opd=:opd,amplitude=:amplitude))
+        @test compiled.propagation===nothing
+        @test AlgorithmGraphs.optical_execution_graph(compiled,:calibrated)===calibrated
+        @test AlgorithmGraphs.optical_execution_graph(compiled,:other)===other
+        @test step_external_pupil!((args...)->nothing,compiled,zeros(8,8),zeros(8,8),
+            ModelTimestamp(0),ModelDuration(1_000_000);domain=ntuple(_->UInt8(1),16),
+            generation=UInt64(1),sequence=UInt64(1))
+        @test optical_sampling_m(AlgorithmGraphs.prepared_graph_node(calibrated,:optics))==15e-6
     end
 end
 
