@@ -23,6 +23,8 @@ function compare_compiled_input_capture(model,::Type{T};mode="reference_ratio",g
     captured=compiled_paths_test_graph(model;dm=device[1],opd=device[2],amplitude=device[3],
         target=COMPILED_TARGET,execution=CapturedGraphExecution(),kwargs...)
     owner=AlgorithmGraphs.prepared_graph_node(captured,:optics)
+    cpu_owner=AlgorithmGraphs.prepared_graph_node(cpu,:optics)
+    stream_owner=AlgorithmGraphs.prepared_graph_node(streamed,:optics)
     @test captured_graph_node_count(captured)==1
     @test graph_execution_policy(captured) isa CapturedGraphExecution
     @test AlgorithmGraphs.graph_node_capture_capability(owner) isa AlgorithmGraphs.GraphNodeCaptureSafe
@@ -44,9 +46,17 @@ function compare_compiled_input_capture(model,::Type{T};mode="reference_ratio",g
         for (destination,source) in zip(device,(dm,opd,amplitude));copyto!(destination,source);end
         AMDGPU.synchronize()
         step_graph!(cpu);step_graph!(streamed);step_graph!(captured)
+        # Preserve an independent-path oracle for the shared-prefix fixture.
+        CP._enqueue_compiled_paths!(cpu_owner.propagation,false)
+        Backends._with_prepared_device_execution_context(streamed.context) do
+            CP._enqueue_compiled_paths!(stream_owner.propagation,false)
+            Backends._synchronize_prepared_device_execution_context!(streamed.context)
+        end
         actual=map(name->Array(graph_output(captured,name)),(:fringed,:unfringed,:reference))
         for (name,values) in zip((:fringed,:unfringed,:reference),actual)
             @test values ≈ graph_output(cpu,name) rtol=rtol atol=atol
+            @test values ≈ getproperty(cpu_owner.propagation.products,name) rtol=rtol atol=atol
+            @test values ≈ Array(getproperty(stream_owner.propagation.products,name)) rtol=rtol atol=atol
             @test values ≈ Array(graph_output(streamed,name)) rtol=rtol atol=atol
             @test all(isfinite,values) && sum(values)>0
         end
@@ -91,6 +101,12 @@ end
     mktempdir() do directory
         model=compiled_paths_yaml_fixture(directory;source_mode=true)
         compare_compiled_input_capture(model,Float32)
+    end
+    mktempdir() do directory
+        model=compiled_paths_yaml_fixture(directory;fixture=compiled_paths_shared_fixture())
+        for T in (Float32,Float64)
+            compare_compiled_input_capture(model,T)
+        end
     end
 end
 

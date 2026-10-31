@@ -48,6 +48,12 @@ struct PathTransformPlan{A,V}
     ghost::V
 end
 
+struct PathPrefixPlan
+    cache_index::Int
+    first_path::Int
+    count::Int
+end
+
 struct CompiledPathsPlan{T,D,P,F,A}
     target::D
     grid::Int
@@ -57,6 +63,7 @@ struct CompiledPathsPlan{T,D,P,F,A}
     n_anchor::Int
     wavelengths::FixedSizeVectorDefault{T}
     paths::P
+    shared_prefixes::FixedSizeVectorDefault{PathPrefixPlan}
     fast_paths::F
     resample_kernel::A
     main_phase::A
@@ -90,6 +97,7 @@ end
 struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L}
     field::A
     prefix::A
+    shared_prefixes::V
     wavefront::W
     context::C
     operations::O
@@ -313,6 +321,42 @@ function _compiled_paths_filter!(out, input, transfer, fft_workspace)
 end
 
 _compiled_paths_seal(values::Vector{T}) where {T} = FixedSizeVectorDefault{T}(values)
+
+# Array identity proves the frozen coefficients came from the same cold model
+# binding; scalar equality includes wavelength, screen source and propagation
+# direction. Distinct bindings are conservatively executed independently.
+function _compiled_paths_same_operation(a, b)
+    return a.kind == b.kind && a.array === b.array &&
+        a.auxiliary === b.auxiliary && a.post === b.post &&
+        isequal(a.dx, b.dx) && isequal(a.dz, b.dz) &&
+        isequal(a.wavelength_m, b.wavelength_m) && isequal(a.gouy, b.gouy) &&
+        a.from_waist == b.from_waist && a.forward == b.forward && a.source == b.source
+end
+
+function _compiled_paths_shared_prefixes(paths)
+    prefixes = fill(PathPrefixPlan(0, 0, 0), length(paths))
+    visited = falses(length(paths))
+    cache_count = 0
+    for first_path in eachindex(paths)
+        visited[first_path] && continue
+        reference = paths[first_path]
+        group = [i for i in first_path:length(paths) if
+            paths[i].anchor_index == reference.anchor_index &&
+            paths[i].entrance === reference.entrance]
+        visited[group] .= true
+        length(group) > 1 || continue
+        count = 0
+        for index in 1:minimum(i -> length(paths[i].prefix), group)
+            all(i -> _compiled_paths_same_operation(reference.prefix[index],
+                paths[i].prefix[index]), group) || break
+            count = index
+        end
+        count > 0 || continue
+        cache_count += 1
+        prefixes[group] .= Ref(PathPrefixPlan(cache_count, first_path, count))
+    end
+    return _compiled_paths_seal(prefixes), cache_count
+end
 
 function _compiled_paths_array(target, ::Type{T}, dims...) where {T}
     out = Backends.allocate_device_array(target, T, dims...)
@@ -557,9 +601,10 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
     pixel_padded = image_size + 2pixel_pad
     size(loadarray(fast["pixel_mtf"])) == (pixel_padded, pixel_padded) ||
         throw(DimensionMismatch("compiled optical paths pixel MTF grid differs"))
+    shared_prefixes, prefix_count = _compiled_paths_shared_prefixes(paths)
     plan = CompiledPathsPlan(target, n, image_size, crop_start, ne, na,
         FixedSizeVectorDefault{T}(T.(metadata["wavelengths"])),
-        _compiled_paths_seal(paths), _compiled_paths_seal(fast_paths),
+        _compiled_paths_seal(paths), shared_prefixes, _compiled_paths_seal(fast_paths),
         loadarray(fast["resample_kernel"]), loadarray(fast["main_phase"]),
         FixedSizeVectorDefault{Complex{T}}(pg),
         loadarray(fast["pixel_mtf"]), phantom_pad, pixel_pad,
@@ -603,7 +648,9 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
         _compiled_paths_array(target, T, image_size, image_size),
         _compiled_paths_array(target, T, image_size, image_size))
     pixel_mtf = _compiled_paths_prepare_pixel_mtf(plan, products)
-    workspace = CompiledPathsWorkspace(field, prefix, wf, ctx, operations,
+    prefix_fields = _compiled_paths_seal(A[
+        _compiled_paths_array(target, Complex{T}, n, n) for _ in 1:prefix_count])
+    workspace = CompiledPathsWorkspace(field, prefix, prefix_fields, wf, ctx, operations,
         physical_fft, image_fft, phantom_fft,
         _compiled_paths_array(target, Complex{T}, image_size, image_size),
         _compiled_paths_array(target, Complex{T}, image_size, image_size),
@@ -671,9 +718,10 @@ function _compiled_paths_interpolate!(work, kernel, source, coefficients)
     return work.opd
 end
 
-function _compiled_paths_execute!(owner, sequence, offset)
+function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(sequence))
     w = owner.workspace
-    for (index, op) in enumerate(sequence)
+    for index in first:last
+        op = sequence[index]
         work = w.operations[offset + index]
         if op.kind == PathMultiply
             w.field .*= op.array
@@ -712,12 +760,31 @@ end
 
 @inline _compiled_paths_slot(path, anchor, n_anchor) = (path - 1) * n_anchor + anchor
 
-function _compiled_paths_slow!(owner)
+function _compiled_paths_slow!(owner, share_prefix::Bool=true)
     plan, w = owner.plan, owner.workspace
     offset = 0
-    for path in plan.paths
-        Backends.copyto_backend_async!(w.field, path.entrance)
-        offset = _compiled_paths_execute!(owner, path.prefix, offset)
+    for (index, path) in enumerate(plan.paths)
+        shared = plan.shared_prefixes[index]
+        if share_prefix && shared.count > 0
+            cached = w.shared_prefixes[shared.cache_index]
+            if index == shared.first_path
+                Backends.copyto_backend_async!(w.field, path.entrance)
+                _compiled_paths_execute!(owner, path.prefix, offset, 1, shared.count)
+                Backends.copyto_backend_async!(cached, w.field)
+            else
+                Backends.copyto_backend_async!(w.field, cached)
+            end
+            # Each operation owns scratch at its original offset, including
+            # skipped live-screen workspaces. Prefix fields are refreshed at
+            # the first member on every invocation, also during GPU capture.
+            # PROPER operations rebind their wavelength, sampling, position
+            # and reference surface in _compiled_paths_proper!; no trajectory
+            # geometry or FFT scratch binding is restored from this field.
+            offset = _compiled_paths_execute!(owner, path.prefix, offset, shared.count + 1)
+        else
+            Backends.copyto_backend_async!(w.field, path.entrance)
+            offset = _compiled_paths_execute!(owner, path.prefix, offset)
+        end
         Backends.copyto_backend_async!(w.prefix, w.field)
         offset = _compiled_paths_execute!(owner, path.closed, offset)
         slot = _compiled_paths_slot(path.path_index, path.anchor_index, plan.n_anchor)
@@ -799,9 +866,9 @@ function _compiled_paths_apply_pixel_mtf!(owners::Tuple)
     return nothing
 end
 
-function _enqueue_compiled_paths!(owner::PreparedCompiledPaths)
+function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bool=true)
     plan, w, products = owner.plan, owner.workspace, owner.products
-    _compiled_paths_slow!(owner)
+    _compiled_paths_slow!(owner, share_prefix)
     _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true)
     _compiled_paths_fast!(w.only_envelopes, w.only_sources, owner, false)
     for k in 1:length(plan.fast_paths), a in 1:plan.n_anchor

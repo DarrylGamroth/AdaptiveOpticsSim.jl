@@ -979,6 +979,13 @@ no reference binding. The native API
 reader are cold inputs and are not retained in execution ownership. Call
 `Optics.propagate_compiled_optical_paths!` on the returned standalone owner.
 
+Preparation shares identical leading operations among paths at the same spectral
+anchor when they use the same frozen entrance and coefficient bindings. Each
+execution recomputes that prefix from the current live inputs and copies its field
+into the remaining branches, preserving their operation and spectral summation
+order. Prepared prefix buffers stay on the selected device; no field is reused
+across calls or wavelength anchors.
+
 The three outputs are simultaneous deterministic relative intensities:
 `fringed`, `unfringed` and `reference`. They do not implement temporal chopping,
 exposure cadence, detector noise or physical radiometry. Select an output as a
@@ -1026,7 +1033,9 @@ raw fitted files remain untouched.
 
 Validate the numerical executor with `test/proper/compiled_paths.jl`; it includes
 an independent centered Fresnel-equation fixture, artifact integrity and metric
-mapping checks, opaque-reference admission, changed-support rejection and prepared allocation checks. The
+mapping checks, opaque-reference admission, changed-support rejection and prepared
+allocation checks. Shared-prefix checks compare with independent execution under
+changing live inputs, both spectral summation modes and reset. The
 optional `tools/compare_compiled_optical_paths.jl MODEL.yaml FROZEN_EXPORT`
 compares a compiled model against the original compiler's hash-bound products.
 Such agreement is a regression check between models with shared ancestry; it

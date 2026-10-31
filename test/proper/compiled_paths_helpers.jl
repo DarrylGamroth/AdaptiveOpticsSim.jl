@@ -75,13 +75,56 @@ function compiled_paths_synthetic_oracle(fixture, dm, entrance_opd, attenuation)
         unfringed=abs2.(closed), reference=abs2.(only))
 end
 
+# Multiple live branches and spectral anchors, plus an independent ghost.
+# Branches fork after the original fixture's full Fresnel prefix.
+function compiled_paths_shared_fixture()
+    fixture = compiled_paths_synthetic_fixture()
+    metadata, arrays = fixture.metadata, fixture.arrays
+    metadata["n_env"] = 3
+    metadata["wavelengths"] = [fixture.lambda, 1.1fixture.lambda]
+    metadata["channels"] = copy(metadata["wavelengths"])
+    original = only(metadata["propagations"])
+    paths = typeof(original)[]
+    for path in 0:2, anchor in 0:1
+        branch = deepcopy(original)
+        branch["path_index"], branch["anchor_index"] = path, anchor
+        for op in branch["prefix"]
+            haskey(op, "lam") && (op["lam"] = metadata["wavelengths"][anchor + 1])
+        end
+        name = "branch_$path"
+        arrays[name] = fixture.arrays["mask"] .* cis.(0.03path .* (1:fixture.n))
+        push!(branch["prefix"], Dict("kind"=>"mult", "array"=>name))
+        # A live suffix needs its own original operation workspace after the
+        # shared operations have been skipped; it also checks phase metadata.
+        branch["closed"] = Dict{String,Any}[op for op in branch["closed"]]
+        push!(branch["closed"], deepcopy(branch["prefix"][3]))
+        push!(branch["closed"], deepcopy(branch["prefix"][4]))
+        push!(paths, branch)
+    end
+    metadata["propagations"] = paths
+    arrays["basis"] = ComplexF64[0.8 0.2; 0.3 0.7]
+    arrays["coefficients"] = ComplexF64[1 0.2im -0.1 0.03; 0.9 0.1 0.1im 0.02]
+    arrays["visibility"] = ones(ComplexF64, 4, 4)
+    arrays["ghost"] = 0.01 .* fixture.arrays["phase"]
+    fast = metadata["fast"]
+    fast["basis"], fast["coefficient"] = "basis", "coefficients"
+    fast["visibility"] = ["visibility", "visibility"]
+    fast["pinhole_gain_real"] = [0.3, 0.2]
+    fast["pinhole_gain_imag"] = [-0.2, 0.1]
+    metadata["fast_paths"] = [Dict("source_index"=>source,
+        "shift_transfer"=>"one", "phase_multiplier"=>["one", "phase"],
+        "ghost_field_anchor"=>source == -1 ? ["ghost", "ghost"] : String[])
+        for source in (0, 1, 2, -1)]
+    return fixture
+end
+
 function compiled_paths_allocated(owner)
     AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
     return @allocated AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
 end
 
-function compiled_paths_yaml_fixture(directory;source_mode=false)
-    fixture=compiled_paths_synthetic_fixture()
+function compiled_paths_yaml_fixture(directory;source_mode=false,
+        fixture=compiled_paths_synthetic_fixture())
     source_mode || (fixture.arrays["entrance"][2,3]=0) # Frozen opaque sky entrance sample.
     metadata=deepcopy(fixture.metadata)
     metadata["mode"]=source_mode ? "source" : "sky"

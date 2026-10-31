@@ -379,3 +379,67 @@ end
         end
     end
 end
+
+@testset "Compiled optical common prefixes" begin
+    for summation in (:path_pairs, :coherent_modes)
+        fixture = compiled_paths_shared_fixture()
+        dm = zeros(fixture.n, fixture.n)
+        opd, attenuation = copy(dm), copy(dm)
+        owner = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
+            fixture.metadata, ref -> fixture.arrays[ref];
+            dm_opd=dm, entrance_opd=opd, entrance_attenuation=attenuation, summation)
+        @test length(owner.workspace.shared_prefixes) == 2
+        @test all(p -> p.count == 5, owner.plan.shared_prefixes)
+        @test [p.cache_index for p in owner.plan.shared_prefixes] == [1, 2, 1, 2, 1, 2]
+        oracle = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
+            fixture.metadata, ref -> fixture.arrays[ref];
+            dm_opd=dm, entrance_opd=opd, entrance_attenuation=attenuation, summation)
+        before = nothing
+        for frame in 1:5
+            @. dm = 8e-8 * sin(frame * 0.3 * (1:fixture.n))
+            @. opd = 2e-8 * cos(frame * 0.7 * (1:fixture.n))
+            @. attenuation = frame * 0.02 * (1:fixture.n)
+            # Poison retained fields to prove every invocation refreshes them.
+            foreach(field -> fill!(field, complex(NaN)), owner.workspace.shared_prefixes)
+            CP._enqueue_compiled_paths!(oracle, false)
+            AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
+            for name in (:fringed, :unfringed, :reference)
+                @test getproperty(owner.products, name) == getproperty(oracle.products, name)
+            end
+            if before !== nothing
+                @test owner.products.fringed != before
+            end
+            before = copy(owner.products.fringed)
+        end
+        @test compiled_paths_allocated(owner) == 0
+    end
+    fixture = compiled_paths_shared_fixture()
+    fixture.arrays["other_entrance"] = copy(fixture.arrays["entrance"])
+    # Different entrance bindings and different leading live wavelengths must
+    # not share, even if another spectral anchor still has a common prefix.
+    fixture.metadata["propagations"][3]["entrance"] = "other_entrance"
+    fixture.metadata["propagations"][5]["prefix"][1]["lam"] *= 1.01
+    owner = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
+        fixture.metadata, ref -> fixture.arrays[ref])
+    @test [p.count for p in owner.plan.shared_prefixes] == [0, 5, 0, 5, 0, 5]
+    independent = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
+        fixture.metadata, ref -> fixture.arrays[ref])
+    CP._enqueue_compiled_paths!(independent, false)
+    AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
+    @test owner.products.fringed == independent.products.fringed
+    mktempdir() do directory
+        model = compiled_paths_yaml_fixture(directory; fixture=compiled_paths_shared_fixture())
+        graph = compiled_paths_test_graph(model)
+        step_graph!(graph)
+        original = copy(graph_output(graph, :fringed))
+        owner = AlgorithmGraphs.prepared_graph_node(graph, :optics)
+        owner.inputs.dm_opd .= 1e-7
+        step_graph!(graph)
+        reset_graph!(graph)
+        @test all(iszero, graph_output(graph, :fringed))
+        fill!(owner.inputs.dm_opd, 0)
+        foreach(field -> fill!(field, complex(NaN)), owner.propagation.workspace.shared_prefixes)
+        step_graph!(graph)
+        @test graph_output(graph, :fringed) == original
+    end
+end
