@@ -1031,6 +1031,15 @@ The importer removes origin workstation paths from generated execution metadata
 while retaining hashes of the original provenance. Existing source checkouts and
 raw fitted files remain untouched.
 
+For an already prepared, frozen typed YAML model, use
+`python tools/import_compiled_optical_model.py SOURCE OUTPUT --preserve-metadata`.
+This mode validates every FITS descriptor and payload, stages the array bytes,
+and copies the source YAML bytes exactly, retaining the model hash and existing
+import provenance needed by matched calibration. It rejects TOML and YAML that
+needs path, reference or live-screen name normalization. `--name` selects a single
+relative `.yaml` or `.yml` filename. Keep authored inputs separate from this
+generated output; neither metadata nor arrays in the frozen source are rewritten.
+
 Validate the numerical executor with `test/proper/compiled_paths.jl`; it includes
 an independent centered Fresnel-equation fixture, artifact integrity and metric
 mapping checks, opaque-reference admission, changed-support rejection and prepared

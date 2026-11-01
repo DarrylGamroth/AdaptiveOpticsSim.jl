@@ -4,6 +4,7 @@
 The cold tool auto-detects model.yaml or historical manifest.toml. Runtime readers use typed YAML
 array descriptors. --link preserves frozen generated array bytes without copying
 large data; neither source metadata nor array files are modified.
+--preserve-metadata retains canonical prepared YAML bytes and their provenance.
 """
 import argparse
 import copy
@@ -146,22 +147,42 @@ def main():
     parser.add_argument("output", type=pathlib.Path)
     parser.add_argument("--link", action="store_true")
     parser.add_argument("--name", default="model.yaml")
+    parser.add_argument("--preserve-metadata", action="store_true",
+                        help="Validate and copy canonical prepared YAML without changing metadata bytes")
     args = parser.parse_args()
+    name = pathlib.Path(args.name)
+    if (name.name != args.name or name.suffix not in (".yaml", ".yml")
+            or "\\" in args.name):
+        parser.error("Metadata name must be a single relative YAML filename")
     source = args.source.resolve(strict=True)
     output = args.output.resolve()
     metadata, manifest = read_model_source(source)
+    if args.preserve_metadata and manifest.suffix not in (".yaml", ".yml"):
+        raise ValueError("Metadata preservation requires a typed canonical YAML model")
     source_root = manifest.parent
     if source_root == output:
         parser.error("Import output must differ from the frozen source directory")
+    destination = output / args.name
+    if args.preserve_metadata and destination.is_symlink():
+        raise ValueError("Metadata destination must not be a symbolic link")
     output.mkdir(parents=True, exist_ok=True)
     document = model_document(metadata, output, source_root=source_root, link=args.link)
-    identity = "imported_manifest_sha256" if manifest.suffix == ".toml" else "imported_model_sha256"
-    document["provenance"][identity] = digest(manifest)
-    document["provenance"]["imported_metadata_sha256"] = digest(manifest)
-    document["provenance"]["importer_sha256"] = digest(pathlib.Path(__file__))
-    document["provenance"]["array_preservation"] = "source generated FITS bytes retained exactly"
-    write_model(document, output / args.name)
-    print(f"Imported {len(document['arrays'])} typed optical arrays into {output / args.name}")
+    if args.preserve_metadata:
+        if document != metadata:
+            raise ValueError("Metadata preservation requires canonical YAML without normalization")
+        if destination.exists():
+            if digest(destination) != digest(manifest):
+                raise ValueError("Destination metadata differs from the frozen source")
+        else:
+            shutil.copyfile(manifest, destination)
+    else:
+        identity = "imported_manifest_sha256" if manifest.suffix == ".toml" else "imported_model_sha256"
+        document["provenance"][identity] = digest(manifest)
+        document["provenance"]["imported_metadata_sha256"] = digest(manifest)
+        document["provenance"]["importer_sha256"] = digest(pathlib.Path(__file__))
+        document["provenance"]["array_preservation"] = "source generated FITS bytes retained exactly"
+        write_model(document, destination)
+    print(f"Imported {len(document['arrays'])} typed optical arrays into {destination}")
 
 
 if __name__ == "__main__":
