@@ -131,9 +131,11 @@ class Artifacts(unittest.TestCase):
             self.prepared_model(root)
             manifest = root / "model.yaml"
             with manifest.open("a") as stream:
-                stream.write("extra:\n  <<: {value: default}\n  value: override\n")
+                stream.write("extra:\n  base: &base\n    <<: {value: default}\n    value: override\n  reused:\n    <<: *base\n")
             self.run_import(root, target, "--preserve-metadata")
             self.assertEqual(manifest.read_bytes(), (target / "model.yaml").read_bytes())
+            parsed, _ = loader.read_model_source(root, strict=True)
+            self.assertEqual(parsed["extra"], {"base": {"value": "override"}, "reused": {"value": "override"}})
 
     def test_default_legacy_import_still_normalizes(self):
         with tempfile.TemporaryDirectory() as source, tempfile.TemporaryDirectory() as output:

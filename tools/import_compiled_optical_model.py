@@ -125,9 +125,16 @@ def read_model_source(source, strict=False):
         import yaml
 
         class StrictLoader(yaml.SafeLoader):
+            def __init__(self, stream):
+                super().__init__(stream)
+                self.checked_mappings = set()
+
             def flatten_mapping(self, node):
+                if node in self.checked_mappings:
+                    return
                 # Check explicit keys before merge expansion so defaults may
-                # still be overridden. Recursion also checks merged mappings.
+                # still be overridden. Aliases reuse nodes that PyYAML has
+                # already expanded; check each node's authored keys only once.
                 explicit_keys = set()
                 for key_node, _ in node.value:
                     if key_node.tag == "tag:yaml.org,2002:merge":
@@ -138,6 +145,7 @@ def read_model_source(source, strict=False):
                     if key in explicit_keys:
                         raise ValueError(f"duplicate YAML mapping key '{key}'")
                     explicit_keys.add(key)
+                self.checked_mappings.add(node)
                 super().flatten_mapping(node)
 
         metadata = yaml.load(manifest.read_text(), Loader=StrictLoader if strict else yaml.SafeLoader)
