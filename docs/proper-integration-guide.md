@@ -1053,11 +1053,30 @@ JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --startup-file=no --project=/pa
 
 The CUDA and AMD selectors require their respective backend package and disable
 scalar device indexing. Both reuse the same small CPU-oracle/stream/capture,
-reset and invalid-input checks. The
-last selector reads an existing SPIDERS fitted program and its declared pupil
-reference, without copying or modifying the frozen artifacts. CPU results are
+reset and invalid-input checks. The last selector reads an existing SPIDERS
+fitted program and its declared pupil reference, without copying or modifying
+the frozen artifacts. CPU results are
 numerical references; these tests never substitute a CPU simulator for a requested
 GPU target. The local Radeon 680M validation used `HSA_OVERRIDE_GFX_VERSION=10.3.0`,
 AMDGPU 2.9.2 and Proper 0.4.1. Initialization/JIT and native capture are cold work;
 repeated captured-step samples do not establish instrument cadence or deadline
 qualification.
+
+### 0.3.17 release validation (2026-11-01)
+
+The bounded source review covers `v0.3.16..dc48bad8` and CUDA admission
+`a2ea8b02`: hash/shape/axis contracts, physical pixel integration, calibrated
+sampling, shared-prefix refresh and alias/failure boundaries. It reuses the prior
+frozen-model and independent-prefix evidence; no numerical change was required.
+CPU pixel/Proper scalar, sampled-mask, shared-prefix and camera checks passed 995
+assertions. That run exposed AOS-R1: the compiled fixture imported FFTW without
+declaring it in `test/proper/Project.toml`. After adding the direct test dependency,
+the blocked `test/proper/compiled_paths.jl` subset passed 278 checks, including
+the final no-GPU-import assertion, with KernelAbstractions 0.10.4.
+Fresh Julia 1.13.3 CUDA fixtures passed 1,090 checks on an RTX 3080 with CUDA 6.4.2,
+KernelAbstractions 0.9.45 and Proper 0.4.1 (`test/cuda_compiled_paths.jl`).
+The Python exporter/importer tests passed 14 checks, and
+`tools/export-node-defaults.jl --check` matched the generated snapshot without
+loading AOS or GPU packages. A fresh process loaded package version 0.3.17.
+This gate starts no instrument simulator or GUI and adds no device, photometry,
+convergence or deadline qualification.
