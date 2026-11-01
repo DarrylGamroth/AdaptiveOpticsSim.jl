@@ -114,7 +114,7 @@ def model_document(metadata, output, source_root=None, link=False, include_refer
     return result
 
 
-def read_model_source(source):
+def read_model_source(source, strict=False):
     if source.is_file():
         manifest = source
     elif (source / "model.yaml").is_file():
@@ -123,7 +123,24 @@ def read_model_source(source):
         manifest = source / "manifest.toml"
     if manifest.suffix in (".yaml", ".yml"):
         import yaml
-        metadata = yaml.safe_load(manifest.read_text())
+
+        class StrictLoader(yaml.SafeLoader):
+            def flatten_mapping(self, node):
+                # Check explicit keys before merge expansion so defaults may
+                # still be overridden. Recursion also checks merged mappings.
+                explicit_keys = set()
+                for key_node, _ in node.value:
+                    if key_node.tag == "tag:yaml.org,2002:merge":
+                        continue
+                    key = self.construct_object(key_node)
+                    if not isinstance(key, str):
+                        raise ValueError("YAML mapping keys must be strings")
+                    if key in explicit_keys:
+                        raise ValueError(f"duplicate YAML mapping key '{key}'")
+                    explicit_keys.add(key)
+                super().flatten_mapping(node)
+
+        metadata = yaml.load(manifest.read_text(), Loader=StrictLoader if strict else yaml.SafeLoader)
         if not isinstance(metadata, dict) or metadata.get("schema_version") != 1 or "arrays" not in metadata:
             raise ValueError("Unsupported compiled YAML model")
     elif manifest.suffix == ".toml":
@@ -156,15 +173,17 @@ def main():
         parser.error("Metadata name must be a single relative YAML filename")
     source = args.source.resolve(strict=True)
     output = args.output.resolve()
-    metadata, manifest = read_model_source(source)
+    metadata, manifest = read_model_source(source, strict=args.preserve_metadata)
     if args.preserve_metadata and manifest.suffix not in (".yaml", ".yml"):
         raise ValueError("Metadata preservation requires a typed canonical YAML model")
     source_root = manifest.parent
     if source_root == output:
         parser.error("Import output must differ from the frozen source directory")
     destination = output / args.name
-    if args.preserve_metadata and destination.is_symlink():
+    if destination.is_symlink():
         raise ValueError("Metadata destination must not be a symbolic link")
+    if destination.exists() and destination.stat().st_nlink > 1:
+        raise ValueError("Metadata destination must not be a hard link")
     output.mkdir(parents=True, exist_ok=True)
     document = model_document(metadata, output, source_root=source_root, link=args.link)
     if args.preserve_metadata:

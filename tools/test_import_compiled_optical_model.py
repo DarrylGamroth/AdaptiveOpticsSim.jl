@@ -87,16 +87,53 @@ class Artifacts(unittest.TestCase):
                     self.run_import(root, target, "--preserve-metadata", "--name", name)
             target.mkdir(exist_ok=True)
             (target / "model.yaml").symlink_to(root / "model.yaml")
-            with self.assertRaises(ValueError):
-                self.run_import(root, target, "--preserve-metadata")
+            for options in ([], ["--preserve-metadata"]):
+                with self.assertRaises(ValueError):
+                    self.run_import(root, target, *options)
             self.assertEqual((root / "model.yaml").read_bytes(), before)
             (target / "model.yaml").unlink()
             payload = next((root / "arrays").iterdir())
             payload_before = payload.read_bytes()
             (target / "model.yaml").hardlink_to(payload)
-            with self.assertRaises(ValueError):
-                self.run_import(root, target, "--preserve-metadata")
+            for options in ([], ["--preserve-metadata"]):
+                with self.assertRaises(ValueError):
+                    self.run_import(root, target, *options)
             self.assertEqual(payload.read_bytes(), payload_before)
+
+    def test_preserve_rejects_duplicate_and_nonstring_yaml_keys_before_staging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory) / "source"
+            root.mkdir()
+            self.prepared_model(root)
+            manifest = root / "model.yaml"
+            canonical = manifest.read_text()
+            invalid_documents = [canonical + "schema_version: 1\n",
+                                 canonical + "extra:\n  duplicate: 1\n  duplicate: 1\n",
+                                 canonical + "1: nonstring\n",
+                                 canonical + "extra:\n  true: nonstring\n",
+                                 canonical + "extra:\n  <<: {duplicate: 1, duplicate: 1}\n",
+                                 canonical + "extra:\n  <<: {1: nonstring}\n"]
+            for index, text in enumerate(invalid_documents):
+                with self.subTest(index=index):
+                    manifest.write_text(text)
+                    target = pathlib.Path(directory) / str(index)
+                    with self.assertRaisesRegex(ValueError, "duplicate YAML mapping key|YAML mapping keys must be strings"):
+                        self.run_import(root, target, "--preserve-metadata")
+                    self.assertFalse(target.exists())
+                    self.assertEqual(manifest.read_text(), text)
+            # The ordinary importer keeps its existing YAML parsing behavior.
+            manifest.write_text(invalid_documents[0])
+            self.assertEqual(loader.read_model_source(root)[0]["schema_version"], 1)
+
+    def test_preserve_allows_yaml_merge_defaults_and_overrides(self):
+        with tempfile.TemporaryDirectory() as source, tempfile.TemporaryDirectory() as output:
+            root, target = pathlib.Path(source), pathlib.Path(output)
+            self.prepared_model(root)
+            manifest = root / "model.yaml"
+            with manifest.open("a") as stream:
+                stream.write("extra:\n  <<: {value: default}\n  value: override\n")
+            self.run_import(root, target, "--preserve-metadata")
+            self.assertEqual(manifest.read_bytes(), (target / "model.yaml").read_bytes())
 
     def test_default_legacy_import_still_normalizes(self):
         with tempfile.TemporaryDirectory() as source, tempfile.TemporaryDirectory() as output:
