@@ -192,7 +192,7 @@ function AOG.reset_graph_node!(owner::CompiledPathsOwner)
 end
 AOG.optical_sampling_m(owner::CompiledPathsOwner)=owner.sampling_m
 _compiled_paths_capture_capability(target)=AOG.GraphNodeCaptureUnsupported()
-_compiled_paths_capture_capability(::Backends.AcceleratorComputeDevice{<:Backends.AMDGPUBackend})=
+_compiled_paths_capture_capability(::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}})=
     AOG.GraphNodeCaptureSafe()
 AOG.graph_node_capture_capability(owner::CompiledPathsOwner)=
     _compiled_paths_capture_capability(Backends.compute_device(owner.inputs.dm_opd))
@@ -221,8 +221,8 @@ function _compiled_paths_validate_amplitude!(amplitude,reference::AbstractMatrix
 end
 
 _require_compiled_input_target(::Backends.HostComputeDevice)=nothing
-_require_compiled_input_target(::Backends.AcceleratorComputeDevice{<:Backends.AMDGPUBackend})=nothing
-_require_compiled_input_target(target)=throw(AOG.AlgorithmGraphError("compiled optical input-grid adapter requires CPU or AMDGPU execution"))
+_require_compiled_input_target(::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}})=nothing
+_require_compiled_input_target(target)=throw(AOG.AlgorithmGraphError("compiled optical input-grid adapter requires CPU, CUDA or AMDGPU execution"))
 
 KernelAbstractions.@kernel function _compiled_paths_validate_finite_kernel!(failure,input,slot)
     index=KernelAbstractions.@index(Global,Linear)

@@ -953,7 +953,7 @@ instrument root. Live ports are `dm_opd` and `pupil_opd` in metres and
 into logical `[y,x]`; pitches and centers describe that permuted grid. Bilinear
 metric maps use zero OPD and zero full amplitude outside input support. Their
 input sample counts need not equal the compiled screen dimensions. The graph
-input adapter supports CPU stream execution and AMDGPU stream or captured graph
+input adapter supports CPU stream execution and CUDA or AMDGPU stream or captured graph
 execution. Accelerator preparation retains the live grids, interpolation maps,
 reference amplitudes and ratio workspace on the selected device. Capture records
 only fixed-address work; input/support/ratio status is checked outside capture
@@ -1046,11 +1046,14 @@ FITSIO in the selected environment) are:
 
 ```sh
 julia --startup-file=no --project=/path/to/environment test/proper/compiled_paths.jl
+JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --startup-file=no --project=/path/to/cuda-environment test/cuda_compiled_paths.jl
 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --startup-file=no --project=/path/to/amdgpu-environment test/amdgpu_compiled_paths.jl
 JULIA_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 julia --startup-file=no --project=/path/to/amdgpu-environment test/amdgpu_compiled_paths_fitted.jl /path/to/spiders
 ```
 
-The AMD selectors also require AMDGPU and disable scalar device indexing. The
+The CUDA and AMD selectors require their respective backend package and disable
+scalar device indexing. Both reuse the same small CPU-oracle/stream/capture,
+reset and invalid-input checks. The
 last selector reads an existing SPIDERS fitted program and its declared pupil
 reference, without copying or modifying the frozen artifacts. CPU results are
 numerical references; these tests never substitute a CPU simulator for a requested
