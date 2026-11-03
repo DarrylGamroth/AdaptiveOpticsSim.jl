@@ -89,12 +89,27 @@ struct PathFFTWorkspace{A,F,I}
     inverse::I
 end
 
+# A plane is one fast path at one spectral anchor. Transforms cover only y,x;
+# the third axis is an independent batch, never an optical coordinate.
+struct PathFilterBatch{A,F,I}
+    field::A
+    transfer::A
+    forward::F
+    inverse::I
+end
+
+struct PathFastWorkspace{B,D,S}
+    image::B
+    defocus::D
+    defocus_slots::S
+end
+
 struct PathNormalizationWorkspace{P,S}
     partials::P
     power::S
 end
 
-struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L}
+struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B}
     field::A
     prefix::A
     shared_prefixes::V
@@ -114,6 +129,7 @@ struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L}
     normalization::N
     pixel_mtf::M
     mul_coefficients::L
+    fast::B
 end
 
 """Canonical `(y,x)` compiled multi-path relative-intensity products, dimensionless intensity."""
@@ -320,6 +336,104 @@ function _compiled_paths_filter!(out, input, transfer, fft_workspace)
     return out
 end
 
+# Pack a centred field into one corner-order FFT plane. Preparation establishes
+# size(field,1:2) == size(input) .+ 2pad; the inside test bounds input accesses.
+KernelAbstractions.@kernel function _compiled_paths_pack_filter_kernel!(field, input, slot, pad, enabled)
+    y, x = @index(Global, NTuple)
+    n = size(field, 1)
+    sy = y + fld(n, 2)
+    sx = x + fld(n, 2)
+    sy > n && (sy -= n)
+    sx > n && (sx -= n)
+    inside = pad < sy <= size(input, 1) + pad && pad < sx <= size(input, 2) + pad
+    @inbounds field[y, x, slot] = enabled && inside ? input[sy - pad, sx - pad] : zero(eltype(field))
+end
+
+# The defocus result remains corner ordered. Read its centred crop while
+# packing the next image FFT; this combines crop, fftshift and ifftshift.
+KernelAbstractions.@kernel function _compiled_paths_pack_defocus_kernel!(field, defocus, slot, defocus_slot, pad)
+    y, x = @index(Global, NTuple)
+    n, p = size(field, 1), size(defocus, 1)
+    sy = y + fld(n, 2)
+    sx = x + fld(n, 2)
+    sy > n && (sy -= n)
+    sx > n && (sx -= n)
+    sy += pad + cld(p, 2)
+    sx += pad + cld(p, 2)
+    sy > p && (sy -= p)
+    sx > p && (sx -= p)
+    @inbounds field[y, x, slot] = defocus[sy, sx, defocus_slot]
+end
+
+# Equal positive square dimensions were checked during preparation. One wrap
+# maps each output pixel to the centred inverse-transform result.
+KernelAbstractions.@kernel function _compiled_paths_unpack_filter_kernel!(out, field, phase, slot)
+    y, x = @index(Global, NTuple)
+    n = size(out, 1)
+    sy = y + cld(n, 2)
+    sx = x + cld(n, 2)
+    sy > n && (sy -= n)
+    sx > n && (sx -= n)
+    @inbounds out[y, x] = field[sy, sx, slot] * phase[y, x]
+end
+
+function _compiled_paths_pack_filter!(field, input, slot, pad, enabled=true)
+    Backends.launch_kernel_async!(Backends.execution_style(field),
+        _compiled_paths_pack_filter_kernel!, field, input, slot, pad, enabled;
+        ndrange=(size(field, 1), size(field, 2)))
+    return nothing
+end
+
+function _compiled_paths_pack_defocus!(field, defocus, slot, defocus_slot, pad)
+    Backends.launch_kernel_async!(Backends.execution_style(field),
+        _compiled_paths_pack_defocus_kernel!, field, defocus, slot, defocus_slot, pad;
+        ndrange=(size(field, 1), size(field, 2)))
+    return nothing
+end
+
+function _compiled_paths_unpack_filter!(out, field, phase, slot)
+    Backends.launch_kernel_async!(Backends.execution_style(out),
+        _compiled_paths_unpack_filter_kernel!, out, field, phase, slot; ndrange=size(out))
+    return nothing
+end
+
+function _compiled_paths_pack_filter!(field::Array, input::Matrix, slot, pad, enabled=true)
+    n = size(field, 1)
+    for x in 1:n, y in 1:n
+        sy, sx = mod1(y + fld(n, 2), n), mod1(x + fld(n, 2), n)
+        inside = pad < sy <= size(input, 1) + pad && pad < sx <= size(input, 2) + pad
+        field[y, x, slot] = enabled && inside ? input[sy - pad, sx - pad] : zero(eltype(field))
+    end
+    return nothing
+end
+
+function _compiled_paths_pack_defocus!(field::Array, defocus::Array, slot, defocus_slot, pad)
+    n, p = size(field, 1), size(defocus, 1)
+    for x in 1:n, y in 1:n
+        sy = mod1(mod1(y + fld(n, 2), n) + pad + cld(p, 2), p)
+        sx = mod1(mod1(x + fld(n, 2), n) + pad + cld(p, 2), p)
+        field[y, x, slot] = defocus[sy, sx, defocus_slot]
+    end
+    return nothing
+end
+
+function _compiled_paths_unpack_filter!(out::Matrix, field::Array, phase::Matrix, slot)
+    n = size(out, 1)
+    for x in 1:n, y in 1:n
+        sy, sx = mod1(y + cld(n, 2), n), mod1(x + cld(n, 2), n)
+        out[y, x] = field[sy, sx, slot] * phase[y, x]
+    end
+    return nothing
+end
+
+function _compiled_paths_filter_batch!(batch::PathFilterBatch)
+    Backends.enqueue_fft_plan!(batch.field, batch.forward)
+    batch.field .*= batch.transfer
+    Backends.enqueue_fft_plan!(batch.field, batch.inverse)
+    return nothing
+end
+_compiled_paths_filter_batch!(::Nothing) = nothing
+
 _compiled_paths_seal(values::Vector{T}) where {T} = FixedSizeVectorDefault{T}(values)
 
 # Array identity proves the frozen coefficients came from the same cold model
@@ -385,6 +499,41 @@ function _compiled_paths_fft_workspace(target, ::Type{T}, n) where {T}
     forward = Backends.plan_fft_backend!(field)
     inverse = Backends.plan_ifft_backend!(field)
     return PathFFTWorkspace(field, scratch, forward, inverse)
+end
+
+function _compiled_paths_filter_batch(target, ::Type{T}, n, transfers) where {T}
+    isempty(transfers) && return nothing
+    field = _compiled_paths_array(target, Complex{T}, n, n, length(transfers))
+    transfer = similar(field)
+    # ifftshift(fftshift(F) .* H) == F .* ifftshift(H). Keeping H in
+    # corner order removes the cancelling shifts between each transform pair.
+    host = Array{Complex{T}}(undef, size(field))
+    for (slot, values) in enumerate(transfers)
+        host[:, :, slot] .= ifftshift(Array(values))
+    end
+    copyto!(transfer, host)
+    return PathFilterBatch(field, transfer,
+        Backends.plan_fft_backend!(field, (1, 2)),
+        Backends.plan_ifft_backend!(field, (1, 2)))
+end
+
+function _compiled_paths_fast_workspace(plan, ::Type{T}) where {T}
+    image_transfers = [path.shift_transfer for path in plan.fast_paths for _ in 1:plan.n_anchor]
+    defocus_transfers = [path.defocus_transfer[a] for path in plan.fast_paths
+        for a in 1:plan.n_anchor if path.source_index != 0 && !isempty(path.defocus_transfer)]
+    slots = zeros(Int, length(image_transfers))
+    defocus_slot = 0
+    for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
+        if path.source_index != 0 && !isempty(path.defocus_transfer)
+            defocus_slot += 1
+            slots[_compiled_paths_slot(k, a, plan.n_anchor)] = defocus_slot
+        end
+    end
+    return PathFastWorkspace(
+        _compiled_paths_filter_batch(plan.target, T, plan.image_size, image_transfers),
+        _compiled_paths_filter_batch(plan.target, T,
+            plan.image_size + 2plan.phantom_pad, defocus_transfers),
+        _compiled_paths_seal(slots))
 end
 
 function _compiled_paths_electric_field(field, dx, wavelength)
@@ -656,7 +805,7 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
         _compiled_paths_array(target, Complex{T}, image_size, image_size),
         fields(nk * na), fields(nk * na), fields(nk * na), fields(ne * na), fields(ne * na),
         _compiled_paths_normalization_workspace(field, target, T), pixel_mtf,
-        Backends._prepare_mul_coefficients(field))
+        Backends._prepare_mul_coefficients(field), _compiled_paths_fast_workspace(plan, T))
     channels = AdaptiveOpticsSim.Optics.SpectralBundle(T.(metadata["channels"]),
         ones(T, nc); T)
     reference_visibility = [Complex{T}[1;;] for _ in 1:nc]
@@ -813,7 +962,7 @@ function _compiled_paths_resample_image!(out, input, owner)
     return out
 end
 
-function _compiled_paths_fast!(envelopes, sources, owner, free_ghost)
+function _compiled_paths_fast_scalar!(envelopes, sources, owner, free_ghost)
     plan, w = owner.plan, owner.workspace
     for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
         out = envelopes[_compiled_paths_slot(k, a, plan.n_anchor)]
@@ -836,6 +985,41 @@ function _compiled_paths_fast!(envelopes, sources, owner, free_ghost)
         end
         _compiled_paths_filter!(out, out, path.shift_transfer, w.image_fft)
         out .*= path.phase_multiplier[a]
+    end
+    return nothing
+end
+
+function _compiled_paths_fast!(envelopes, sources, owner, free_ghost)
+    plan, w = owner.plan, owner.workspace
+    fast = w.fast
+    # All bindings and batch slots are frozen at preparation. Closed and only
+    # branches reuse the same scratch in stream order, including capture replay.
+    for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
+        slot = _compiled_paths_slot(k, a, plan.n_anchor)
+        defocus_slot = fast.defocus_slots[slot]
+        if defocus_slot != 0
+            source = sources[_compiled_paths_slot(path.source_index, a, plan.n_anchor)]
+            _compiled_paths_pack_filter!(fast.defocus.field, source, defocus_slot, plan.phantom_pad)
+        end
+    end
+    _compiled_paths_filter_batch!(fast.defocus)
+    for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
+        slot = _compiled_paths_slot(k, a, plan.n_anchor)
+        defocus_slot = fast.defocus_slots[slot]
+        if defocus_slot != 0
+            _compiled_paths_pack_defocus!(fast.image.field, fast.defocus.field,
+                slot, defocus_slot, plan.phantom_pad)
+        elseif path.source_index == 0
+            _compiled_paths_pack_filter!(fast.image.field, path.ghost[a], slot, 0, free_ghost)
+        else
+            source = sources[_compiled_paths_slot(path.source_index, a, plan.n_anchor)]
+            _compiled_paths_pack_filter!(fast.image.field, source, slot, 0)
+        end
+    end
+    _compiled_paths_filter_batch!(fast.image)
+    for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
+        slot = _compiled_paths_slot(k, a, plan.n_anchor)
+        _compiled_paths_unpack_filter!(envelopes[slot], fast.image.field, path.phase_multiplier[a], slot)
     end
     return nothing
 end
@@ -866,11 +1050,16 @@ function _compiled_paths_apply_pixel_mtf!(owners::Tuple)
     return nothing
 end
 
-function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bool=true)
+function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bool=true, batch_fast::Bool=true)
     plan, w, products = owner.plan, owner.workspace, owner.products
     _compiled_paths_slow!(owner, share_prefix)
-    _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true)
-    _compiled_paths_fast!(w.only_envelopes, w.only_sources, owner, false)
+    if batch_fast
+        _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true)
+        _compiled_paths_fast!(w.only_envelopes, w.only_sources, owner, false)
+    else
+        _compiled_paths_fast_scalar!(w.closed_envelopes, w.closed_sources, owner, true)
+        _compiled_paths_fast_scalar!(w.only_envelopes, w.only_sources, owner, false)
+    end
     for k in 1:length(plan.fast_paths), a in 1:plan.n_anchor
         slot = _compiled_paths_slot(k, a, plan.n_anchor)
         gain = plan.pinhole_gain[a]

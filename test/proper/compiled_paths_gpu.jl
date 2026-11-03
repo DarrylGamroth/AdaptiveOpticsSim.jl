@@ -38,9 +38,9 @@ function compare_compiled_input_capture(model,::Type{T};mode="reference_ratio",g
         COMPILED_SYNCHRONIZE()
         step_graph!(cpu);step_graph!(streamed);step_graph!(captured)
         # Preserve an independent-path oracle for the shared-prefix fixture.
-        CP._enqueue_compiled_paths!(cpu_owner.propagation,false)
+        CP._enqueue_compiled_paths!(cpu_owner.propagation,false,false)
         Backends._with_prepared_device_execution_context(streamed.context) do
-            CP._enqueue_compiled_paths!(stream_owner.propagation,false)
+            CP._enqueue_compiled_paths!(stream_owner.propagation,false,false)
             Backends._synchronize_prepared_device_execution_context!(streamed.context)
         end
         actual=map(name->Array(graph_output(captured,name)),(:fringed,:unfringed,:reference))
@@ -97,6 +97,15 @@ end
         model=compiled_paths_yaml_fixture(directory;fixture=compiled_paths_shared_fixture())
         for T in (Float32,Float64)
             compare_compiled_input_capture(model,T)
+        end
+    end
+    for image_size in (5,6)
+        mktempdir() do directory
+            model=compiled_paths_yaml_fixture(directory;
+                fixture=compiled_paths_filtered_fixture(;image_size))
+            for T in (Float32,Float64)
+                compare_compiled_input_capture(model,T)
+            end
         end
     end
 end

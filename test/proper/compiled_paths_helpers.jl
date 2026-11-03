@@ -118,6 +118,64 @@ function compiled_paths_shared_fixture()
     return fixture
 end
 
+# Nonseparable complex filters, odd/even image sizes, an independent ghost,
+# and defocus on only part of the fast batch expose ordering and slot errors.
+function compiled_paths_filtered_fixture(; image_size=5, phantom_pad=2)
+    fixture = compiled_paths_shared_fixture()
+    metadata, arrays = fixture.metadata, fixture.arrays
+    m = image_size
+    metadata["image_size"] = m
+    metadata["crop_start"] = (fixture.n - m) ÷ 2
+    metadata["fast"]["phantom_pad"] = phantom_pad
+    q = collect(0:m-1) .- m÷2
+    freq = FFTW.fftshift(FFTW.fftfreq(m))
+    arrays["resample"] = exp.(2im*pi .* (q * transpose(freq)))
+    arrays["phase"] = ComplexF64[cis(0.07x*y + 0.03y) for y in q, x in q]
+    arrays["ghost"] = 0.01 .* arrays["phase"]
+    arrays["pixel"] = ones(ComplexF64, m+2, m+2)
+    for (k, path) in enumerate(metadata["fast_paths"])
+        shift = "shift_$k"
+        arrays[shift] = ComplexF64[(1+0.02y-0.01x)*cis(0.03k*x-0.05y+0.01x*y) for y in q, x in q]
+        path["shift_transfer"] = shift
+        phases = ["phase_$(k)_$a" for a in 1:2]
+        for (a, name) in enumerate(phases)
+            arrays[name] = ComplexF64[(1+0.01a*x)*cis(0.02k*y-0.04a*x+0.03x*y) for y in q, x in q]
+        end
+        path["phase_multiplier"] = phases
+        if k in (1, 3)
+            p = m + 2phantom_pad
+            f = FFTW.fftshift(FFTW.fftfreq(p))
+            transfers = ["defocus_$(k)_$a" for a in 1:2]
+            for (a, name) in enumerate(transfers)
+                arrays[name] = ComplexF64[cis(0.8a*(fy^2+1.3fx^2)+0.2k*fy*fx) for fy in f, fx in f]
+            end
+            path["defocus_transfer"] = transfers
+        end
+    end
+    return merge(fixture, (; m))
+end
+
+function compiled_paths_fast_oracle(owner, sources, free_ghost)
+    plan = owner.plan
+    fftc(a) = FFTW.fftshift(FFTW.fft(FFTW.ifftshift(a)))
+    ifftc(a) = FFTW.fftshift(FFTW.ifft(FFTW.ifftshift(a)))
+    filter(a, transfer) = ifftc(fftc(a) .* transfer)
+    return [begin
+        if path.source_index == 0
+            input = free_ghost ? copy(path.ghost[a]) : zeros(eltype(path.ghost[a]), plan.image_size, plan.image_size)
+        else
+            input = copy(sources[(path.source_index-1)*plan.n_anchor+a])
+            if !isempty(path.defocus_transfer)
+                pad = plan.phantom_pad
+                padded = zeros(eltype(input), plan.image_size+2pad, plan.image_size+2pad)
+                padded[pad+1:pad+plan.image_size, pad+1:pad+plan.image_size] .= input
+                input = filter(padded, path.defocus_transfer[a])[pad+1:pad+plan.image_size, pad+1:pad+plan.image_size]
+            end
+        end
+        filter(input, path.shift_transfer) .* path.phase_multiplier[a]
+    end for path in plan.fast_paths for a in 1:plan.n_anchor]
+end
+
 function compiled_paths_allocated(owner)
     AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
     return @allocated AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)

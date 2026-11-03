@@ -52,6 +52,26 @@ device-residency, type-stability, and steady-state allocation gates to both;
 focused tuning and counter work defaults to CUDA unless backend-specific
 evidence identifies an AMDGPU defect or regression.
 
+Compiled optical paths batch independent fast-path/anchor fields over the third
+array axis; FFTs transform only canonical `(y,x)` axes `(1,2)`. Frozen filter
+transfers use corner ordering internally. Fused packing retains centred input,
+padding and cropping semantics; unpacking applies the frozen phase. PROPER slow
+propagation and shared-prefix selection are unchanged. The two branches reuse
+one image batch and one optional defocus batch in stream order.
+
+Run `julia --project=test/proper test/proper/compiled_paths.jl` for the focused
+CPU equations and warmed zero-allocation checks. The CUDA/AMDGPU compiled-path
+selectors exercise the same odd/even, mixed-defocus and ghost fixtures with
+streamed execution, capture replay, changed live inputs and reset. The private
+qualification hook `_enqueue_compiled_paths!(owner, share_prefix, batch_fast)`
+can select the original per-plane filters with `batch_fast=false`; this is not
+an instrument setting. Compare all products and individual envelopes before
+timing the exact fitted model. Record both model-step latency and retained
+storage: the 221-square, 39-plane image batch and 285-square, 21-plane defocus
+batch add 57,768,384 bytes of Float32 complex fields/transfers (55.09 MiB),
+excluding FFT-provider work areas. Float64 doubles that payload. CPU checks do
+not establish accelerator capture support or deadline performance.
+
 ## AMDGPU
 
 The maintained local ROCm target is:
