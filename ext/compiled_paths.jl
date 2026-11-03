@@ -837,13 +837,14 @@ end
 
 # Fixed geometry is shared across optical branches. The cold dictionary never
 # enters execution: the sealed vector has an explicit concrete union element.
+# Enable this lowering on the CUDA backend qualified by the captured gates.
 _compiled_paths_prepare_propagation(paths, wf, ctx) =
-    _compiled_paths_prepare_propagation(Backends.execution_style(wf.field), paths, wf, ctx)
-function _compiled_paths_prepare_propagation(::Backends.ScalarCPUStyle, paths, wf, ctx)
+    _compiled_paths_prepare_propagation(Backends.array_backend_selector(typeof(wf.field)), paths, wf, ctx)
+function _compiled_paths_prepare_propagation(::Backends.AbstractArrayBackend, paths, wf, ctx)
     count = sum(length(seq) for path in paths for seq in (path.prefix, path.closed, path.only))
     return _compiled_paths_seal(fill(nothing, count))
 end
-function _compiled_paths_prepare_propagation(::Backends.AcceleratorStyle, paths, wf::Proper.WaveFront{T}, ctx) where {T}
+function _compiled_paths_prepare_propagation(::Backends.CUDABackend, paths, wf::Proper.WaveFront{T}, ctx) where {T}
     function prepare(op)
         wf.wavelength_m = op.wavelength_m
         wf.sampling_m = op.dx
