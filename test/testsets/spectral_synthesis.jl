@@ -236,3 +236,112 @@ end
         @test !Base.isexported(AdaptiveOpticsSim, name)
     end
 end
+
+# Exercise the portable accelerator kernels on KA's CPU backend as well as the
+# ordinary independent CPU executor. Production dispatch stays backend-driven.
+function spectral_synthesis_kernel_storage(owner)
+    style = Backends.AcceleratorStyle(Backends.KernelAbstractions.CPU())
+    plan = owner.plan
+    calibration = Optics._spectral_synthesis_resident_calibration(style,
+        owner.products.output, plan.basis, plan.coefficients, plan.visibility,
+        plan.mode_factors, plan.weights)
+    packed = Optics._spectral_synthesis_packed_scratch(style, first(owner.envelopes),
+        plan.n_path, plan.n_anchor, length(plan.channels))
+    return style, calibration, packed...
+end
+
+function spectral_synthesis_kernel_check!(owner, storage)
+    expected = copy(Optics._synthesize_spectrum_reference!(owner))
+    style, calibration, packed_envelopes, fields = storage
+    @test Optics._synthesize_spectrum!(style, owner, calibration, packed_envelopes,
+        fields) === owner.products.output
+    Backends.synchronize_backend!(style)
+    T = eltype(expected)
+    @test owner.products.output ≈ expected rtol=32eps(T) atol=32eps(T)
+    return copy(owner.products.output)
+end
+
+@testset "Fused spectral synthesis kernels" begin
+    for T in (Float32, Float64), summation in (:coherent_modes, :path_pairs),
+            uniform in (false, true)
+        rng = MersenneTwister(9021)
+        n_channel, n_anchor, n_path = 5, 3, 4
+        # Odd, non-square dimensions exercise the pack and compute boundaries.
+        envelopes = [randn(rng, Complex{T}, 7, 9)
+            for _ in 1:(n_anchor * n_path)]
+        basis = randn(rng, T, n_channel, n_anchor)
+        coefficients = randn(rng, Complex{T}, n_channel, n_path)
+        visibility = map(1:n_channel) do _
+            factor = randn(rng, Complex{T}, n_path, n_path)
+            factor ./= sqrt.(sum(abs2, factor; dims=2))
+            return factor * factor'
+        end
+        weights = uniform ? ones(T, n_channel) : T[1, 2, 4, 3, 5]
+        channels = SpectralBundle(collect(range(T(600e-9), T(800e-9);
+            length=n_channel)), weights; T=T)
+        response = uniform ? ones(T, n_channel) : T[0.2, 0.7, 0, 1.3, 0.4]
+        owner = Optics.prepare_spectral_synthesis(envelopes, basis,
+            coefficients, visibility, channels; response, summation)
+        @test owner.plan.uniform_average == uniform
+        @test owner.plan.resident_calibration === nothing
+        @test owner.workspace.packed_envelopes === nothing
+        @test owner.workspace.packed_channel_fields === nothing
+        storage = spectral_synthesis_kernel_storage(owner)
+        original = spectral_synthesis_kernel_check!(owner, storage)
+        @test original ≈ spectral_synthesis_oracle(envelopes, basis,
+            coefficients, visibility, channels, response) rtol=64eps(T) atol=64eps(T)
+        # Packed fields are refreshed from the exact bound storage on each call.
+        envelopes[2] .*= Complex{T}(0.3, -0.8)
+        changed = spectral_synthesis_kernel_check!(owner, storage)
+        @test changed != original
+        fill!(owner.products.output, T(NaN))
+        @test spectral_synthesis_kernel_check!(owner, storage) ≈ changed
+    end
+
+    for T in (Float32, Float64), summation in (:coherent_modes, :path_pairs)
+        # Preserve destructive cancellation and termwise uniform division.
+        channels = SpectralBundle(T[600e-9, 700e-9, 800e-9], ones(T, 3); T=T)
+        paths = [fill(Complex{T}(1, 0), 3, 5),
+            fill(Complex{T}(-1, 0), 3, 5)]
+        owner = Optics.prepare_spectral_synthesis(paths, ones(T, 3, 1),
+            ones(Complex{T}, 3, 2), [ones(Complex{T}, 2, 2) for _ in 1:3],
+            channels; summation)
+        spectral_synthesis_kernel_check!(owner, spectral_synthesis_kernel_storage(owner))
+        if summation === :coherent_modes
+            @test all(>=(zero(T)), owner.products.output)
+        end
+        single = Optics.prepare_spectral_synthesis(
+            [fill(Complex{T}(0.1, 0.2), 3, 5)], ones(T, 3, 1),
+            ones(Complex{T}, 3, 1), [ones(Complex{T}, 1, 1) for _ in 1:3],
+            channels; summation)
+        result = spectral_synthesis_kernel_check!(single,
+            spectral_synthesis_kernel_storage(single))
+        @test result == Optics._synthesize_spectrum_reference!(single)
+
+        # Strided input and output matrices retain their logical detector grid.
+        input_parent = reshape(Complex{T}.(1:63), 7, 9)
+        input = view(input_parent, 1:2:7, 1:2:9)
+        output_parent = fill(T(NaN), 8, 10)
+        output = view(output_parent, 2:2:8, 2:2:10)
+        viewed = Optics.prepare_spectral_synthesis([input], ones(T, 3, 1),
+            ones(Complex{T}, 3, 1), [ones(Complex{T}, 1, 1) for _ in 1:3],
+            channels; summation, output)
+        spectral_synthesis_kernel_check!(viewed,
+            spectral_synthesis_kernel_storage(viewed))
+        @test all(isnan, output_parent[1:2:7, :])
+
+        # The admitted negative PSD roundoff is preserved by pair summation;
+        # coherent modes use the projected factor and remain nonnegative.
+        channel = SpectralBundle(T[700e-9], T[1]; T=T)
+        near_psd = Complex{T}[1 1 + 2eps(T); 1 + 2eps(T) 1]
+        signed = Optics.prepare_spectral_synthesis(paths, ones(T, 1, 1),
+            ones(Complex{T}, 1, 2), [near_psd], channel; summation)
+        spectral_synthesis_kernel_check!(signed,
+            spectral_synthesis_kernel_storage(signed))
+        if summation === :path_pairs
+            @test all(<(zero(T)), signed.products.output)
+        else
+            @test all(>=(zero(T)), signed.products.output)
+        end
+    end
+end
