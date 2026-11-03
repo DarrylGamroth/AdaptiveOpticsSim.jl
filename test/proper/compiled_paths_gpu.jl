@@ -1,5 +1,5 @@
 # Shared CPU-oracle, streamed and captured GPU checks; include from a backend selector.
-function compare_compiled_input_capture(model,::Type{T};mode="reference_ratio",grid=nothing) where {T}
+function compare_compiled_input_capture(model,::Type{T};mode="reference_ratio",grid=nothing,same_backend_gate=nothing,resample_fields=false) where {T}
     grid===nothing && (grid=(size=(8,8),axes=(1,2),
         sampling_m=(model.fixture.dx,model.fixture.dx),center_pixel=(5.0,5.0)))
     reference=ones(T,grid.size)
@@ -24,6 +24,16 @@ function compare_compiled_input_capture(model,::Type{T};mode="reference_ratio",g
     @test mode!="reference_ratio" || Backends.compute_device(owner.reference)==COMPILED_TARGET
     retained=(field=owner.propagation.workspace.field,dm=owner.propagation.inputs.dm_opd,
         maps=owner.mapping,reference=owner.workspace.reference,flags=owner.workspace.validation.device)
+    # Direct prepared-field capture follows the lowering actually selected for
+    # this backend. The complete YAML graph below also tests ordinary backends.
+    if resample_fields && owner.propagation.workspace.propagation[5]!==nothing
+        Backends._with_prepared_device_execution_context(captured.context) do
+            compare_compiled_resample_fields(owner.propagation;
+                synchronize=COMPILED_SYNCHRONIZE,
+                capture=operation->Backends._capture_prepared_device_graph(operation,captured.context),
+                replay=recorded->Backends._launch_prepared_device_graph!(recorded,captured.context))
+        end
+    end
     first_images=nothing
     previous=nothing
     rtol,atol=T===Float32 ? (8e-4,8e-6) : (8e-10,8e-12)
@@ -50,6 +60,11 @@ function compare_compiled_input_capture(model,::Type{T};mode="reference_ratio",g
             @test values ≈ Array(getproperty(stream_owner.propagation.products,name)) rtol=rtol atol=atol
             @test values ≈ Array(graph_output(streamed,name)) rtol=rtol atol=atol
             @test all(isfinite,values) && sum(values)>0
+            if same_backend_gate!==nothing
+                expected=Array(getproperty(stream_owner.propagation.products,name))
+                @test norm(values-expected)/norm(expected)<=same_backend_gate
+                @test maximum(abs,values-expected)/maximum(abs,expected)<=same_backend_gate
+            end
         end
         if frame==1
             first_images=map(copy,actual)
@@ -97,6 +112,20 @@ end
         model=compiled_paths_yaml_fixture(directory;fixture=compiled_paths_shared_fixture())
         for T in (Float32,Float64)
             compare_compiled_input_capture(model,T)
+        end
+    end
+    mktempdir() do directory
+        model=compiled_paths_yaml_fixture(directory;fixture=compiled_paths_grouped_fixture())
+        for T in (Float32,Float64)
+            compare_compiled_input_capture(model,T)
+        end
+    end
+    for n in (7,8),distance in (-0.004,0.0,0.004)
+        mktempdir() do directory
+            model=compiled_paths_yaml_fixture(directory;fixture=compiled_paths_resample_fixture(;n,distance))
+            for T in (Float32,Float64)
+                compare_compiled_input_capture(model,T;same_backend_gate=1e-5,resample_fields=true)
+            end
         end
     end
     for image_size in (5,6)

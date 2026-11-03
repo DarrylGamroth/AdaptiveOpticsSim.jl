@@ -1020,6 +1020,98 @@ function _compiled_paths_proper_pair!(workspace, op, next, ::Nothing, ::Nothing)
     return nothing
 end
 
+function _compiled_paths_proper_group!(workspace, operations, masks,
+    prepared::NTuple{N,P}) where {N,P<:Proper.PreparedPropagation}
+    edge(op)=isempty(op.auxiliary) ? nothing : op.auxiliary
+    gain(op)=op.kind==PathFourierTransform ? op.gouy : one(op.gouy)
+    inputs=ntuple(Val(N)) do i
+        i>1 && isodd(i) ? (masks[fld(i-1,2)].array,edge(operations[i])) : edge(operations[i])
+    end
+    Proper.propagate!(workspace.field,prepared,workspace.field;centered=true,
+        input_multipliers=inputs,output_multipliers=map(gain,operations))
+    return nothing
+end
+function _compiled_paths_proper_group!(workspace,operations,masks,::NTuple{N,Nothing}) where {N}
+    for i in 1:N
+        if i>1 && isodd(i)
+            workspace.field .*=masks[fld(i-1,2)].array
+        end
+        _compiled_paths_proper!(workspace,operations[i])
+    end
+    return nothing
+end
+
+function _compiled_paths_group_matches(sequence,index,last,::Val{N}) where {N}
+    stop=index+3(N÷2)-2
+    stop<=last || return false
+    # Leave a final PTP and its Fourier resampling to the transform pair
+    # lowering below. A checkpoint beyond `last` must still receive a field.
+    stop<last && sequence[stop].kind==PathTransferFunction &&
+        sequence[stop+1].kind==PathResample && return false
+    for pair in 0:N÷2-1
+        first=index+3pair
+        sequence[first].kind in (PathTransferFunction,PathFourierTransform) &&
+            sequence[first+1].kind in (PathTransferFunction,PathFourierTransform) || return false
+        pair==N÷2-1 || sequence[first+2].kind==PathMultiply || return false
+    end
+    return true
+end
+
+function _compiled_paths_resample_frequency!(w,op,work)
+    if !isempty(op.auxiliary)
+        w.physical_fft.scratch .*=op.auxiliary
+    end
+    Backends._enqueue_mul!(work.temporary,op.array,w.physical_fft.scratch,w.mul_coefficients)
+    Backends._enqueue_mul!(w.field,work.temporary,transpose(op.array),w.mul_coefficients)
+    w.field ./=size(op.array,2)^2
+    if !isempty(op.post)
+        w.field .*=op.post
+    end
+    return nothing
+end
+function _compiled_paths_resample!(w,op,work)
+    _compiled_paths_fft!(w.physical_fft.scratch,w.field,w.physical_fft)
+    return _compiled_paths_resample_frequency!(w,op,work)
+end
+
+function _compiled_paths_proper_resample!(w,op,tf,resample,work,
+    first::Proper.PreparedPropagation,last::Proper.PreparedPropagation)
+    if last.direction!=2
+        _compiled_paths_proper_pair!(w,op,tf,first,last)
+        return _compiled_paths_resample!(w,resample,work)
+    end
+    # PTP ends with BFFT followed by scale; resampling immediately applies FFT.
+    # FFT(BFFT(G)*s)=length(G)*s*G. Preserve phases, edge/gain positions and the
+    # centered Fourier coordinates; only the redundant FFT pair is removed.
+    edge(value)=isempty(value.auxiliary) ? nothing : value.auxiliary
+    gain=op.kind==PathFourierTransform ? op.gouy : one(op.gouy)
+    backend=KernelAbstractions.get_backend(first.field)
+    shift=fld(size(first.field,1),2)
+    Proper._propagation_pack_kernel!(backend,(16,16))(
+        first.field,w.field,edge(op),first.before,shift;ndrange=size(w.field))
+    Proper._propagation_fft!(first)
+    Proper._propagation_join_kernel!(backend,(16,16))(
+        first.field,first.after,first.scale,gain,edge(tf),last.before,shift;ndrange=size(w.field))
+    last.forward*last.field
+    Proper._propagation_transfer_kernel!(backend,(16,16))(
+        last.field,last.transfer;ndrange=size(w.field))
+    Proper._propagation_unpack_kernel!(backend,(16,16))(
+        w.physical_fft.scratch,last.field,last.after,length(last.field)*last.scale,
+        one(tf.gouy),cld(size(last.field,1),2);ndrange=size(w.field))
+    return _compiled_paths_resample_frequency!(w,resample,work)
+end
+function _compiled_paths_proper_resample!(w,op,tf,resample,work,::Nothing,::Nothing)
+    _compiled_paths_proper_pair!(w,op,tf,nothing,nothing)
+    return _compiled_paths_resample!(w,resample,work)
+end
+function _compiled_paths_execute_group!(owner,sequence,offset,index,::Val{N}) where {N}
+    positions=ntuple(i->index+3fld(i-1,2)+mod(i-1,2),Val(N))
+    masks=ntuple(i->sequence[index+3i-1],Val(N÷2-1))
+    _compiled_paths_proper_group!(owner.workspace,map(i->sequence[i],positions),masks,
+        map(i->owner.workspace.propagation[offset+i],positions))
+    return index+3(N÷2)-2
+end
+
 function _compiled_paths_interpolate!(work, kernel, source, coefficients)
     work.input .= source
     Backends._enqueue_mul!(work.temporary, kernel, work.input, coefficients)
@@ -1039,7 +1131,16 @@ function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(
         elseif op.kind == PathNormalize
             _compiled_paths_normalize!(w.field, w.normalization)
         elseif op.kind in (PathTransferFunction, PathFourierTransform)
-            if prepared && index < last && sequence[index+1].kind in (PathTransferFunction, PathFourierTransform)
+            if prepared && index+2<=last && sequence[index+1].kind==PathTransferFunction &&
+                    sequence[index+2].kind==PathResample
+                _compiled_paths_proper_resample!(w,op,sequence[index+1],sequence[index+2],
+                    w.operations[offset+index+2],w.propagation[offset+index],w.propagation[offset+index+1])
+                index+=2
+            elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(8))
+                index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(8))
+            elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(4))
+                index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(4))
+            elseif prepared && index < last && sequence[index+1].kind in (PathTransferFunction, PathFourierTransform)
                 _compiled_paths_proper_pair!(w, op, sequence[index+1],
                     w.propagation[offset+index], w.propagation[offset+index+1])
                 index += 1
@@ -1051,18 +1152,7 @@ function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(
         elseif op.kind == PathSpectralMultiplier
             _compiled_paths_filter!(w.field, w.field, op.array, w.physical_fft)
         elseif op.kind == PathResample
-            _compiled_paths_fft!(w.physical_fft.scratch, w.field, w.physical_fft)
-            if !isempty(op.auxiliary)
-                w.physical_fft.scratch .*= op.auxiliary
-            end
-            Backends._enqueue_mul!(work.temporary, op.array, w.physical_fft.scratch,
-                w.mul_coefficients)
-            Backends._enqueue_mul!(w.field, work.temporary, transpose(op.array),
-                w.mul_coefficients)
-            w.field ./= size(op.array, 2)^2
-            if !isempty(op.post)
-                w.field .*= op.post
-            end
+            _compiled_paths_resample!(w,op,work)
         elseif op.kind == PathLiveScreen
             input = op.source == 1 ? owner.inputs.dm_opd : owner.inputs.entrance_opd
             _compiled_paths_interpolate!(work, op.array, input, w.mul_coefficients)

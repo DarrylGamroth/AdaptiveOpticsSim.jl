@@ -31,6 +31,14 @@ output quantities. Faster execution changes wall-clock cost, not the declared
 simulation timestep or exposure duration. Compare fixed inputs, seeds and model
 timestamps when checking results across implementations.
 
+YAML remains the static authoring surface for graph topology, optical paths,
+physical parameters and array bindings. Preparation reads those definitions and
+selects reusable execution steps; it does not substitute a fixed instrument
+pipeline. Changing topology, geometry or fixed bindings requires preparation
+and graph capture again. Bound live DM and pupil inputs can change on replay.
+An operation sequence that does not match an optimization continues through
+the ordinary supported execution path.
+
 The shared improvements have different scopes:
 
 | Mechanism | Simulations that use it |
@@ -43,6 +51,12 @@ Shack–Hartmann, Pyramid and ordinary direct-image workflows have their own
 executors. They continue to work and do not automatically receive a compiled-path
 speedup. CPU execution does not require CUDA. A result on one GPU is not a
 throughput guarantee for another system or simulation.
+
+Compatible prepared paths can keep fields in raw FFT order across sampled
+masks. A PTP immediately followed by Fourier resampling can also omit the
+cancelling inverse/forward FFT pair. Phases, gains, centering and normalization
+retain their mathematical positions. FFT cancellation changes floating-point
+roundoff, so complex-field and intensity comparisons remain qualification gates.
 
 Phase storage trades memory traffic against computation. Preparation selects the
 qualified implementation; scientific model files contain no GPU tuning settings.

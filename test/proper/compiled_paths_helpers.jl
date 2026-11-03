@@ -8,8 +8,8 @@ using SHA
 
 # Redistributable compiler-contract fixture. The oracle uses the defining
 # centred Fresnel equations, independently of PROPER and the prepared runtime.
-function compiled_paths_synthetic_fixture(; forward=true, from_waist=true)
-    n, m = 8, 5
+function compiled_paths_synthetic_fixture(; forward=true, from_waist=true,n=8)
+    m = 5
     lambda, dx, dz = 1.6e-6, 4e-5, forward ? 0.013 : -0.013
     q = collect(0:n-1) .- n÷2
     entrance = ComplexF64[exp(-0.07*(x*x+y*y))*cis(0.2x+0.03y*y) for y in q, x in q]
@@ -47,6 +47,69 @@ function compiled_paths_synthetic_fixture(; forward=true, from_waist=true)
         "fast_paths"=>[Dict("source_index"=>0,"shift_transfer"=>"one",
             "phase_multiplier"=>["one"])])
     return (; metadata, arrays, n, m, lambda, dx, dz, forward, from_waist)
+end
+
+function compiled_paths_grouped_fixture()
+    fixture=compiled_paths_synthetic_fixture()
+    prefix=only(fixture.metadata["propagations"])["prefix"]
+    for _ in 1:3
+        append!(prefix,[Dict("kind"=>"mult","array"=>"mask"),
+            deepcopy(prefix[4]),deepcopy(prefix[5])])
+    end
+    push!(prefix,deepcopy(prefix[3]))
+    return fixture
+end
+
+function compiled_paths_resample_fixture(;n=8,distance=0.004)
+    fixture=compiled_paths_synthetic_fixture(;n)
+    prefix=only(fixture.metadata["propagations"])["prefix"]
+    transfer=deepcopy(prefix[4])
+    transfer["dz"]=distance
+    append!(prefix,[transfer,Dict("kind"=>"resample","kernel"=>"identity",
+        "roll"=>"edge","post"=>"mask"),deepcopy(prefix[3])])
+    return fixture
+end
+
+function compare_compiled_resample_fields(owner;synchronize=()->nothing,capture=nothing,replay=nothing)
+    w=owner.workspace
+    path=only(owner.plan.paths)
+    op,tf,resample=path.prefix[5:7]
+    wf,ctx=w.wavefront,w.context
+    wf.wavelength_m=op.wavelength_m;wf.sampling_m=op.dx
+    first=Proper.prepare_propagation(wf,op.dz,ctx;kind=op.from_waist ? :wts : :stw)
+    wf.wavelength_m=tf.wavelength_m;wf.sampling_m=tf.dx
+    last=Proper.prepare_propagation(wf,tf.dz,ctx;kind=:ptp)
+    work=w.operations[7]
+    input=similar(w.field)
+    T=real(eltype(input));n=size(input,1)
+    ordinary()=begin
+        AdaptiveOpticsSim.Backends.copyto_backend_async!(w.field,input)
+        CP._compiled_paths_proper_pair!(w,op,tf,first,last)
+        CP._compiled_paths_resample!(w,resample,work)
+    end
+    optimized()=begin
+        AdaptiveOpticsSim.Backends.copyto_backend_async!(w.field,input)
+        CP._compiled_paths_proper_resample!(w,op,tf,resample,work,first,last)
+    end
+    fill!(input,one(eltype(input)))
+    ordinary();optimized();synchronize()
+    captures=capture===nothing ? nothing : map(capture,(ordinary,optimized))
+    # Native graph arguments retain addresses; explicitly retain all backing
+    # arrays while comparing changed-input replays of the complex field.
+    GC.@preserve first last input w begin
+        for state in 1:3
+            copyto!(input,Complex{T}[sin(.3y+.11x+state)+im*cos(.2y-.17x-state) for y in 1:n,x in 1:n])
+            captures===nothing ? ordinary() : replay(captures[1])
+            synchronize();expected=Array(w.field)
+            captures===nothing ? optimized() : replay(captures[2])
+            synchronize();actual=Array(w.field)
+            gate=T===Float32 ? 1e-5 : 2e-12
+            @test norm(actual-expected)/norm(expected)<=gate
+            @test maximum(abs,actual-expected)/maximum(abs,expected)<=gate
+            last.direction==0 && @test actual==expected
+        end
+    end
+    return nothing
 end
 
 function compiled_paths_synthetic_oracle(fixture, dm, entrance_opd, attenuation)

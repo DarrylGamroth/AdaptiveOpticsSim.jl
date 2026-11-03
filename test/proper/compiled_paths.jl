@@ -1,5 +1,32 @@
 include("compiled_paths_helpers.jl")
 
+@testset "Compiled propagation groups preserve operation positions" begin
+    fixtures=(compiled_paths_grouped_fixture(),
+        (compiled_paths_resample_fixture(;n,distance) for n in (7,8),distance in (-0.004,0.0,0.004))...)
+    for fixture in fixtures
+    dm=zeros(fixture.n,fixture.n)
+    owner=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->fixture.arrays[ref];dm_opd=dm)
+    reference=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->fixture.arrays[ref];dm_opd=dm)
+    for state in 1:3
+        @. dm=state*3e-8*sin(.2*(1:fixture.n))
+        CP._enqueue_compiled_paths!(reference,false,false,false)
+        CP._enqueue_compiled_paths!(owner)
+        for name in (:fringed,:unfringed,:reference)
+            @test getproperty(owner.products,name)==getproperty(reference.products,name)
+        end
+    end
+    @test compiled_paths_allocated(owner)==0
+    end
+    for T in (Float32,Float64),n in (7,8),distance in (-0.004,0.0,0.004)
+        fixture=compiled_paths_resample_fixture(;n,distance)
+        owner=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+            ref->fixture.arrays[ref];T)
+        compare_compiled_resample_fields(owner)
+    end
+end
+
 @testset "Compiled fast filter batches" begin
     for T in (Float32, Float64), image_size in (5, 6), phantom_pad in (0, 2)
         fixture = compiled_paths_filtered_fixture(; image_size, phantom_pad)
