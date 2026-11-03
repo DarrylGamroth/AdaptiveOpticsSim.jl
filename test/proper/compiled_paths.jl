@@ -567,3 +567,11 @@ end
         @test graph_output(graph, :fringed) == original
     end
 end
+
+@testset "Compiled multiplication backend fallback" begin
+    field=zeros(ComplexF32,512,512)
+    coefficients=AdaptiveOpticsSim.Backends._prepare_mul_coefficients(field)
+    @test AdaptiveOpticsSim.Optics._prepare_compiled_paths_mul_coefficients(field,coefficients) === coefficients
+    @test !AdaptiveOpticsSim.Optics._compiled_paths_edge_cache_enabled(
+        AdaptiveOpticsSim.Backends.HostComputeDevice(),field)
+end

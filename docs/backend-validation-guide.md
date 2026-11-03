@@ -55,9 +55,27 @@ evidence identifies an AMDGPU defect or regression.
 Compiled optical paths batch independent fast-path/anchor fields over the third
 array axis; FFTs transform only canonical `(y,x)` axes `(1,2)`. Frozen filter
 transfers use corner ordering internally. Fused packing retains centred input,
-padding and cropping semantics; unpacking applies the frozen phase. PROPER slow
-propagation and shared-prefix selection are unchanged. The two branches reuse
+padding and cropping semantics; unpacking applies the frozen phase. The two branches reuse
 one image batch and one optional defocus batch in stream order.
+
+Cold preparation may select measured backend-specific lowering without changing
+YAML topology or optical coefficients. The CUDA 512² ComplexF32 path on sm86
+with 5 MiB L2 retains an exactly verified real, even edge multiplier as a
+quarter-sized indexed view. It adds 266,244 bytes per owner while preserving the
+original complex array for the ordinary numerical executor. Complex, asymmetric
+or multiple distinct edges retain their original storage. CPU, AMDGPU, other
+grids/precisions and unqualified CUDA devices retain the existing policy.
+
+For the same CUDA class, default math mode selects cuBLAS `Cgemm3m` for cubic
+512² products. This Gaussian complex algorithm uses three full-precision real
+products and changes rounding; it does not enable TF32 or reduce input precision.
+Smaller/rectangular products and explicit non-default math modes keep ordinary
+GEMM. The retained `prepared=false` executor always uses the original coefficients
+and GEMM selection. Compare changed inputs and reset against that executor at
+the fitted model's existing accuracy limit before claiming a performance gain.
+Shared FFT/field/checkpoint storage remains serialized; concurrent replay of an
+owner is unsupported. Reprepare and recapture after changing fixed configuration
+or the execution policy. Live DM/pupil inputs remain bound and can change.
 
 Run `julia --project=test/proper test/proper/compiled_paths.jl` for the focused
 CPU equations and warmed zero-allocation checks. The CUDA/AMDGPU compiled-path

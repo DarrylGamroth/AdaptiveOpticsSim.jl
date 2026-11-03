@@ -120,7 +120,7 @@ struct PathNormalizationWorkspace{P,S}
     power::S
 end
 
-struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P}
+struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P,E,K}
     field::A
     prefix::A
     shared_prefixes::V
@@ -142,6 +142,8 @@ struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P}
     mul_coefficients::L
     fast::B
     propagation::P
+    edge_multiplier::E
+    prepared_mul_coefficients::K
 end
 
 """Canonical `(y,x)` compiled multi-path relative-intensity products, dimensionless intensity."""
@@ -902,14 +904,17 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
     pixel_mtf = _compiled_paths_prepare_pixel_mtf(plan, products)
     prefix_fields = _compiled_paths_seal(A[
         _compiled_paths_array(target, Complex{T}, n, n) for _ in 1:prefix_count])
+    coefficients = Backends._prepare_mul_coefficients(field)
     workspace = CompiledPathsWorkspace(field, prefix, prefix_fields, wf, ctx, operations,
         physical_fft, image_fft, phantom_fft,
         _compiled_paths_array(target, Complex{T}, image_size, image_size),
         _compiled_paths_array(target, Complex{T}, image_size, image_size),
         fields(nk * na), fields(nk * na), fields(nk * na), fields(ne * na), fields(ne * na),
         _compiled_paths_normalization_workspace(field, target, T), pixel_mtf,
-        Backends._prepare_mul_coefficients(field), _compiled_paths_fast_workspace(plan, T),
-        _compiled_paths_prepare_propagation(paths, wf, ctx))
+        coefficients, _compiled_paths_fast_workspace(plan, T),
+        _compiled_paths_prepare_propagation(paths, wf, ctx),
+        _compiled_paths_prepare_edge_multiplier(paths, target, field),
+        AdaptiveOpticsSim.Optics._prepare_compiled_paths_mul_coefficients(field, coefficients))
     channels = AdaptiveOpticsSim.Optics.SpectralBundle(T.(metadata["channels"]),
         ones(T, nc); T)
     reference_visibility = [Complex{T}[1;;] for _ in 1:nc]
@@ -971,10 +976,44 @@ function _compiled_paths_prepare_propagation(::Backends.CUDABackend, paths, wf::
     return _compiled_paths_seal(values)
 end
 
+# Preserve the original complex coefficients for the retained numerical executor.
+# A real, even multiplier can instead be read through a quarter-sized indexed
+# view. Reconstruction is exact, including signed zeros; asymmetric or multiple
+# distinct edges retain their original storage.
+function _compiled_paths_prepare_edge_multiplier(paths, target, field)
+    AdaptiveOpticsSim.Optics._compiled_paths_edge_cache_enabled(target, field) || return nothing
+    edge = nothing
+    for path in paths, sequence in (path.prefix, path.closed, path.only), op in sequence
+        op.kind in (PathTransferFunction, PathFourierTransform) || continue
+        isempty(op.auxiliary) && continue
+        edge === nothing && (edge = op.auxiliary)
+        edge === op.auxiliary || return nothing
+    end
+    edge === nothing && return nothing
+    T = real(eltype(field))
+    values = Array(edge)
+    all(value -> isequal(imag(value), zero(T)), values) || return nothing
+    ny, nx = size(values)
+    iseven(ny) && iseven(nx) || return nothing
+    iy = Int32[min(i, ny + 2 - i) for i in 1:ny]
+    ix = Int32[min(i, nx + 2 - i) for i in 1:nx]
+    quarter = real.(values[1:ny÷2+1, 1:nx÷2+1])
+    isequal(complex.(quarter[iy, ix]), values) || return nothing
+    resident = _compiled_paths_resident(target, quarter, T)
+    rows = _compiled_paths_resident(target, iy, Int32)
+    columns = ny == nx ? rows : _compiled_paths_resident(target, ix, Int32)
+    return (edge, view(resident, rows, columns))
+end
+@inline _compiled_paths_edge(::Nothing, op) = isempty(op.auxiliary) ? nothing : op.auxiliary
+@inline _compiled_paths_edge(cache::Tuple, op) =
+    op.auxiliary === first(cache) ? last(cache) : _compiled_paths_edge(nothing, op)
+@inline _compiled_paths_mul_coefficients(w, prepared::Bool) =
+    prepared ? w.prepared_mul_coefficients : w.mul_coefficients
+
 _compiled_paths_proper!(workspace, op, ::Nothing) = _compiled_paths_proper!(workspace, op)
 
 function _compiled_paths_proper!(workspace, op, prepared::Proper.PreparedPropagation)
-    edge = isempty(op.auxiliary) ? nothing : op.auxiliary
+    edge = _compiled_paths_edge(workspace.edge_multiplier, op)
     Proper.propagate!(workspace.field, prepared, workspace.field; centered=true,
         input_multiplier=edge,
         output_multiplier=op.kind == PathFourierTransform ? op.gouy : one(op.gouy))
@@ -1008,7 +1047,7 @@ function _compiled_paths_proper!(workspace, op)
 end
 
 function _compiled_paths_proper_pair!(workspace, op, next, first::Proper.PreparedPropagation, second::Proper.PreparedPropagation)
-    edge(value) = isempty(value.auxiliary) ? nothing : value.auxiliary
+    edge(value) = _compiled_paths_edge(workspace.edge_multiplier, value)
     gain(value) = value.kind == PathFourierTransform ? value.gouy : one(value.gouy)
     Proper.propagate!(workspace.field, (first,second), workspace.field; centered=true,
         input_multipliers=(edge(op),edge(next)), output_multipliers=(gain(op),gain(next)))
@@ -1022,7 +1061,7 @@ end
 
 function _compiled_paths_proper_group!(workspace, operations, masks,
     prepared::NTuple{N,P}) where {N,P<:Proper.PreparedPropagation}
-    edge(op)=isempty(op.auxiliary) ? nothing : op.auxiliary
+    edge(op)=_compiled_paths_edge(workspace.edge_multiplier, op)
     gain(op)=op.kind==PathFourierTransform ? op.gouy : one(op.gouy)
     inputs=ntuple(Val(N)) do i
         i>1 && isodd(i) ? (masks[fld(i-1,2)].array,edge(operations[i])) : edge(operations[i])
@@ -1057,21 +1096,21 @@ function _compiled_paths_group_matches(sequence,index,last,::Val{N}) where {N}
     return true
 end
 
-function _compiled_paths_resample_frequency!(w,op,work)
+function _compiled_paths_resample_frequency!(w,op,work,prepared::Bool=true)
     if !isempty(op.auxiliary)
         w.physical_fft.scratch .*=op.auxiliary
     end
-    Backends._enqueue_mul!(work.temporary,op.array,w.physical_fft.scratch,w.mul_coefficients)
-    Backends._enqueue_mul!(w.field,work.temporary,transpose(op.array),w.mul_coefficients)
+    Backends._enqueue_mul!(work.temporary,op.array,w.physical_fft.scratch,_compiled_paths_mul_coefficients(w,prepared))
+    Backends._enqueue_mul!(w.field,work.temporary,transpose(op.array),_compiled_paths_mul_coefficients(w,prepared))
     w.field ./=size(op.array,2)^2
     if !isempty(op.post)
         w.field .*=op.post
     end
     return nothing
 end
-function _compiled_paths_resample!(w,op,work)
+function _compiled_paths_resample!(w,op,work,prepared::Bool=true)
     _compiled_paths_fft!(w.physical_fft.scratch,w.field,w.physical_fft)
-    return _compiled_paths_resample_frequency!(w,op,work)
+    return _compiled_paths_resample_frequency!(w,op,work,prepared)
 end
 
 function _compiled_paths_proper_resample!(w,op,tf,resample,work,
@@ -1083,7 +1122,7 @@ function _compiled_paths_proper_resample!(w,op,tf,resample,work,
     # PTP ends with BFFT followed by scale; resampling immediately applies FFT.
     # FFT(BFFT(G)*s)=length(G)*s*G. Preserve phases, edge/gain positions and the
     # centered Fourier coordinates; only the redundant FFT pair is removed.
-    edge(value)=isempty(value.auxiliary) ? nothing : value.auxiliary
+    edge(value)=_compiled_paths_edge(w.edge_multiplier, value)
     gain=op.kind==PathFourierTransform ? op.gouy : one(op.gouy)
     backend=KernelAbstractions.get_backend(first.field)
     shift=fld(size(first.field,1),2)
@@ -1152,14 +1191,14 @@ function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(
         elseif op.kind == PathSpectralMultiplier
             _compiled_paths_filter!(w.field, w.field, op.array, w.physical_fft)
         elseif op.kind == PathResample
-            _compiled_paths_resample!(w,op,work)
+            _compiled_paths_resample!(w,op,work,prepared)
         elseif op.kind == PathLiveScreen
             input = op.source == 1 ? owner.inputs.dm_opd : owner.inputs.entrance_opd
-            _compiled_paths_interpolate!(work, op.array, input, w.mul_coefficients)
+            _compiled_paths_interpolate!(work, op.array, input, _compiled_paths_mul_coefficients(w,prepared))
             AdaptiveOpticsSim.Optics.apply_phase_async!(work.electric_field, work.opd)
             if op.source == 2
                 _compiled_paths_interpolate!(work, op.array, owner.inputs.entrance_attenuation,
-                    w.mul_coefficients)
+                    _compiled_paths_mul_coefficients(w,prepared))
                 @. w.field *= exp(-work.opd)
             end
         end
@@ -1203,13 +1242,13 @@ function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true
         offset=_compiled_paths_sequence!(owner,path.closed,offset,sharing.closed,share_prefix,prepared)
         slot=_compiled_paths_slot(path.path_index,path.anchor_index,plan.n_anchor)
         _compiled_paths_crop!(w.crop,w.field,plan.crop_start)
-        _compiled_paths_resample_image!(w.closed_sources[slot],w.crop,owner)
+        _compiled_paths_resample_image!(w.closed_sources[slot],w.crop,owner,prepared)
         if !share_prefix || sharing.only.count==0
             Backends.copyto_backend_async!(w.field,w.prefix)
         end
         offset=_compiled_paths_sequence!(owner,path.only,offset,sharing.only,share_prefix,prepared)
         _compiled_paths_crop!(w.crop,w.field,plan.crop_start)
-        _compiled_paths_resample_image!(w.only_sources[slot],w.crop,owner)
+        _compiled_paths_resample_image!(w.only_sources[slot],w.crop,owner,prepared)
     end
     for a in 1:plan.n_anchor
         w.closed_sources[a] .*=plan.main_phase
@@ -1218,13 +1257,13 @@ function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true
     return nothing
 end
 
-function _compiled_paths_resample_image!(out, input, owner)
+function _compiled_paths_resample_image!(out, input, owner, prepared::Bool=true)
     plan, w = owner.plan, owner.workspace
     _compiled_paths_fft!(w.image_fft.scratch, input, w.image_fft)
     Backends._enqueue_mul!(w.resample_temporary, plan.resample_kernel, w.image_fft.scratch,
-        w.mul_coefficients)
+        _compiled_paths_mul_coefficients(w,prepared))
     Backends._enqueue_mul!(out, w.resample_temporary, transpose(plan.resample_kernel),
-        w.mul_coefficients)
+        _compiled_paths_mul_coefficients(w,prepared))
     out ./= plan.image_size^2
     return out
 end

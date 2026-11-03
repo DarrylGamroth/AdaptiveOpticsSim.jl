@@ -1,7 +1,7 @@
 module AdaptiveOpticsSimCUDAExt
 
 import AdaptiveOpticsSim
-import AdaptiveOpticsSim: Backends, WavefrontSensors
+import AdaptiveOpticsSim: Backends, WavefrontSensors, Optics
 using CUDA
 using LinearAlgebra
 
@@ -108,6 +108,54 @@ function Backends._prepare_mul_coefficients(
         return (alpha=CUDA.CUDACore.CuRefArray(values, 1),
             beta=CUDA.CUDACore.CuRefArray(values, 2))
     end
+end
+
+# Measured for 512² ComplexF32 compiled propagation on sm86 / 5 MiB L2.
+# Keep other devices, grids, precisions and explicit non-default math policies
+# on their existing storage and GEMM implementation.
+_compiled_paths_device_qualified(field) = false
+function _compiled_paths_device_qualified(field::CUDA.CuMatrix{ComplexF32})
+    size(field) == (512,512) || return false
+    device = CUDA.device(field)
+    return CUDA.capability(device) == v"8.6" &&
+        CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_L2_CACHE_SIZE) == 5 * 1024 * 1024
+end
+function Optics._compiled_paths_edge_cache_enabled(
+    ::Backends.AcceleratorComputeDevice{Backends.CUDABackend}, field::CUDA.CuMatrix{ComplexF32})
+    return _compiled_paths_device_qualified(field)
+end
+function Optics._prepare_compiled_paths_mul_coefficients(
+    field::CUDA.CuMatrix{ComplexF32}, coefficients)
+    _compiled_paths_device_qualified(field) && CUDA.math_mode() == CUDA.DEFAULT_MATH ||
+        return coefficients
+    return (; coefficients..., algorithm=Val(:gemm3m))
+end
+
+# Gaussian complex multiplication uses three full-precision real products.
+# It changes rounding, but does not downconvert inputs to TF32/FP16. Restrict
+# selection to measured cubic GEMMs; rectangular and smaller maps keep GEMM.
+function _compiled_paths_gemm3m!(C, A, B, coefficients, transb)
+    if size(C) == size(A) == size(B) == (512,512) &&
+            stride(C,1) == stride(A,1) == stride(B,1) == 1
+        CUDA.CUBLAS.cublasCgemm3m(CUDA.CUBLAS.handle(), CUDA.CUBLAS.CUBLAS_OP_N,
+            transb == 'N' ? CUDA.CUBLAS.CUBLAS_OP_N : CUDA.CUBLAS.CUBLAS_OP_T,
+            size(C,1), size(C,2), size(A,2), coefficients.alpha,
+            A, stride(A,2), B, stride(B,2), coefficients.beta, C, stride(C,2))
+        return C
+    end
+    return CUDA.CUBLAS.gemm!('N', transb, coefficients.alpha, A, B, coefficients.beta, C)
+end
+function Backends._enqueue_mul!(C::CUDA.StridedCuMatrix{ComplexF32},
+    A::CUDA.StridedCuMatrix{ComplexF32}, B::CUDA.StridedCuMatrix{ComplexF32},
+    coefficients::NamedTuple{(:alpha,:beta,:algorithm),Tuple{R,R,Val{:gemm3m}}}) where {
+        R<:CUDA.CUDACore.CuRefArray{ComplexF32}}
+    return _compiled_paths_gemm3m!(C, A, B, coefficients, 'N')
+end
+function Backends._enqueue_mul!(C::CUDA.StridedCuMatrix{ComplexF32},
+    A::CUDA.StridedCuMatrix{ComplexF32}, B::Transpose{ComplexF32,<:CUDA.StridedCuMatrix{ComplexF32}},
+    coefficients::NamedTuple{(:alpha,:beta,:algorithm),Tuple{R,R,Val{:gemm3m}}}) where {
+        R<:CUDA.CUDACore.CuRefArray{ComplexF32}}
+    return _compiled_paths_gemm3m!(C, A, parent(B), coefficients, 'T')
 end
 
 # Passing retained CuRefArray values directly to the typed BLAS wrappers avoids

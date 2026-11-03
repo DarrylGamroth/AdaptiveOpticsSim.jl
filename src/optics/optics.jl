@@ -18,6 +18,8 @@ activate execution. `read_array(reference)` supplies canonical logical[y,x]
 matrices during cold preparation; execution retains no metadata dictionary or
 reader. OPD inputs are metres; entrance attenuation is the finite additional
 log-amplitude quantity `a` in `exp(-a)` on the compiled native input grid.
+Backend execution policies, including CUDA math mode, are fixed at preparation
+and capture; changing them requires a new preparation/capture.
 """
 function prepare_compiled_optical_paths end
 """
@@ -29,6 +31,11 @@ retained products after completion. Exposure timing, detector acquisition and
 physical radiometry remain the caller's responsibility. Requires Proper.jl.
 """
 function propagate_compiled_optical_paths! end
+
+# Backend policy hooks for cold preparation; other backends retain the ordinary
+# multiplier storage and BLAS arithmetic.
+_compiled_paths_edge_cache_enabled(target, field) = false
+_prepare_compiled_paths_mul_coefficients(field, coefficients) = coefficients
 
 using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault, FixedSizeMatrixDefault
 using KernelAbstractions
