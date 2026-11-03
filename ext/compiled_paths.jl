@@ -109,7 +109,7 @@ struct PathNormalizationWorkspace{P,S}
     power::S
 end
 
-struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B}
+struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P}
     field::A
     prefix::A
     shared_prefixes::V
@@ -130,6 +130,7 @@ struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B}
     pixel_mtf::M
     mul_coefficients::L
     fast::B
+    propagation::P
 end
 
 """Canonical `(y,x)` compiled multi-path relative-intensity products, dimensionless intensity."""
@@ -805,7 +806,8 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
         _compiled_paths_array(target, Complex{T}, image_size, image_size),
         fields(nk * na), fields(nk * na), fields(nk * na), fields(ne * na), fields(ne * na),
         _compiled_paths_normalization_workspace(field, target, T), pixel_mtf,
-        Backends._prepare_mul_coefficients(field), _compiled_paths_fast_workspace(plan, T))
+        Backends._prepare_mul_coefficients(field), _compiled_paths_fast_workspace(plan, T),
+        _compiled_paths_prepare_propagation(paths, wf, ctx))
     channels = AdaptiveOpticsSim.Optics.SpectralBundle(T.(metadata["channels"]),
         ones(T, nc); T)
     reference_visibility = [Complex{T}[1;;] for _ in 1:nc]
@@ -831,6 +833,49 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
     wf.field === fft_workspace.scratch || throw(ArgumentError(
         "compiled optical paths PROPER field must retain its prepared FFT scratch binding"))
     return owner
+end
+
+# Fixed geometry is shared across optical branches. The cold dictionary never
+# enters execution: the sealed vector has an explicit concrete union element.
+_compiled_paths_prepare_propagation(paths, wf, ctx) =
+    _compiled_paths_prepare_propagation(Backends.execution_style(wf.field), paths, wf, ctx)
+function _compiled_paths_prepare_propagation(::Backends.ScalarCPUStyle, paths, wf, ctx)
+    count = sum(length(seq) for path in paths for seq in (path.prefix, path.closed, path.only))
+    return _compiled_paths_seal(fill(nothing, count))
+end
+function _compiled_paths_prepare_propagation(::Backends.AcceleratorStyle, paths, wf::Proper.WaveFront{T}, ctx) where {T}
+    function prepare(op)
+        wf.wavelength_m = op.wavelength_m
+        wf.sampling_m = op.dx
+        kind = op.kind == PathTransferFunction ? :ptp : op.from_waist ? :wts : :stw
+        return Proper.prepare_propagation(wf, op.dz, ctx; kind)
+    end
+    first_prepared = Proper.prepare_propagation(wf, zero(T), ctx; kind=:ptp)
+    key(op) = (op.kind, op.wavelength_m, op.dx, op.dz, op.from_waist)
+    P = typeof(first_prepared)
+    cache = Dict{Tuple{PathOperationKind,T,T,T,Bool},P}()
+    values = Union{Nothing,P}[]
+    for path in paths, seq in (path.prefix, path.closed, path.only), op in seq
+        value = if op.kind in (PathTransferFunction, PathFourierTransform)
+            get!(cache, key(op)) do
+                prepare(op)
+            end
+        else
+            nothing
+        end
+        push!(values, value)
+    end
+    return _compiled_paths_seal(values)
+end
+
+_compiled_paths_proper!(workspace, op, ::Nothing) = _compiled_paths_proper!(workspace, op)
+
+function _compiled_paths_proper!(workspace, op, prepared::Proper.PreparedPropagation)
+    edge = isempty(op.auxiliary) ? nothing : op.auxiliary
+    Proper.propagate!(workspace.field, prepared, workspace.field; centered=true,
+        input_multiplier=edge,
+        output_multiplier=op.kind == PathFourierTransform ? op.gouy : one(op.gouy))
+    return nothing
 end
 
 function _compiled_paths_proper!(workspace, op)
@@ -859,6 +904,19 @@ function _compiled_paths_proper!(workspace, op)
     return nothing
 end
 
+function _compiled_paths_proper_pair!(workspace, op, next, first::Proper.PreparedPropagation, second::Proper.PreparedPropagation)
+    edge(value) = isempty(value.auxiliary) ? nothing : value.auxiliary
+    gain(value) = value.kind == PathFourierTransform ? value.gouy : one(value.gouy)
+    Proper.propagate!(workspace.field, (first,second), workspace.field; centered=true,
+        input_multipliers=(edge(op),edge(next)), output_multipliers=(gain(op),gain(next)))
+    return nothing
+end
+function _compiled_paths_proper_pair!(workspace, op, next, ::Nothing, ::Nothing)
+    _compiled_paths_proper!(workspace, op)
+    _compiled_paths_proper!(workspace, next)
+    return nothing
+end
+
 function _compiled_paths_interpolate!(work, kernel, source, coefficients)
     work.input .= source
     Backends._enqueue_mul!(work.temporary, kernel, work.input, coefficients)
@@ -867,9 +925,10 @@ function _compiled_paths_interpolate!(work, kernel, source, coefficients)
     return work.opd
 end
 
-function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(sequence))
+function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(sequence), prepared::Bool=true)
     w = owner.workspace
-    for index in first:last
+    index = first
+    while index <= last
         op = sequence[index]
         work = w.operations[offset + index]
         if op.kind == PathMultiply
@@ -877,7 +936,15 @@ function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(
         elseif op.kind == PathNormalize
             _compiled_paths_normalize!(w.field, w.normalization)
         elseif op.kind in (PathTransferFunction, PathFourierTransform)
-            _compiled_paths_proper!(w, op)
+            if prepared && index < last && sequence[index+1].kind in (PathTransferFunction, PathFourierTransform)
+                _compiled_paths_proper_pair!(w, op, sequence[index+1],
+                    w.propagation[offset+index], w.propagation[offset+index+1])
+                index += 1
+            elseif prepared
+                _compiled_paths_proper!(w, op, w.propagation[offset + index])
+            else
+                _compiled_paths_proper!(w, op)
+            end
         elseif op.kind == PathSpectralMultiplier
             _compiled_paths_filter!(w.field, w.field, op.array, w.physical_fft)
         elseif op.kind == PathResample
@@ -903,13 +970,14 @@ function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(
                 @. w.field *= exp(-work.opd)
             end
         end
+        index += 1
     end
     return offset + length(sequence)
 end
 
 @inline _compiled_paths_slot(path, anchor, n_anchor) = (path - 1) * n_anchor + anchor
 
-function _compiled_paths_slow!(owner, share_prefix::Bool=true)
+function _compiled_paths_slow!(owner, share_prefix::Bool=true, prepared::Bool=true)
     plan, w = owner.plan, owner.workspace
     offset = 0
     for (index, path) in enumerate(plan.paths)
@@ -918,7 +986,7 @@ function _compiled_paths_slow!(owner, share_prefix::Bool=true)
             cached = w.shared_prefixes[shared.cache_index]
             if index == shared.first_path
                 Backends.copyto_backend_async!(w.field, path.entrance)
-                _compiled_paths_execute!(owner, path.prefix, offset, 1, shared.count)
+                _compiled_paths_execute!(owner, path.prefix, offset, 1, shared.count, prepared)
                 Backends.copyto_backend_async!(cached, w.field)
             else
                 Backends.copyto_backend_async!(w.field, cached)
@@ -926,21 +994,21 @@ function _compiled_paths_slow!(owner, share_prefix::Bool=true)
             # Each operation owns scratch at its original offset, including
             # skipped live-screen workspaces. Prefix fields are refreshed at
             # the first member on every invocation, also during GPU capture.
-            # PROPER operations rebind their wavelength, sampling, position
-            # and reference surface in _compiled_paths_proper!; no trajectory
-            # geometry or FFT scratch binding is restored from this field.
-            offset = _compiled_paths_execute!(owner, path.prefix, offset, shared.count + 1)
+            # Ordinary PROPER calls rebind geometry; prepared transforms freeze
+            # it independently of this cached field. Neither trajectory state
+            # nor FFT scratch bindings are restored from the prefix cache.
+            offset = _compiled_paths_execute!(owner, path.prefix, offset, shared.count + 1, length(path.prefix), prepared)
         else
             Backends.copyto_backend_async!(w.field, path.entrance)
-            offset = _compiled_paths_execute!(owner, path.prefix, offset)
+            offset = _compiled_paths_execute!(owner, path.prefix, offset, 1, length(path.prefix), prepared)
         end
         Backends.copyto_backend_async!(w.prefix, w.field)
-        offset = _compiled_paths_execute!(owner, path.closed, offset)
+        offset = _compiled_paths_execute!(owner, path.closed, offset, 1, length(path.closed), prepared)
         slot = _compiled_paths_slot(path.path_index, path.anchor_index, plan.n_anchor)
         _compiled_paths_crop!(w.crop, w.field, plan.crop_start)
         _compiled_paths_resample_image!(w.closed_sources[slot], w.crop, owner)
         Backends.copyto_backend_async!(w.field, w.prefix)
-        offset = _compiled_paths_execute!(owner, path.only, offset)
+        offset = _compiled_paths_execute!(owner, path.only, offset, 1, length(path.only), prepared)
         _compiled_paths_crop!(w.crop, w.field, plan.crop_start)
         _compiled_paths_resample_image!(w.only_sources[slot], w.crop, owner)
     end
@@ -1050,9 +1118,9 @@ function _compiled_paths_apply_pixel_mtf!(owners::Tuple)
     return nothing
 end
 
-function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bool=true, batch_fast::Bool=true)
+function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bool=true, batch_fast::Bool=true, prepared::Bool=true)
     plan, w, products = owner.plan, owner.workspace, owner.products
-    _compiled_paths_slow!(owner, share_prefix)
+    _compiled_paths_slow!(owner, share_prefix, prepared)
     if batch_fast
         _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true)
         _compiled_paths_fast!(w.only_envelopes, w.only_sources, owner, false)

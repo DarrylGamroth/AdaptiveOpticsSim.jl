@@ -40,7 +40,7 @@ function compare_compiled_input_capture(model,::Type{T};mode="reference_ratio",g
         # Preserve an independent-path oracle for the shared-prefix fixture.
         CP._enqueue_compiled_paths!(cpu_owner.propagation,false,false)
         Backends._with_prepared_device_execution_context(streamed.context) do
-            CP._enqueue_compiled_paths!(stream_owner.propagation,false,false)
+            CP._enqueue_compiled_paths!(stream_owner.propagation,false,false,false)
             Backends._synchronize_prepared_device_execution_context!(streamed.context)
         end
         actual=map(name->Array(graph_output(captured,name)),(:fringed,:unfringed,:reference))
