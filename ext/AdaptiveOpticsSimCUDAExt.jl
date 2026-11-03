@@ -120,6 +120,25 @@ function _compiled_paths_device_qualified(field::CUDA.CuMatrix{ComplexF32})
     return CUDA.capability(device) == v"8.6" &&
         CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_L2_CACHE_SIZE) == 5 * 1024 * 1024
 end
+# Small detector-grid resampling groups reuse one matrix in L2. Larger
+# physical-grid batches require different checkpoint ownership and are not
+# selected by this policy.
+function Optics._compiled_paths_resample_batch_size(
+    ::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
+    field::CUDA.CuMatrix{ComplexF32}, image_size, count)
+    return _compiled_paths_device_qualified(field) && image_size == 221 &&
+        count >= 4 && CUDA.math_mode() == CUDA.DEFAULT_MATH ? 4 : 1
+end
+function Optics._compiled_paths_resample_mul!(
+    field::CUDA.CuArray{ComplexF32,3}, temporary::CUDA.CuArray{ComplexF32,3},
+    kernel::CUDA.CuArray{ComplexF32,3}, coefficients)
+    CUDA.CUBLAS.gemm_strided_batched!('N', 'N', coefficients.alpha,
+        kernel, field, coefficients.beta, temporary)
+    CUDA.CUBLAS.gemm_strided_batched!('N', 'T', coefficients.alpha,
+        temporary, kernel, coefficients.beta, field)
+    return nothing
+end
+
 function Optics._compiled_paths_edge_cache_enabled(
     ::Backends.AcceleratorComputeDevice{Backends.CUDABackend}, field::CUDA.CuMatrix{ComplexF32})
     return _compiled_paths_device_qualified(field)

@@ -77,6 +77,19 @@ Shared FFT/field/checkpoint storage remains serialized; concurrent replay of an
 owner is unsupported. Reprepare and recapture after changing fixed configuration
 or the execution policy. Live DM/pupil inputs remain bound and can change.
 
+The same qualified CUDA class groups four independent 221² image resamplings.
+Crop and inverse centering share one pack pass; FFTs transform only `(y,x)`.
+A column-permuted copy of the fixed resampling matrix accepts raw FFT order,
+then two ordinary FP32 strided-batched GEMMs produce the original source slots.
+The dot-product summation order changes, so validate complex fields/intensities
+against the retained ordinary executor. A final partial group zeros unused
+planes before execution and writes only valid outputs. Prefix/checkpoint order
+is unchanged and the batch is drained before source products are consumed.
+Two field stacks plus the reordered matrix add 3,516,552 bytes per owner,
+excluding FFT/library work areas. Other backends and unqualified shapes retain
+per-source execution. Prepared physical resampling also omits exactly verified
+identity rolls and fuses division followed by the existing post multiplier.
+
 Run `julia --project=test/proper test/proper/compiled_paths.jl` for the focused
 CPU equations and warmed zero-allocation checks. The CUDA/AMDGPU compiled-path
 selectors exercise the same odd/even, mixed-defocus and ghost fixtures with

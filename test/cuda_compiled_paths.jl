@@ -49,3 +49,6 @@ include("proper/compiled_paths_gpu.jl")
 end
 
 include("proper/compiled_paths_cuda_multiplication.jl")
+
+include("proper/compiled_paths_resampling_batch.jl")
+check_compiled_image_resampling_batch(CuArray,COMPILED_TARGET;captured=true)

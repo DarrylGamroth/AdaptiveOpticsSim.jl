@@ -34,6 +34,17 @@ function propagate_compiled_optical_paths! end
 
 # Backend policy hooks for cold preparation; other backends retain the ordinary
 # multiplier storage and BLAS arithmetic.
+_compiled_paths_resample_batch_size(target, field, image_size, count) = 1
+function _compiled_paths_resample_mul!(field, temporary, kernel, coefficients)
+    matrix = view(kernel, :, :, 1)
+    for i in axes(field, 3)
+        input = view(field, :, :, i)
+        work = view(temporary, :, :, i)
+        _enqueue_mul!(work, matrix, input, coefficients)
+        _enqueue_mul!(input, work, transpose(matrix), coefficients)
+    end
+    return nothing
+end
 _compiled_paths_edge_cache_enabled(target, field) = false
 _prepare_compiled_paths_mul_coefficients(field, coefficients) = coefficients
 

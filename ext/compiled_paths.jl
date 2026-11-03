@@ -91,6 +91,7 @@ struct PathOperationWorkspace{A,R,E}
     mapped::A
     opd::R
     electric_field::E
+    identity_roll::Bool
 end
 
 struct PathFFTWorkspace{A,F,I}
@@ -120,7 +121,17 @@ struct PathNormalizationWorkspace{P,S}
     power::S
 end
 
-struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P,E,K}
+struct PathResampleBatch{N,A,F,O,C}
+    batch_size::Val{N}
+    field::A
+    temporary::A
+    kernel::A
+    forward::F
+    outputs::O
+    coefficients::C
+end
+
+struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P,E,K,R}
     field::A
     prefix::A
     shared_prefixes::V
@@ -144,6 +155,7 @@ struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P,E,K}
     propagation::P
     edge_multiplier::E
     prepared_mul_coefficients::K
+    image_resample::R
 end
 
 """Canonical `(y,x)` compiled multi-path relative-intensity products, dimensionless intensity."""
@@ -716,7 +728,9 @@ function _compiled_paths_operation_workspace(op, field, target, ::Type{T}) where
     mapped = _compiled_paths_array(target, Complex{T}, m == 0 ? 0 : n, m == 0 ? 0 : n)
     opd = _compiled_paths_array(target, T, m == 0 ? 0 : n, m == 0 ? 0 : n)
     electric_field = _compiled_paths_electric_field(field, op.dx, op.wavelength_m)
-    return PathOperationWorkspace(input, temporary, mapped, opd, electric_field)
+    identity_roll = op.kind == PathResample && !isempty(op.auxiliary) &&
+        all(value -> isequal(value, one(value)), Array(op.auxiliary))
+    return PathOperationWorkspace(input, temporary, mapped, opd, electric_field, identity_roll)
 end
 
 function _compiled_paths_bind(target, ::Type{T}, value, n, role) where {T}
@@ -905,16 +919,21 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
     prefix_fields = _compiled_paths_seal(A[
         _compiled_paths_array(target, Complex{T}, n, n) for _ in 1:prefix_count])
     coefficients = Backends._prepare_mul_coefficients(field)
+    closed_sources, only_sources = fields(ne * na), fields(ne * na)
+    batch_size = AdaptiveOpticsSim.Optics._compiled_paths_resample_batch_size(
+        target, field, image_size, 2length(paths))
+    image_resample = batch_size == 1 ? nothing : _compiled_paths_prepare_image_resample(
+        plan, closed_sources, only_sources, coefficients, Val(batch_size))
     workspace = CompiledPathsWorkspace(field, prefix, prefix_fields, wf, ctx, operations,
         physical_fft, image_fft, phantom_fft,
         _compiled_paths_array(target, Complex{T}, image_size, image_size),
         _compiled_paths_array(target, Complex{T}, image_size, image_size),
-        fields(nk * na), fields(nk * na), fields(nk * na), fields(ne * na), fields(ne * na),
+        fields(nk * na), fields(nk * na), fields(nk * na), closed_sources, only_sources,
         _compiled_paths_normalization_workspace(field, target, T), pixel_mtf,
         coefficients, _compiled_paths_fast_workspace(plan, T),
         _compiled_paths_prepare_propagation(paths, wf, ctx),
         _compiled_paths_prepare_edge_multiplier(paths, target, field),
-        AdaptiveOpticsSim.Optics._prepare_compiled_paths_mul_coefficients(field, coefficients))
+        AdaptiveOpticsSim.Optics._prepare_compiled_paths_mul_coefficients(field, coefficients), image_resample)
     channels = AdaptiveOpticsSim.Optics.SpectralBundle(T.(metadata["channels"]),
         ones(T, nc); T)
     reference_visibility = [Complex{T}[1;;] for _ in 1:nc]
@@ -1097,14 +1116,17 @@ function _compiled_paths_group_matches(sequence,index,last,::Val{N}) where {N}
 end
 
 function _compiled_paths_resample_frequency!(w,op,work,prepared::Bool=true)
-    if !isempty(op.auxiliary)
+    if !isempty(op.auxiliary) && !(prepared && work.identity_roll)
         w.physical_fft.scratch .*=op.auxiliary
     end
     Backends._enqueue_mul!(work.temporary,op.array,w.physical_fft.scratch,_compiled_paths_mul_coefficients(w,prepared))
     Backends._enqueue_mul!(w.field,work.temporary,transpose(op.array),_compiled_paths_mul_coefficients(w,prepared))
-    w.field ./=size(op.array,2)^2
-    if !isempty(op.post)
-        w.field .*=op.post
+    normalization = size(op.array,2)^2
+    if prepared && !isempty(op.post)
+        @. w.field = (w.field / normalization) * op.post
+    else
+        w.field ./=normalization
+        isempty(op.post) || (w.field .*=op.post)
     end
     return nothing
 end
@@ -1224,6 +1246,77 @@ function _compiled_paths_sequence!(owner,sequence,offset,sharing,share_prefix,pr
     return _compiled_paths_execute!(owner,sequence,offset,first,length(sequence),prepared)
 end
 
+# Inputs remain independent through the resampling FFT and both matrix
+# products. Batch outputs are consumed only after all slow paths complete.
+function _compiled_paths_prepare_image_resample(plan, closed, only, coefficients, ::Val{N}) where {N}
+    N > 0 || throw(ArgumentError("compiled image resampling batch must be positive"))
+    n = plan.image_size
+    field = _compiled_paths_array(plan.target, eltype(plan.resample_kernel), n, n, N)
+    temporary = similar(field)
+    # fftshift(F) = P*F*transpose(P). Copy K*P by permuting K's columns,
+    # so both products accept raw FFT order. Coefficients are not reevaluated;
+    # the changed dot-product summation order can change roundoff.
+    columns = mod1.((1:n) .+ fld(n,2), n)
+    values = reshape(Array(plan.resample_kernel)[:,columns], n, n, 1)
+    kernel = _compiled_paths_resident(plan.target, values, eltype(field))
+    outputs = eltype(closed)[]
+    for path in plan.paths
+        slot = _compiled_paths_slot(path.path_index, path.anchor_index, plan.n_anchor)
+        push!(outputs, closed[slot], only[slot])
+    end
+    return PathResampleBatch(Val(N), field, temporary, kernel,
+        Backends.plan_fft_backend!(field, (1,2)), _compiled_paths_seal(outputs), coefficients)
+end
+
+# Preparation checks crop bounds. The wrapped coordinates stay in 1:n.
+# A final partial batch clears unused planes to prevent stale values growing
+# on replay; transforms and products never combine separate batch planes.
+KernelAbstractions.@kernel function _compiled_paths_pack_resample_kernel!(out, input, start, slot, valid)
+    y,x = @index(Global,NTuple)
+    n = size(out,1)
+    if y <= n && x <= n
+        sy,sx = y + fld(n,2), x + fld(n,2)
+        sy > n && (sy -= n)
+        sx > n && (sx -= n)
+        @inbounds out[y,x,slot] = input[sy+start,sx+start]
+        for plane in valid+1:size(out,3)
+            @inbounds out[y,x,plane] = zero(eltype(out))
+        end
+    end
+end
+KernelAbstractions.@kernel function _compiled_paths_unpack_resample_kernel!(outputs, field, valid, normalization)
+    y,x,plane = @index(Global,NTuple)
+    if y <= size(field,1) && x <= size(field,2) && plane <= valid
+        @inbounds outputs[plane][y,x] = field[y,x,plane] / normalization
+    end
+end
+
+function _compiled_paths_stage_image!(::Nothing, owner, number, out, prepared)
+    w,plan = owner.workspace, owner.plan
+    _compiled_paths_crop!(w.crop,w.field,plan.crop_start)
+    _compiled_paths_resample_image!(out,w.crop,owner,prepared)
+    return nothing
+end
+function _compiled_paths_stage_image!(batch::PathResampleBatch{N}, owner, number, out, prepared) where {N}
+    prepared || return _compiled_paths_stage_image!(nothing,owner,number,out,prepared)
+    n = owner.plan.image_size
+    slot = mod1(number,N)
+    valid = number == length(batch.outputs) ? slot : N
+    backend = KernelAbstractions.get_backend(batch.field)
+    _compiled_paths_pack_resample_kernel!(backend,(16,16))(
+        batch.field, owner.workspace.field, owner.plan.crop_start, slot, valid; ndrange=(n,n))
+    if slot == N || number == length(batch.outputs)
+        Backends.enqueue_fft_plan!(batch.field,batch.forward)
+        AdaptiveOpticsSim.Optics._compiled_paths_resample_mul!(batch.field,batch.temporary,
+            batch.kernel,batch.coefficients)
+        first = number - slot
+        outputs = ntuple(i -> batch.outputs[min(first+i,length(batch.outputs))], Val(N))
+        _compiled_paths_unpack_resample_kernel!(backend,(16,16,1))(
+            outputs, batch.field, slot, n^2; ndrange=size(batch.field))
+    end
+    return nothing
+end
+
 function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true)
     plan,w=owner.plan,owner.workspace
     offset=0
@@ -1241,14 +1334,12 @@ function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true
         end
         offset=_compiled_paths_sequence!(owner,path.closed,offset,sharing.closed,share_prefix,prepared)
         slot=_compiled_paths_slot(path.path_index,path.anchor_index,plan.n_anchor)
-        _compiled_paths_crop!(w.crop,w.field,plan.crop_start)
-        _compiled_paths_resample_image!(w.closed_sources[slot],w.crop,owner,prepared)
+        _compiled_paths_stage_image!(w.image_resample,owner,2index-1,w.closed_sources[slot],prepared)
         if !share_prefix || sharing.only.count==0
             Backends.copyto_backend_async!(w.field,w.prefix)
         end
         offset=_compiled_paths_sequence!(owner,path.only,offset,sharing.only,share_prefix,prepared)
-        _compiled_paths_crop!(w.crop,w.field,plan.crop_start)
-        _compiled_paths_resample_image!(w.only_sources[slot],w.crop,owner,prepared)
+        _compiled_paths_stage_image!(w.image_resample,owner,2index,w.only_sources[slot],prepared)
     end
     for a in 1:plan.n_anchor
         w.closed_sources[a] .*=plan.main_phase

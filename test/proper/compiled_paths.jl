@@ -575,3 +575,6 @@ end
     @test !AdaptiveOpticsSim.Optics._compiled_paths_edge_cache_enabled(
         AdaptiveOpticsSim.Backends.HostComputeDevice(),field)
 end
+
+include("compiled_paths_resampling_batch.jl")
+check_compiled_image_resampling_batch(Array,AdaptiveOpticsSim.Backends.HostComputeDevice())
