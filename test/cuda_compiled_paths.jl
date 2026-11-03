@@ -55,3 +55,5 @@ check_compiled_image_resampling_batch(CuArray,COMPILED_TARGET;captured=true)
 
 include("proper/compiled_paths_branch_batch.jl")
 check_compiled_branch_batch(CuArray,COMPILED_TARGET;captured=true)
+
+check_compiled_input_groups(CuArray,COMPILED_TARGET;captured=true)

@@ -154,3 +154,75 @@ function check_compiled_branch_rejections()
         @test all(isnothing,identity_owner.workspace.branch_batch.pairs)
     end
 end
+
+# Later branches fork after one/three transform pairs. Their remaining prefix
+# contains ten/six transforms and starts directly from a retained checkpoint.
+function check_compiled_input_groups(array,target;captured=false)
+    backend=AdaptiveOpticsSim.Backends
+    context=backend._prepare_device_execution_context(target)
+    backend._with_prepared_device_execution_context(context) do
+        @testset "Prepared prefix input groups $array" begin
+            for T in (Float32,Float64),n in (7,8),sign in (-1,1)
+                fixture=compiled_paths_branch_fixture(;n,sign)
+                for branch in fixture.metadata["propagations"]
+                    prefix=deepcopy(branch["prefix"][1:3])
+                    wavelength=fixture.metadata["wavelengths"][branch["anchor_index"]+1]
+                    fork=branch["path_index"]==1 ? 2 : branch["path_index"]==2 ? 4 : 0
+                    for pair in 1:6
+                        mask=pair==fork ? "branch_$(branch["path_index"])" : "mask"
+                        push!(prefix,Dict("kind"=>"mult","array"=>mask))
+                        for (waist,distance) in ((true,.013),(false,-.009))
+                            push!(prefix,Dict("kind"=>"ft","dx"=>fixture.dx,"dz"=>sign*distance,
+                                "lam"=>wavelength,"edge"=>"edge","from_waist"=>waist,
+                                "forward"=>sign*distance>=0,"gouy_real"=>.13,"gouy_imag"=>-.9))
+                        end
+                    end
+                    branch["prefix"]=prefix
+                end
+                dm=array(zeros(T,n,n))
+                prepare()=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+                    key->fixture.arrays[key];target,T,dm_opd=dm)
+                reference=prepare()
+                forced=force_compiled_branch_batch(prepare())
+                w=forced.workspace
+                workspace=CP.CompiledPathsWorkspace(map(fieldnames(typeof(w))) do name
+                    name===:branch_batch ? nothing : getfield(w,name)
+                end...)
+                owner=CP.PreparedCompiledPaths(forced.plan,workspace,forced.inputs,forced.products,
+                    forced.execution_context,forced.synthesis)
+                retained=Tuple(w.shared_prefixes)
+                operation()=CP._enqueue_compiled_paths!(owner)
+                operation();backend._synchronize_prepared_device_execution_context!(context)
+                recorded=captured ? backend._capture_prepared_device_graph(operation,context) : nothing
+                first_products=nothing
+                for state in (1,2,1)
+                    copyto!(dm,array(T[state*2e-8sin(.2i+.3j) for i in 1:n,j in 1:n]))
+                    for work in (w,reference.workspace)
+                        fill!(work.field,Complex{T}(NaN))
+                        foreach(field->fill!(field,Complex{T}(NaN)),work.shared_prefixes)
+                    end
+                    CP._enqueue_compiled_paths!(reference,true,true,false)
+                    recorded===nothing ? operation() : backend._launch_prepared_device_graph!(recorded,context)
+                    backend._synchronize_prepared_device_execution_context!(context)
+                    tolerance=T===Float32 ? 1e-5 : 1e-11
+                    for name in (:fringed,:unfringed,:reference)
+                        actual=Array(getproperty(owner.products,name));expected=Array(getproperty(reference.products,name))
+                        @test norm(actual-expected)/norm(expected)<=tolerance
+                        @test maximum(abs,actual-expected)/maximum(abs,expected)<=tolerance
+                    end
+                    for (left,right) in ((w.closed_sources,reference.workspace.closed_sources),
+                            (w.only_sources,reference.workspace.only_sources),(w.shared_prefixes,reference.workspace.shared_prefixes))
+                        for (a,b) in zip(left,right)
+                            expected=Array(b)
+                            @test norm(Array(a)-expected)/norm(expected)<=tolerance
+                        end
+                    end
+                    @test all(i->w.shared_prefixes[i]===retained[i],eachindex(retained))
+                    products=map(name->Array(getproperty(owner.products,name)),(:fringed,:unfringed,:reference))
+                    first_products===nothing && (first_products=products)
+                    state==1 && @test products==first_products
+                end
+            end
+        end
+    end
+end

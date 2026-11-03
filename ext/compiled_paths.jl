@@ -1102,17 +1102,21 @@ function _compiled_paths_proper_pair!(workspace, op, next, ::Nothing, ::Nothing)
 end
 
 function _compiled_paths_proper_group!(workspace, operations, masks,
-    prepared::NTuple{N,P}) where {N,P<:Proper.PreparedPropagation}
+    prepared::NTuple{N,P},input=workspace.field,initial_mask=nothing) where {N,P<:Proper.PreparedPropagation}
     edge(op)=_compiled_paths_edge(workspace.edge_multiplier, op)
     gain(op)=op.kind==PathFourierTransform ? op.gouy : one(op.gouy)
     inputs=ntuple(Val(N)) do i
-        i>1 && isodd(i) ? (masks[fld(i-1,2)].array,edge(operations[i])) : edge(operations[i])
+        i==1 ? (initial_mask,edge(operations[i])) :
+            isodd(i) ? (masks[fld(i-1,2)].array,edge(operations[i])) : edge(operations[i])
     end
-    Proper.propagate!(workspace.field,prepared,workspace.field;centered=true,
+    Proper.propagate!(workspace.field,prepared,input;centered=true,
         input_multipliers=inputs,output_multipliers=map(gain,operations))
     return nothing
 end
-function _compiled_paths_proper_group!(workspace,operations,masks,::NTuple{N,Nothing}) where {N}
+function _compiled_paths_proper_group!(workspace,operations,masks,::NTuple{N,Nothing},
+    input=workspace.field,initial_mask=nothing) where {N}
+    input === workspace.field || Backends.copyto_backend_async!(workspace.field,input)
+    initial_mask === nothing || (workspace.field .*=initial_mask)
     for i in 1:N
         if i>1 && isodd(i)
             workspace.field .*=masks[fld(i-1,2)].array
@@ -1188,12 +1192,39 @@ function _compiled_paths_proper_resample!(w,op,tf,resample,work,::Nothing,::Noth
     _compiled_paths_proper_pair!(w,op,tf,nothing,nothing)
     return _compiled_paths_resample!(w,resample,work)
 end
-function _compiled_paths_execute_group!(owner,sequence,offset,index,::Val{N}) where {N}
+function _compiled_paths_execute_group!(owner,sequence,offset,index,::Val{N},
+    input=owner.workspace.field,initial_mask=nothing) where {N}
+    return _compiled_paths_execute_group!(owner,sequence,offset,index,Val(N),input,initial_mask,
+        owner.workspace.propagation[offset+index])
+end
+function _compiled_paths_execute_group!(owner,sequence,offset,index,::Val{N},
+    input,initial_mask,::P) where {N,P}
     positions=ntuple(i->index+3fld(i-1,2)+mod(i-1,2),Val(N))
     masks=ntuple(i->sequence[index+3i-1],Val(N÷2-1))
+    # Preparation seals one propagation type (or all Nothing). Narrow it before
+    # constructing the tuple, rather than boxing Union-valued tuple elements.
+    prepared=ntuple(i->owner.workspace.propagation[offset+positions[i]]::P,Val(N))
     _compiled_paths_proper_group!(owner.workspace,map(i->sequence[i],positions),masks,
-        map(i->owner.workspace.propagation[offset+i],positions))
+        prepared,input,initial_mask)
     return index+3(N÷2)-2
+end
+
+# Consume an initial sampled multiplier while packing the first transform.
+# The source may be the current field or a retained prefix checkpoint.
+function _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input)
+    first+2<=last && sequence[first].kind==PathMultiply &&
+        sequence[first+1].kind in (PathTransferFunction,PathFourierTransform) &&
+        owner.workspace.propagation[offset+first+1] !== nothing || return first-1
+    return _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input,
+        (Val(10),Val(8),Val(6),Val(4),Val(2)))
+end
+@inline _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input,::Tuple{}) = first-1
+@inline function _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input,groups::Tuple)
+    group=Base.first(groups)
+    if _compiled_paths_group_matches(sequence,first+1,last,group)
+        return _compiled_paths_execute_group!(owner,sequence,offset,first+1,group,input,sequence[first].array)
+    end
+    return _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input,Base.tail(groups))
 end
 
 function _compiled_paths_interpolate!(work, kernel, source, coefficients)
@@ -1211,7 +1242,12 @@ function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(
         op = sequence[index]
         work = w.operations[offset + index]
         if op.kind == PathMultiply
-            w.field .*= op.array
+            consumed = prepared ? _compiled_paths_multiplied_group!(owner,sequence,offset,index,last,w.field) : index-1
+            if consumed < index
+                w.field .*= op.array
+            else
+                index = consumed
+            end
         elseif op.kind == PathNormalize
             _compiled_paths_normalize!(w.field, w.normalization)
         elseif op.kind in (PathTransferFunction, PathFourierTransform)
@@ -1220,8 +1256,12 @@ function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(
                 _compiled_paths_proper_resample!(w,op,sequence[index+1],sequence[index+2],
                     w.operations[offset+index+2],w.propagation[offset+index],w.propagation[offset+index+1])
                 index+=2
+            elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(10))
+                index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(10))
             elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(8))
                 index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(8))
+            elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(6))
+                index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(6))
             elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(4))
                 index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(4))
             elseif prepared && index < last && sequence[index+1].kind in (PathTransferFunction, PathFourierTransform)
@@ -1259,8 +1299,17 @@ function _compiled_paths_sequence!(owner,sequence,offset,sharing,share_prefix,pr
         return _compiled_paths_execute!(owner,sequence,offset,1,length(sequence),prepared)
     end
     w=owner.workspace
-    sharing.count>0 && Backends.copyto_backend_async!(w.field,w.shared_prefixes[sharing.cache_index])
     first=sharing.count+1
+    if sharing.count>0
+        input=w.shared_prefixes[sharing.cache_index]
+        last=isempty(sharing.checkpoints) ? length(sequence) : sharing.checkpoints[1].index
+        consumed=prepared ? _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input) : first-1
+        if consumed < first
+            Backends.copyto_backend_async!(w.field,input)
+        else
+            first=consumed+1
+        end
+    end
     for checkpoint in sharing.checkpoints
         _compiled_paths_execute!(owner,sequence,offset,first,checkpoint.index,prepared)
         Backends.copyto_backend_async!(w.shared_prefixes[checkpoint.cache_index],w.field)

@@ -582,3 +582,5 @@ check_compiled_image_resampling_batch(Array,AdaptiveOpticsSim.Backends.HostCompu
 include("compiled_paths_branch_batch.jl")
 check_compiled_branch_batch(Array,AdaptiveOpticsSim.Backends.HostComputeDevice())
 check_compiled_branch_rejections()
+
+check_compiled_input_groups(Array,AdaptiveOpticsSim.Backends.HostComputeDevice())

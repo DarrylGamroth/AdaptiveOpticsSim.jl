@@ -105,6 +105,13 @@ compare complex fields, checkpoints and intensities, including zero fields,
 changed inputs, poisoned scratch and replay. This optimization changes execution
 prepared from YAML, not its topology or scientific coefficients.
 
+Prepared scalar groups also admit six/ten-transform stencils, bounded by the
+next checkpoint. The first sampled multiplier can execute in the existing pack,
+which reads a retained prefix input directly. Multiplier order, checkpoint buffers
+and terminal PTP/resampling cancellation are preserved. This adds no field or
+coefficient storage. Propagation tuple construction narrows the preparation-time
+common type before submission; captured replay retains the same ownership rules.
+
 Run `julia --project=test/proper test/proper/compiled_paths.jl` for the focused
 CPU equations and warmed zero-allocation checks. The CUDA/AMDGPU compiled-path
 selectors exercise the same odd/even, mixed-defocus and ghost fixtures with
