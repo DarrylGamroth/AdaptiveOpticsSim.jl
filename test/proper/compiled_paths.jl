@@ -459,9 +459,10 @@ end
         owner = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
             fixture.metadata, ref -> fixture.arrays[ref];
             dm_opd=dm, entrance_opd=opd, entrance_attenuation=attenuation, summation)
-        @test length(owner.workspace.shared_prefixes) == 2
-        @test all(p -> p.count == 5, owner.plan.shared_prefixes)
-        @test [p.cache_index for p in owner.plan.shared_prefixes] == [1, 2, 1, 2, 1, 2]
+        @test length(owner.workspace.shared_prefixes) == 1
+        @test [p.prefix.count for p in owner.plan.shared_prefixes] == [0,5,5,0,5,5]
+        @test all(p -> only(p.prefix.checkpoints).index==5,owner.plan.shared_prefixes[[1,4]])
+        @test [p.prefix.cache_index for p in owner.plan.shared_prefixes] == [0,1,1,0,1,1]
         oracle = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
             fixture.metadata, ref -> fixture.arrays[ref];
             dm_opd=dm, entrance_opd=opd, entrance_attenuation=attenuation, summation)
@@ -484,6 +485,30 @@ end
         end
         @test compiled_paths_allocated(owner) == 0
     end
+    # Nested sharing must retain shorter forks and reuse a complete deeper
+    # prefix plus its closed continuation, rather than stopping at one common
+    # prefix for the entire family. Compare changing inputs with no sharing.
+    fixture=compiled_paths_shared_fixture()
+    for path in fixture.metadata["propagations"]
+        path["path_index"]==2 && (path["prefix"][end]["array"]="branch_0")
+    end
+    dm=zeros(fixture.n,fixture.n)
+    nested=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->fixture.arrays[ref];dm_opd=dm)
+    reference=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->fixture.arrays[ref];dm_opd=dm)
+    @test maximum(p.prefix.count for p in nested.plan.shared_prefixes)>5
+    @test any(p->p.closed.count>0,nested.plan.shared_prefixes)
+    for frame in 1:3
+        @. dm=3e-8*sin(frame*.2*(1:fixture.n))
+        foreach(field->fill!(field,complex(NaN)),nested.workspace.shared_prefixes)
+        CP._enqueue_compiled_paths!(reference,false)
+        CP._enqueue_compiled_paths!(nested)
+        for name in (:fringed,:unfringed,:reference)
+            @test getproperty(nested.products,name)==getproperty(reference.products,name)
+        end
+    end
+    @test compiled_paths_allocated(nested)==0
     fixture = compiled_paths_shared_fixture()
     fixture.arrays["other_entrance"] = copy(fixture.arrays["entrance"])
     # Different entrance bindings and different leading live wavelengths must
@@ -492,7 +517,8 @@ end
     fixture.metadata["propagations"][5]["prefix"][1]["lam"] *= 1.01
     owner = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
         fixture.metadata, ref -> fixture.arrays[ref])
-    @test [p.count for p in owner.plan.shared_prefixes] == [0, 5, 0, 5, 0, 5]
+    @test [p.prefix.count for p in owner.plan.shared_prefixes] == [0,0,0,5,5,0]
+    @test only(owner.plan.shared_prefixes[3].prefix.checkpoints).index==5
     independent = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
         fixture.metadata, ref -> fixture.arrays[ref])
     CP._enqueue_compiled_paths!(independent, false)

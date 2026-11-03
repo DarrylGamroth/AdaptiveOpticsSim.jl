@@ -66,16 +66,19 @@ function compare_fitted(application, name; benchmark=false, profile=false)
     for propagation in owner.workspace.propagation
         propagation === nothing && continue
         for phase in (propagation.before,propagation.transfer,propagation.after)
-            isempty(phase) || push!(phase_arrays,phase)
+            stored=Proper._propagation_phase_storage(phase)
+            stored === nothing || isempty(stored) || push!(phase_arrays,stored)
         end
     end
     phase_bytes=sum(length(phase)*sizeof(eltype(phase)) for phase in phase_arrays)
-    println((;name,phase_arrays=length(phase_arrays),phase_bytes));flush(stdout)
+    println((;name,phase_arrays=length(phase_arrays),phase_bytes,
+        shared_fields=length(owner.workspace.shared_prefixes),
+        shared_field_bytes=sum(length(field)*sizeof(eltype(field)) for field in owner.workspace.shared_prefixes)));flush(stdout)
     # Both graphs reuse the exact same owner, FFT plans, buffers and inputs.
     capture_start=time_ns()
     ordinary = capture_paths(graph, () -> CP._enqueue_compiled_paths!(owner,true,true,false))
     original = capture_paths(graph, () -> begin
-        CP._enqueue_compiled_paths!(owner,true,false,false)
+        CP._enqueue_compiled_paths!(owner,false,false,false)
         for synthesis in owner.synthesis
             AdaptiveOpticsSim.Optics._synthesize_spectrum_reference!(synthesis)
         end

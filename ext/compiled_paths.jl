@@ -48,13 +48,24 @@ struct PathTransformPlan{A,V}
     ghost::V
 end
 
-struct PathPrefixPlan
+struct PathPrefixCheckpoint
+    index::Int
     cache_index::Int
-    first_path::Int
-    count::Int
 end
 
-struct CompiledPathsPlan{T,D,P,F,A}
+struct PathPrefixPlan{C}
+    cache_index::Int
+    count::Int
+    checkpoints::C
+end
+
+struct PathSharingPlan{S}
+    prefix::S
+    closed::S
+    only::S
+end
+
+struct CompiledPathsPlan{T,D,P,F,A,S}
     target::D
     grid::Int
     image_size::Int
@@ -63,7 +74,7 @@ struct CompiledPathsPlan{T,D,P,F,A}
     n_anchor::Int
     wavelengths::FixedSizeVectorDefault{T}
     paths::P
-    shared_prefixes::FixedSizeVectorDefault{PathPrefixPlan}
+    shared_prefixes::S
     fast_paths::F
     resample_kernel::A
     main_phase::A
@@ -448,29 +459,119 @@ function _compiled_paths_same_operation(a, b)
         a.from_waist == b.from_waist && a.forward == b.forward && a.source == b.source
 end
 
-function _compiled_paths_shared_prefixes(paths)
-    prefixes = fill(PathPrefixPlan(0, 0, 0), length(paths))
-    visited = falses(length(paths))
-    cache_count = 0
-    for first_path in eachindex(paths)
-        visited[first_path] && continue
-        reference = paths[first_path]
-        group = [i for i in first_path:length(paths) if
-            paths[i].anchor_index == reference.anchor_index &&
-            paths[i].entrance === reference.entrance]
-        visited[group] .= true
-        length(group) > 1 || continue
-        count = 0
-        for index in 1:minimum(i -> length(paths[i].prefix), group)
-            all(i -> _compiled_paths_same_operation(reference.prefix[index],
-                paths[i].prefix[index]), group) || break
-            count = index
+# Group independent numerical paths by exact root binding. Output slots retain
+# their declared path/anchor indices; only the serial evaluation order changes.
+# Completing each root before the next permits checkpoint storage to be reused.
+function _compiled_paths_group_paths(paths)
+    grouped=eltype(paths)[]
+    visited=falses(length(paths))
+    for first in eachindex(paths)
+        visited[first] && continue
+        reference=paths[first]
+        for index in first:length(paths)
+            path=paths[index]
+            if !visited[index] && path.anchor_index==reference.anchor_index &&
+                    path.entrance===reference.entrance
+                push!(grouped,path)
+                visited[index]=true
+            end
         end
-        count > 0 || continue
-        cache_count += 1
-        prefixes[group] .= Ref(PathPrefixPlan(cache_count, first_path, count))
     end
-    return _compiled_paths_seal(prefixes), cache_count
+    return grouped
+end
+
+function _compiled_paths_shared_prefixes(paths)
+    empty = PathPrefixPlan(0,0,_compiled_paths_seal(PathPrefixCheckpoint[]))
+    P = typeof(PathSharingPlan(empty,empty,empty))
+    isempty(paths) && return _compiled_paths_seal(P[]),0
+    O = eltype(first(paths).prefix)
+    # Cold trie nodes identify exact numerical operations and their ancestry.
+    # Roots additionally bind entrance identity and spectral anchor. No dictionary,
+    # abstract operation container or mutable trie enters the prepared executor.
+    operations = Union{Nothing,O}[]
+    children = Vector{Int}[]
+    origins, positions = Int[],Int[]
+    roots, root_paths = Int[],Int[]
+    chains = Vector{Int}[]
+    function node!(op,stage,index)
+        push!(operations,op);push!(children,Int[])
+        push!(origins,stage);push!(positions,index)
+        return length(operations)
+    end
+    function chain!(sequence,parent,stage)
+        chain=Int[]
+        for (index,op) in enumerate(sequence)
+            found=findfirst(child->_compiled_paths_same_operation(operations[child]::O,op),children[parent])
+            child=if found===nothing
+                created=node!(op,stage,index)
+                push!(children[parent],created)
+                created
+            else
+                children[parent][found]
+            end
+            push!(chain,child)
+            parent=child
+        end
+        push!(chains,chain)
+        return parent
+    end
+    for (index,path) in enumerate(paths)
+        found=findfirst(i->paths[root_paths[i]].anchor_index==path.anchor_index &&
+            paths[root_paths[i]].entrance===path.entrance,eachindex(roots))
+        root=if found===nothing
+            created=node!(nothing,0,0)
+            push!(roots,created);push!(root_paths,index)
+            created
+        else
+            roots[found]
+        end
+        base=chain!(path.prefix,root,3index-2)
+        chain!(path.closed,base,3index-1)
+        chain!(path.only,base,3index)
+    end
+    counts=zeros(Int,length(chains))
+    targets=Set{Int}()
+    last_use=zeros(Int,length(operations))
+    for (stage,chain) in enumerate(chains)
+        count=0
+        for (index,node) in enumerate(chain)
+            origins[node]<stage || break
+            count=index
+        end
+        counts[stage]=count
+        if count>0
+            node=chain[count]
+            push!(targets,node)
+            last_use[node]=stage
+        end
+    end
+    cache_nodes=sort!(collect(targets))
+    cache_indices=zeros(Int,length(operations))
+    # Recycle storage only after its last consuming stage. The conservative
+    # stage-level intervals also remain safe if a future caller interleaves roots.
+    slot_ends=Int[]
+    for node in cache_nodes
+        slot=findfirst(last->last<origins[node],slot_ends)
+        if slot===nothing
+            push!(slot_ends,last_use[node])
+            slot=length(slot_ends)
+        else
+            slot_ends[slot]=last_use[node]
+        end
+        cache_indices[node]=slot
+    end
+    sequences=typeof(empty)[]
+    for (stage,chain) in enumerate(chains)
+        checkpoints=PathPrefixCheckpoint[
+            PathPrefixCheckpoint(positions[node],cache_indices[node])
+            for node in cache_nodes if origins[node]==stage]
+        sort!(checkpoints;by=point->point.index)
+        count=counts[stage]
+        cache=count==0 ? 0 : cache_indices[chain[count]]
+        push!(sequences,PathPrefixPlan(cache,count,_compiled_paths_seal(checkpoints)))
+    end
+    return _compiled_paths_seal(P[PathSharingPlan(sequences[3i-2],sequences[3i-1],sequences[3i])
+        for i in eachindex(paths)]),length(slot_ends)
 end
 
 function _compiled_paths_array(target, ::Type{T}, dims...) where {T}
@@ -751,6 +852,7 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
     pixel_padded = image_size + 2pixel_pad
     size(loadarray(fast["pixel_mtf"])) == (pixel_padded, pixel_padded) ||
         throw(DimensionMismatch("compiled optical paths pixel MTF grid differs"))
+    paths = _compiled_paths_group_paths(paths)
     shared_prefixes, prefix_count = _compiled_paths_shared_prefixes(paths)
     plan = CompiledPathsPlan(target, n, image_size, crop_start, ne, na,
         FixedSizeVectorDefault{T}(T.(metadata["wavelengths"])),
@@ -978,44 +1080,50 @@ end
 
 @inline _compiled_paths_slot(path, anchor, n_anchor) = (path - 1) * n_anchor + anchor
 
-function _compiled_paths_slow!(owner, share_prefix::Bool=true, prepared::Bool=true)
-    plan, w = owner.plan, owner.workspace
-    offset = 0
-    for (index, path) in enumerate(plan.paths)
-        shared = plan.shared_prefixes[index]
-        if share_prefix && shared.count > 0
-            cached = w.shared_prefixes[shared.cache_index]
-            if index == shared.first_path
-                Backends.copyto_backend_async!(w.field, path.entrance)
-                _compiled_paths_execute!(owner, path.prefix, offset, 1, shared.count, prepared)
-                Backends.copyto_backend_async!(cached, w.field)
-            else
-                Backends.copyto_backend_async!(w.field, cached)
-            end
-            # Each operation owns scratch at its original offset, including
-            # skipped live-screen workspaces. Prefix fields are refreshed at
-            # the first member on every invocation, also during GPU capture.
-            # Ordinary PROPER calls rebind geometry; prepared transforms freeze
-            # it independently of this cached field. Neither trajectory state
-            # nor FFT scratch bindings are restored from the prefix cache.
-            offset = _compiled_paths_execute!(owner, path.prefix, offset, shared.count + 1, length(path.prefix), prepared)
-        else
-            Backends.copyto_backend_async!(w.field, path.entrance)
-            offset = _compiled_paths_execute!(owner, path.prefix, offset, 1, length(path.prefix), prepared)
+function _compiled_paths_sequence!(owner,sequence,offset,sharing,share_prefix,prepared)
+    if !share_prefix
+        return _compiled_paths_execute!(owner,sequence,offset,1,length(sequence),prepared)
+    end
+    w=owner.workspace
+    sharing.count>0 && Backends.copyto_backend_async!(w.field,w.shared_prefixes[sharing.cache_index])
+    first=sharing.count+1
+    for checkpoint in sharing.checkpoints
+        _compiled_paths_execute!(owner,sequence,offset,first,checkpoint.index,prepared)
+        Backends.copyto_backend_async!(w.shared_prefixes[checkpoint.cache_index],w.field)
+        first=checkpoint.index+1
+    end
+    return _compiled_paths_execute!(owner,sequence,offset,first,length(sequence),prepared)
+end
+
+function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true)
+    plan,w=owner.plan,owner.workspace
+    offset=0
+    for (index,path) in enumerate(plan.paths)
+        sharing=plan.shared_prefixes[index]
+        # Each reused prefix is produced earlier in this invocation, including
+        # during capture. Scratch offsets remain those of the original program;
+        # cached fields do not restore wavefront geometry or FFT bindings.
+        if !share_prefix || sharing.prefix.count==0
+            Backends.copyto_backend_async!(w.field,path.entrance)
         end
-        Backends.copyto_backend_async!(w.prefix, w.field)
-        offset = _compiled_paths_execute!(owner, path.closed, offset, 1, length(path.closed), prepared)
-        slot = _compiled_paths_slot(path.path_index, path.anchor_index, plan.n_anchor)
-        _compiled_paths_crop!(w.crop, w.field, plan.crop_start)
-        _compiled_paths_resample_image!(w.closed_sources[slot], w.crop, owner)
-        Backends.copyto_backend_async!(w.field, w.prefix)
-        offset = _compiled_paths_execute!(owner, path.only, offset, 1, length(path.only), prepared)
-        _compiled_paths_crop!(w.crop, w.field, plan.crop_start)
-        _compiled_paths_resample_image!(w.only_sources[slot], w.crop, owner)
+        offset=_compiled_paths_sequence!(owner,path.prefix,offset,sharing.prefix,share_prefix,prepared)
+        if !share_prefix || sharing.only.count==0
+            Backends.copyto_backend_async!(w.prefix,w.field)
+        end
+        offset=_compiled_paths_sequence!(owner,path.closed,offset,sharing.closed,share_prefix,prepared)
+        slot=_compiled_paths_slot(path.path_index,path.anchor_index,plan.n_anchor)
+        _compiled_paths_crop!(w.crop,w.field,plan.crop_start)
+        _compiled_paths_resample_image!(w.closed_sources[slot],w.crop,owner)
+        if !share_prefix || sharing.only.count==0
+            Backends.copyto_backend_async!(w.field,w.prefix)
+        end
+        offset=_compiled_paths_sequence!(owner,path.only,offset,sharing.only,share_prefix,prepared)
+        _compiled_paths_crop!(w.crop,w.field,plan.crop_start)
+        _compiled_paths_resample_image!(w.only_sources[slot],w.crop,owner)
     end
     for a in 1:plan.n_anchor
-        w.closed_sources[a] .*= plan.main_phase
-        w.only_sources[a] .*= plan.main_phase
+        w.closed_sources[a] .*=plan.main_phase
+        w.only_sources[a] .*=plan.main_phase
     end
     return nothing
 end

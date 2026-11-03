@@ -23,6 +23,39 @@ Use `PreparedGraphHILBoundary` when an external RTC consumes each completed
 simulated frame and returns one complete command for the next frame. An external
 application owns transport and wall-clock pacing.
 
+## Performance And Scientific Results
+
+Execution optimizations preserve the authored optics, spectra, detector response,
+coordinates, precision and calibration. Scientists use the same model inputs and
+output quantities. Faster execution changes wall-clock cost, not the declared
+simulation timestep or exposure duration. Compare fixed inputs, seeds and model
+timestamps when checking results across implementations.
+
+The shared improvements have different scopes:
+
+| Mechanism | Simulations that use it |
+| --- | --- |
+| Reuse of identical optical prefixes and continuations | Compiled optical-path programs on their supported CPU or accelerator backend. Reuse requires the same entrance binding, wavelength anchor and exact operation ancestry. |
+| Prepared quadratic-phase factors | Callers of PROPER's fixed-geometry prepared PTP/WTS/STW transforms. The factors and kernels contain no instrument identity. |
+| Recomputed spatial phases | Qualified CUDA device, shape and precision combinations. Other combinations retain cached factors. |
+
+Shack–Hartmann, Pyramid and ordinary direct-image workflows have their own
+executors. They continue to work and do not automatically receive a compiled-path
+speedup. CPU execution does not require CUDA. A result on one GPU is not a
+throughput guarantee for another system or simulation.
+
+Phase storage trades memory traffic against computation. Preparation selects the
+qualified implementation; scientific model files contain no GPU tuning settings.
+For the fitted SPIDERS comparison, the numerical acceptance gate checks changing
+inputs and reset/replay against the retained arithmetic. Roundoff equivalence
+within that gate does not imply identical bits for every model or backend.
+Preserve package/model identities and validate the quantities used in a study.
+
+Preparation and compilation are separate from warmed execution. A higher camera
+rate also changes the wall-clock schedule seen by an external controller, so
+camera-to-command latency, drops and closed-loop behavior need their own
+validation. Faster optical propagation alone does not establish those results.
+
 ## Direct Optical Model
 
 ~~~julia
