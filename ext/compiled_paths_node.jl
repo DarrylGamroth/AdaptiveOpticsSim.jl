@@ -225,7 +225,7 @@ _require_compiled_input_target(::Backends.AcceleratorComputeDevice{<:Union{Backe
 _require_compiled_input_target(target)=throw(AOG.AlgorithmGraphError("compiled optical input-grid adapter requires CPU, CUDA or AMDGPU execution"))
 
 KernelAbstractions.@kernel function _compiled_paths_validate_finite_kernel!(failure,input,slot)
-    index=KernelAbstractions.@index(Global,Linear)
+    index=@index(Global,Linear)
     if index <= length(input) && !isfinite(input[index])
         KernelAbstractions.@atomic failure[slot]=UInt32(1)
     end
@@ -240,7 +240,7 @@ end
     return 0
 end
 KernelAbstractions.@kernel function _compiled_paths_validate_amplitude_kernel!(failure,amplitude,reference)
-    index=KernelAbstractions.@index(Global,Linear)
+    index=@index(Global,Linear)
     if index <= length(amplitude)
         slot=_compiled_paths_amplitude_failure(amplitude[index],reference,index)
         if !iszero(slot)
@@ -264,7 +264,7 @@ end
 _compiled_paths_ratio!(::Backends.ScalarCPUStyle,attenuation,amplitude,reference,validation)=
     _compiled_paths_ratio!(attenuation,amplitude,reference)
 KernelAbstractions.@kernel function _compiled_paths_ratio_kernel!(attenuation,amplitude,reference,failure)
-    index=KernelAbstractions.@index(Global,Linear)
+    index=@index(Global,Linear)
     if index <= length(attenuation)
         a,r=amplitude[index],reference[index]
         value=zero(a)
