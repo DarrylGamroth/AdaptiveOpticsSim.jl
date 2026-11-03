@@ -27,27 +27,29 @@ struct PreparedBoundaryModelTimeDriver{
     state::_ModelTimeDriverState
 end
 
-"""One mapped run-local model timestamp with uncertainty and owned provenance."""
+"""One mapped run-local model timestamp with optional uncertainty and owned provenance."""
 struct CapturedModelTimestamp{Provenance}
     timestamp::ModelTimestamp
+    has_uncertainty::Bool
     uncertainty::ModelDuration
     provenance::Provenance
 
     function CapturedModelTimestamp(
         timestamp::ModelTimestamp,
-        uncertainty::ModelDuration,
+        uncertainty::Union{Nothing,ModelDuration},
         provenance::Provenance,
     ) where {Provenance}
         isbitstype(Provenance) || throw(AlgorithmGraphError(
             "captured model-time provenance must have an immutable isbits representation",
         ))
-        return new{Provenance}(timestamp, uncertainty, provenance)
+        return new{Provenance}(timestamp, uncertainty !== nothing,
+            something(uncertainty,zero(ModelDuration)), provenance)
     end
 end
 
 @inline model_timestamp(capture::CapturedModelTimestamp) = capture.timestamp
 @inline model_time_uncertainty(capture::CapturedModelTimestamp) =
-    capture.uncertainty
+    capture.has_uncertainty ? capture.uncertainty : nothing
 @inline model_time_provenance(capture::CapturedModelTimestamp) =
     capture.provenance
 
