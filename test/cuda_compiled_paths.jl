@@ -52,3 +52,6 @@ include("proper/compiled_paths_cuda_multiplication.jl")
 
 include("proper/compiled_paths_resampling_batch.jl")
 check_compiled_image_resampling_batch(CuArray,COMPILED_TARGET;captured=true)
+
+include("proper/compiled_paths_branch_batch.jl")
+check_compiled_branch_batch(CuArray,COMPILED_TARGET;captured=true)

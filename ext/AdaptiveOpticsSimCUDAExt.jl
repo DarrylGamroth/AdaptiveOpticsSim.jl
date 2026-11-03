@@ -120,9 +120,13 @@ function _compiled_paths_device_qualified(field::CUDA.CuMatrix{ComplexF32})
     return CUDA.capability(device) == v"8.6" &&
         CUDA.attribute(device, CUDA.DEVICE_ATTRIBUTE_L2_CACHE_SIZE) == 5 * 1024 * 1024
 end
-# Small detector-grid resampling groups reuse one matrix in L2. Larger
-# physical-grid batches require different checkpoint ownership and are not
-# selected by this policy.
+function Optics._compiled_paths_branch_batch_enabled(
+    ::Backends.AcceleratorComputeDevice{Backends.CUDABackend}, field::CUDA.CuMatrix{ComplexF32})
+    return _compiled_paths_device_qualified(field) && CUDA.math_mode() == CUDA.DEFAULT_MATH
+end
+
+# Small detector-grid resampling groups reuse one matrix in L2. Physical-grid
+# propagation uses the separate sibling eligibility and checkpoint policy.
 function Optics._compiled_paths_resample_batch_size(
     ::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
     field::CUDA.CuMatrix{ComplexF32}, image_size, count)

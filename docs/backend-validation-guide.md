@@ -90,6 +90,21 @@ excluding FFT/library work areas. Other backends and unqualified shapes retain
 per-source execution. Prepared physical resampling also omits exactly verified
 identity rolls and fuses division followed by the existing post multiplier.
 
+The same CUDA class and default math mode can pair independent closed/only
+physical propagation suffixes in two 512² planes. Preparation requires equal
+geometry, shared-prefix reuse counts and checkpoint cuts, disjoint checkpoint
+outputs and no dependency on a current sibling producer. Unsupported operation
+sequences retain serial execution. Shared prefixes execute once, roots finish
+in their original order, and each checkpoint retains its original buffer.
+Private PROPER kernels reuse common phase factors while preserving the scalar
+multiplier order; FFTs transform axes `(1,2)` only. The two-plane field adds
+4,194,304 bytes per owner, excluding FFT work areas. Existing scalar mapping
+scratch consumes terminal planes in order. Other backend policies remain
+unchanged; focused CPU/CUDA/AMDGPU tests force the portable numerical path and
+compare complex fields, checkpoints and intensities, including zero fields,
+changed inputs, poisoned scratch and replay. This optimization changes execution
+prepared from YAML, not its topology or scientific coefficients.
+
 Run `julia --project=test/proper test/proper/compiled_paths.jl` for the focused
 CPU equations and warmed zero-allocation checks. The CUDA/AMDGPU compiled-path
 selectors exercise the same odd/even, mixed-defocus and ghost fixtures with

@@ -140,8 +140,8 @@ end
 
 # Multiple live branches and spectral anchors, plus an independent ghost.
 # Branches fork after the original fixture's full Fresnel prefix.
-function compiled_paths_shared_fixture()
-    fixture = compiled_paths_synthetic_fixture()
+function compiled_paths_shared_fixture(;n=8)
+    fixture = compiled_paths_synthetic_fixture(;n)
     metadata, arrays = fixture.metadata, fixture.arrays
     metadata["n_env"] = 3
     metadata["wavelengths"] = [fixture.lambda, 1.1fixture.lambda]

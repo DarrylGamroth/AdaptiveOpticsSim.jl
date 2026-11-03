@@ -131,7 +131,26 @@ struct PathResampleBatch{N,A,F,O,C}
     coefficients::C
 end
 
-struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P,E,K,R}
+struct PathBranchSegment
+    last::Int
+    closed_cache::Int
+    only_cache::Int
+end
+
+struct PathBranchPair{S}
+    first::Int
+    segments::S
+end
+
+struct PathBranchBatch{A,V,F,B,P}
+    field::A
+    planes::V
+    forward::F
+    backward::B
+    pairs::P
+end
+
+struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P,E,K,R,Q}
     field::A
     prefix::A
     shared_prefixes::V
@@ -156,6 +175,7 @@ struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P,E,K,R}
     edge_multiplier::E
     prepared_mul_coefficients::K
     image_resample::R
+    branch_batch::Q
 end
 
 """Canonical `(y,x)` compiled multi-path relative-intensity products, dimensionless intensity."""
@@ -561,8 +581,9 @@ function _compiled_paths_shared_prefixes(paths)
     end
     cache_nodes=sort!(collect(targets))
     cache_indices=zeros(Int,length(operations))
-    # Recycle storage only after its last consuming stage. The conservative
-    # stage-level intervals also remain safe if a future caller interleaves roots.
+    # Recycle storage only after its last consuming stage. Roots must finish
+    # in this order; sibling batching must preserve initial cache reads and
+    # disjoint checkpoint stores within these conservative stage intervals.
     slot_ends=Int[]
     for node in cache_nodes
         slot=findfirst(last->last<origins[node],slot_ends)
@@ -924,6 +945,8 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
         target, field, image_size, 2length(paths))
     image_resample = batch_size == 1 ? nothing : _compiled_paths_prepare_image_resample(
         plan, closed_sources, only_sources, coefficients, Val(batch_size))
+    propagation = _compiled_paths_prepare_propagation(paths, wf, ctx)
+    branch_batch = _compiled_paths_prepare_branch_batch(plan, field, propagation)
     workspace = CompiledPathsWorkspace(field, prefix, prefix_fields, wf, ctx, operations,
         physical_fft, image_fft, phantom_fft,
         _compiled_paths_array(target, Complex{T}, image_size, image_size),
@@ -931,9 +954,9 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
         fields(nk * na), fields(nk * na), fields(nk * na), closed_sources, only_sources,
         _compiled_paths_normalization_workspace(field, target, T), pixel_mtf,
         coefficients, _compiled_paths_fast_workspace(plan, T),
-        _compiled_paths_prepare_propagation(paths, wf, ctx),
+        propagation,
         _compiled_paths_prepare_edge_multiplier(paths, target, field),
-        AdaptiveOpticsSim.Optics._prepare_compiled_paths_mul_coefficients(field, coefficients), image_resample)
+        AdaptiveOpticsSim.Optics._prepare_compiled_paths_mul_coefficients(field, coefficients), image_resample, branch_batch)
     channels = AdaptiveOpticsSim.Optics.SpectralBundle(T.(metadata["channels"]),
         ones(T, nc); T)
     reference_visibility = [Complex{T}[1;;] for _ in 1:nc]
@@ -1317,6 +1340,146 @@ function _compiled_paths_stage_image!(batch::PathResampleBatch{N}, owner, number
     return nothing
 end
 
+# Match independent suffixes without changing the existing prefix trie or its
+# cache allocation. Restrict cuts to common multiplier/transform-pair regions.
+# Other sequences retain their ordinary executor.
+function _compiled_paths_branch_pair(path, sharing, propagation, offset)
+    a,b = path.closed,path.only
+    length(a) == length(b) && !isempty(a) && sharing.closed.count == sharing.only.count || return nothing
+    a[end].kind == b[end].kind == PathResample || return nothing
+    _compiled_paths_same_operation(a[end],b[end]) || return nothing
+    left,right = sharing.closed.checkpoints,sharing.only.checkpoints
+    length(left) == length(right) || return nothing
+    all(i -> left[i].index == right[i].index,eachindex(left)) || return nothing
+    # Only may depend on a checkpoint produced by this closed suffix. It must
+    # then wait for that producer in the original serial order.
+    sharing.only.count > 0 && any(p -> p.cache_index == sharing.only.cache_index,left) && return nothing
+    any(x -> any(y -> x.cache_index == y.cache_index,right),left) && return nothing
+    segments = PathBranchSegment[PathBranchSegment(p.index,p.cache_index,right[i].cache_index)
+        for (i,p) in enumerate(left)]
+    push!(segments,PathBranchSegment(length(a)-1,0,0))
+    first = sharing.closed.count+1
+    for segment in segments
+        last = segment.last
+        last >= first && (last-first+1)%3 == 0 || return nothing
+        for i in first:3:last
+            a[i].kind == b[i].kind == PathMultiply || return nothing
+            for j in i+1:i+2
+                a[j].kind in (PathTransferFunction,PathFourierTransform) &&
+                    _compiled_paths_same_operation(a[j],b[j]) || return nothing
+                p,q = propagation[offset+j],propagation[offset+length(a)+j]
+                p !== nothing && p === q || return nothing
+            end
+        end
+        first = last+1
+    end
+    a[end-1].kind == PathTransferFunction || return nothing
+    propagation[offset+length(a)-1].direction == 2 || return nothing
+    return PathBranchPair(sharing.closed.count+1,_compiled_paths_seal(segments))
+end
+
+function _compiled_paths_branch_pairs(plan, propagation)
+    S = typeof(_compiled_paths_seal(PathBranchSegment[]))
+    pairs = Union{Nothing,PathBranchPair{S}}[]
+    offset = 0
+    for (i,path) in enumerate(plan.paths)
+        offset += length(path.prefix)
+        push!(pairs,_compiled_paths_branch_pair(path,plan.shared_prefixes[i],propagation,offset))
+        offset += length(path.closed)+length(path.only)
+    end
+    return _compiled_paths_seal(pairs)
+end
+function _compiled_paths_branch_batch(field, pairs)
+    n = size(field,1)
+    planes = similar(field,n,n,2)
+    fill!(planes,zero(eltype(planes)))
+    return PathBranchBatch(planes,(view(planes,:,:,1),view(planes,:,:,2)),
+        Backends.plan_fft_backend!(planes,(1,2)),
+        Backends.plan_bfft_backend!(planes,(1,2)),pairs)
+end
+function _compiled_paths_prepare_branch_batch(plan,field,propagation)
+    AdaptiveOpticsSim.Optics._compiled_paths_branch_batch_enabled(plan.target,field) || return nothing
+    pairs = _compiled_paths_branch_pairs(plan,propagation)
+    all(isnothing,pairs) && return nothing
+    return _compiled_paths_branch_batch(field,pairs)
+end
+@inline _compiled_paths_branch_pair(::Nothing,index) = nothing
+@inline _compiled_paths_branch_pair(batch::PathBranchBatch,index) = batch.pairs[index]
+@inline _compiled_paths_branch_gain(op) = op.kind == PathFourierTransform ? op.gouy : one(op.gouy)
+
+function _compiled_paths_branch_fft!(batch, propagation, terminal::Bool=false)
+    if propagation.direction == 2
+        Backends.enqueue_fft_plan!(batch.field,batch.forward)
+        n = size(batch.field,1)
+        Proper._propagation_batch_transfer_kernel!(KernelAbstractions.get_backend(batch.field),(16,16))(
+            batch.field,propagation.transfer;ndrange=(n,n))
+        terminal || Backends.enqueue_fft_plan!(batch.field,batch.backward)
+    elseif propagation.direction == 1
+        Backends.enqueue_fft_plan!(batch.field,batch.forward)
+    elseif propagation.direction == -1
+        Backends.enqueue_fft_plan!(batch.field,batch.backward)
+    end
+    return nothing
+end
+
+function _compiled_paths_branches!(owner,path,sharing,offset,index,pair)
+    w = owner.workspace
+    batch = w.branch_batch
+    n = size(batch.field,1)
+    backend = KernelAbstractions.get_backend(batch.field)
+    a,b = path.closed,path.only
+    other = offset+length(a)
+    # Both initial cache reads precede either suffix's new stores. Stage-level
+    # cache lifetimes therefore remain conservative; paired cache outputs are
+    # disjoint and no current closed producer feeds the paired only input.
+    inputs = (sharing.closed.count > 0 ? w.shared_prefixes[sharing.closed.cache_index] : w.field,
+        sharing.only.count > 0 ? w.shared_prefixes[sharing.only.cache_index] : w.field)
+    first = pair.first
+    for segment in pair.segments
+        initial = first+1
+        previous = w.propagation[offset+initial]
+        previous_op = a[initial]
+        Proper._propagation_batch_pack_kernel!(backend,(16,16))(
+            batch.field,inputs,(a[first].array,b[first].array),
+            _compiled_paths_edge(w.edge_multiplier,previous_op),previous.before,fld(n,2);ndrange=(n,n))
+        _compiled_paths_branch_fft!(batch,previous)
+        for j in initial+1:segment.last
+            a[j].kind == PathMultiply && continue
+            next = w.propagation[offset+j]
+            masks = a[j-1].kind == PathMultiply ? (a[j-1].array,b[j-1].array) : (nothing,nothing)
+            Proper._propagation_batch_join_kernel!(backend,(16,16))(
+                batch.field,previous.after,previous.scale,_compiled_paths_branch_gain(previous_op),
+                masks,_compiled_paths_edge(w.edge_multiplier,a[j]),next.before,fld(n,2);ndrange=(n,n))
+            _compiled_paths_branch_fft!(batch,next,j == length(a)-1)
+            previous,previous_op = next,a[j]
+        end
+        if segment.closed_cache == 0
+            # Preserve FFT(BFFT(G)*s)=length(G)*s*G at the terminal PTP.
+            # Consume one plane at a time through the existing scalar mapping
+            # scratch; neither resampling GEMM writes the paired raw field.
+            slot = _compiled_paths_slot(path.path_index,path.anchor_index,owner.plan.n_anchor)
+            for plane in 1:2
+                Proper._propagation_unpack_kernel!(backend,(16,16))(
+                    w.physical_fft.scratch,batch.planes[plane],previous.after,
+                    n^2*previous.scale,one(previous_op.gouy),cld(n,2);ndrange=(n,n))
+                operation = plane == 1 ? a[end] : b[end]
+                work = w.operations[(plane == 1 ? offset : other)+length(a)]
+                _compiled_paths_resample_frequency!(w,operation,work)
+                output = plane == 1 ? w.closed_sources[slot] : w.only_sources[slot]
+                _compiled_paths_stage_image!(w.image_resample,owner,2index-2+plane,output,true)
+            end
+        else
+            outputs = (w.shared_prefixes[segment.closed_cache],w.shared_prefixes[segment.only_cache])
+            Proper._propagation_batch_unpack_kernel!(backend,(16,16))(
+                outputs,batch.field,previous.after,previous.scale,
+                _compiled_paths_branch_gain(previous_op),cld(n,2);ndrange=(n,n))
+            inputs = outputs
+        end
+        first = segment.last+1
+    end
+    return other+length(b)
+end
+
 function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true)
     plan,w=owner.plan,owner.workspace
     offset=0
@@ -1329,6 +1492,11 @@ function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true
             Backends.copyto_backend_async!(w.field,path.entrance)
         end
         offset=_compiled_paths_sequence!(owner,path.prefix,offset,sharing.prefix,share_prefix,prepared)
+        pair = prepared && share_prefix ? _compiled_paths_branch_pair(w.branch_batch,index) : nothing
+        if pair !== nothing
+            offset = _compiled_paths_branches!(owner,path,sharing,offset,index,pair)
+            continue
+        end
         if !share_prefix || sharing.only.count==0
             Backends.copyto_backend_async!(w.prefix,w.field)
         end
