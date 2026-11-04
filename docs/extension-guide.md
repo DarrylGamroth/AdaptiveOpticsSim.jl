@@ -54,14 +54,16 @@ existing owners over copying a fast kernel into another instrument:
 
 | Reuse point | Existing use | Conditions to preserve |
 | --- | --- | --- |
-| PROPER prepared field arithmetic | Compiled optical paths and prepared scalar trains | Fixed wavelength, sampling and geometry; serialize shared FFT scratch and keep caller fields separate from it. The field operation does not advance wavefront geometry. |
+| PROPER prepared field arithmetic | Compiled optical paths and prepared scalar trains | Fixed wavelength, sampling and geometry; serialize shared FFT scratch. The public field API requires caller fields separate from that scratch. The field operation does not advance wavefront geometry. |
 | Scalar optical-train owner | Scalar, runtime-OPD and per-wavelength polychromatic trains | Keep live OPD inputs live, restore the prepared geometry, and retain the owner’s exact input/output bindings. |
 | `Optics.prepare_spectral_synthesis` / `synthesize_spectrum!` | Calibrated multi-path spectral synthesis | Fields already share one detector grid; preserve path/anchor order, coherence, quadrature, response and normalization. See the [spectral recipe](model-cookbook.md#synthesize-calibrated-spectral-channels). |
 | `CapturedGraphExecution` | Prepared algorithm graphs with capture-safe nodes | Fixed buffer/plan identities and device-work topology; input contents may change between completed replays. Host-side effects are not replayed. |
 
-Compiled paths use PROPER's public `prepare_propagation` / `propagate!` surface.
-Scalar trains additionally coordinate private in-place kernels. Use the public
-surface when starting a new prescription.
+Compiled paths use PROPER's public `prepare_propagation` / `propagate!` surface,
+with private lowerings for sibling batching and terminal cancellation. Scalar
+trains coordinate private in-place kernels whose live field is the FFT scratch.
+These lowerings require their owners' additional aliasing and scheduling proofs.
+Use the public surface when starting a new prescription.
 
 Polychromatic train preparation constructs the same scalar owner per wavelength,
 so it already shares that implementation. Measure performance for each new
