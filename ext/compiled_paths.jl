@@ -1473,9 +1473,11 @@ function _compiled_paths_branch_fft!(batch, propagation, terminal::Bool=false)
     if propagation.direction == 2
         Backends.enqueue_fft_plan!(batch.field,batch.forward)
         n = size(batch.field,1)
-        Proper._propagation_batch_transfer_kernel!(KernelAbstractions.get_backend(batch.field),(16,16))(
-            batch.field,propagation.transfer;ndrange=(n,n))
-        terminal || Backends.enqueue_fft_plan!(batch.field,batch.backward)
+        if !terminal
+            Proper._propagation_batch_transfer_kernel!(KernelAbstractions.get_backend(batch.field),(16,16))(
+                batch.field,propagation.transfer;ndrange=(n,n))
+            Backends.enqueue_fft_plan!(batch.field,batch.backward)
+        end
     elseif propagation.direction == 1
         Backends.enqueue_fft_plan!(batch.field,batch.forward)
     elseif propagation.direction == -1
@@ -1521,8 +1523,8 @@ function _compiled_paths_branches!(owner,path,sharing,offset,index,pair)
             # scratch; neither resampling GEMM writes the paired raw field.
             slot = _compiled_paths_slot(path.path_index,path.anchor_index,owner.plan.n_anchor)
             for plane in 1:2
-                Proper._propagation_unpack_kernel!(backend,(16,16))(
-                    w.physical_fft.scratch,batch.planes[plane],previous.after,
+                Proper._propagation_transfer_unpack_kernel!(backend,(16,16))(
+                    w.physical_fft.scratch,batch.planes[plane],previous.transfer,previous.after,
                     n^2*previous.scale,one(previous_op.gouy),cld(n,2);ndrange=(n,n))
                 operation = plane == 1 ? a[end] : b[end]
                 work = w.operations[(plane == 1 ? offset : other)+length(a)]
