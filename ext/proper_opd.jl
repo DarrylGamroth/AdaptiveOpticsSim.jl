@@ -234,14 +234,14 @@ end
     end
 end
 
-function _step_opd_optic!(workspace, input, step, mask, ::Nothing)
+function _step_opd_optic!(workspace, input, step, mask, ::Nothing,phase=nothing)
     _train_optic!(workspace.wavefront, step, mask, workspace.context, workspace.shifted_mask)
     return nothing
 end
 
-function _step_opd_optic!(workspace, input, step, mask, interpolation::BilinearInterpolationPlan)
+function _step_opd_optic!(workspace, input, step, mask, interpolation::BilinearInterpolationPlan,phase=nothing)
     _interpolate_grid!(workspace.padded_opd, input, interpolation)
-    Proper.prop_add_phase(workspace.wavefront, workspace.padded_opd)
+    Proper._apply_phase!(workspace.wavefront, workspace.padded_opd, phase)
     return nothing
 end
 
@@ -257,9 +257,9 @@ end
 AOG.step_graph_node!(owner::RuntimeOPDTrainOwner) =
     _step_train_execution!(owner,owner.train.workspace.execution)
 
-_begin_sampled_pupil!(train, ::Nothing) = _begin_optical_train!(train)
+_begin_sampled_pupil!(train, ::Nothing,phase=nothing) = _begin_optical_train!(train,phase)
 
-function _begin_sampled_pupil!(train, entrance::BilinearInterpolationPlan)
+function _begin_sampled_pupil!(train, entrance::BilinearInterpolationPlan,phase=nothing)
     plan, workspace = train.plan, train.workspace
     _interpolate_grid!(workspace.padded_opd, train.pupil_opd, entrance)
     _interpolate_grid!(workspace.padded_amplitude, train.pupil_amplitude, entrance)
@@ -267,7 +267,7 @@ function _begin_sampled_pupil!(train, entrance::BilinearInterpolationPlan)
     Proper.prop_begin!(wf, plan.diameter_m, plan.wavelength_um*oftype(plan.wavelength_um,1e-6);
         beam_diam_fraction=plan.pupil_resolution/plan.resolution)
     Proper.prop_multiply(wf, workspace.padded_amplitude)
-    Proper.prop_add_phase(wf, workspace.padded_opd)
+    Proper._apply_phase!(wf, workspace.padded_opd, phase)
     return nothing
 end
 

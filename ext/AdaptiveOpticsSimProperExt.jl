@@ -429,7 +429,7 @@ function _prepare_train_capture!(owner,
     return nothing
 end
 
-function _begin_optical_train!(owner::OpticalTrainOwner)
+function _begin_optical_train!(owner::OpticalTrainOwner,phase=nothing)
     plan, workspace = owner.plan, owner.workspace
     opd, amplitude = workspace.padded_opd, workspace.padded_amplitude
     fill!(opd, 0)
@@ -443,7 +443,7 @@ function _begin_optical_train!(owner::OpticalTrainOwner)
         plan.wavelength_um*oftype(plan.wavelength_um, 1e-6);
         beam_diam_fraction=plan.pupil_resolution/plan.resolution)
     Proper.prop_multiply(wf, amplitude)
-    Proper.prop_add_phase(wf, opd)
+    Proper._apply_phase!(wf, opd, phase)
     return nothing
 end
 

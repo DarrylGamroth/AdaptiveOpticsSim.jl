@@ -37,6 +37,13 @@ function force_prepared_train(owner,target)
     train=ext._scalar_train(owner);w=train.workspace
     execution=ext._prepare_train_execution(train,target,Val(:enabled))
     execution===nothing && error("fixture did not establish raw FFT storage")
+    # Exercise the portable phase kernel on every backend, independently of
+    # the cold device/shape policy that qualifies production selection.
+    if eltype(w.wavefront.field)===ComplexF32
+        phase=Proper._PreparedPhase(w.wavefront.wavelength_m,2pi/w.wavefront.wavelength_m)
+        execution=ext.PreparedTrainExecution(execution.segments,execution.geometry,
+            execution.field,execution.empty,phase)
+    end
     workspace=ext.OpticalTrainWorkspace(w.wavefront,w.context,w.padded_opd,w.padded_amplitude,
         w.masks,w.shifted_mask,execution)
     replacement=ext.OpticalTrainOwner(train.plan,workspace,train.pupil_opd,train.pupil_amplitude,

@@ -8,11 +8,12 @@ struct TrainPropagationSegment{P,M,T}
 end
 struct TrainRuntimeOPD{I} end
 
-struct PreparedTrainExecution{S,G,A}
+struct PreparedTrainExecution{S,G,A,P}
     segments::S
     geometry::G
     field::A
     empty::A
+    phase::P
 end
 
 _train_propagation_kind(::typeof(Proper.prop_ptp)) = :ptp
@@ -107,28 +108,29 @@ function _prepare_train_execution(owner,target,::Val{:enabled};cache_limit=128*1
         end
     end
     segments=(segments...,TrainPropagationSegment(propagation,multipliers,pending))
-    execution=PreparedTrainExecution(segments,_wavefront_geometry(wf),wf.field,similar(wf.field,0,0))
+    execution=PreparedTrainExecution(segments,_wavefront_geometry(wf),wf.field,similar(wf.field,0,0),
+        Proper._prepare_phase(wf))
     AOG.reset_graph_node!(owner)
     return execution
 end
 
 _step_train_execution!(owner::OpticalTrainOwner,::Nothing) = _step_optical_train_reference!(owner)
 _step_train_execution!(owner::RuntimeOPDTrainOwner,::Nothing) = _step_runtime_opd_reference!(owner)
-_begin_prepared_train!(owner::OpticalTrainOwner) = _begin_optical_train!(owner)
-_begin_prepared_train!(owner::RuntimeOPDTrainOwner) = _begin_sampled_pupil!(owner.train,owner.entrance)
+_begin_prepared_train!(owner::OpticalTrainOwner,phase) = _begin_optical_train!(owner,phase)
+_begin_prepared_train!(owner::RuntimeOPDTrainOwner,phase) = _begin_sampled_pupil!(owner.train,owner.entrance,phase)
 
 function _step_train_execution!(owner,execution::PreparedTrainExecution)
     train=_scalar_train(owner)
     workspace=train.workspace
     workspace.wavefront.field===execution.field && Proper.fft_workspace(workspace.context).scratch===execution.field ||
         throw(AOG.AlgorithmGraphError("prepared train live field binding changed"))
-    _begin_prepared_train!(owner)
-    foreach(segment->_step_train_segment!(owner,segment,execution.empty),execution.segments)
+    _begin_prepared_train!(owner,execution.phase)
+    foreach(segment->_step_train_segment!(owner,segment,execution.empty,execution.phase),execution.segments)
     _restore_wavefront_geometry!(train.workspace.wavefront,execution.geometry)
     _finish_optical_train!(train.workspace.wavefront,train.output,train.plan.output_quantity)
     return nothing
 end
-function _step_train_segment!(owner,segment::TrainPropagationSegment,empty)
+function _step_train_segment!(owner,segment::TrainPropagationSegment,empty,phase)
     train=_scalar_train(owner)
     _step_train_propagation!(train.workspace.wavefront.field,segment.propagation,segment.multipliers,segment.tail,empty)
     return nothing
@@ -144,8 +146,8 @@ function _step_train_propagation!(field,propagation::Tuple{P,Vararg{P}},multipli
     Proper._propagate_inplace!(propagation,multipliers,tail,empty)
     return nothing
 end
-function _step_train_segment!(owner::RuntimeOPDTrainOwner,::TrainRuntimeOPD{I},empty) where {I}
+function _step_train_segment!(owner::RuntimeOPDTrainOwner,::TrainRuntimeOPD{I},empty,phase) where {I}
     _step_opd_optic!(owner.train.workspace,owner.inputs[I],owner.train.plan.steps[I],
-        owner.train.workspace.masks[I],owner.interpolation[I])
+        owner.train.workspace.masks[I],owner.interpolation[I],phase)
     return nothing
 end
