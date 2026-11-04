@@ -1,6 +1,6 @@
 # AOS 0.3.20 accumulated optics review
 
-Review candidate: `codex/prepared-proper-paths`, implementation `e931beb6`.
+Review candidate: `codex/prepared-proper-paths`, implementation `6c4f0912`.
 Release base: `v0.3.19` (`cbfc4956`). Cleanup `e0c5ff9d` was fast-forwarded
 onto the performance branch; merge `5a9c16b2` retains the already released
 optional model-time uncertainty fix. No history was rewritten.
@@ -43,7 +43,57 @@ backend fallback and package compatibility.
 No remaining source-review blocker. Execution gates below determine validation;
 source review alone does not establish numerical or timing qualification.
 
-## Verification
+## Prepared scheduling continuation — 2026-11-04
+
+Implementation `6c4f0912`, developed from `dfa46ac6` on isolated branch
+`codex/prepared-path-schedules`, moves longest-group matching, initial cached
+multiplier consumption and transform/PTP/resample cancellation into preparation.
+A separate `PathExecutionPlan` owns concrete fixed-size instruction/range storage;
+its 32-byte instruction records contain decisions and indices, not array/FFT/live
+input bindings. Shared and unshared schedules preserve distinct cache behavior.
+The paired executor receives precomputed transform/mask positions and a bounded
+union of two terminal-transform types. The independent ordinary traversal does
+not consume these schedules. No PROPER or RTC source changes are required.
+
+Group arities specialize through literal `Val(2/4/6/8/10)` calls. Geometry values,
+coefficients, complete path length and spectral count remain data. Tests confirm
+that different grid sizes and program lengths retain the same schedule storage
+type; there is no whole-YAML tuple type or custom generated executor. A finite
+opcode selection remains when enqueueing; captured replay launches the existing
+GPU graph and does not interpret the schedule.
+
+A separate Sol reviewer checked group priority/consumed indices, checkpoint
+boundaries, cached inputs, ordinary traversal, paired terminal steps and forced
+backend schedule rebuilds. No blocking finding remains. Final local checks:
+
+| Gate | Result |
+| --- | --- |
+| CPU compiled-path selector, Julia 1.12.7 / 1.13.3 | Passed; 4,450 testset assertions each, including 19 new scheduling checks. |
+| CUDA / AMD compiled-path selectors | Passed; 6,659 / 6,546 testset assertions plus standalone checks; captured execution and AMD CUDA-not-loaded check. |
+| Quality selector, Julia 1.13.3 | Passed, including Aqua and implementation storage policy. |
+| Concrete CPU schedule inference | Return `Nothing`; JET 0.13.1 `@report_opt target_modules=(CP,)` reports no errors on Julia 1.12.7. Julia 1.13.3 optimized LLVM has no generic Julia dispatch call for this signature. |
+| Warmed representative CPU frame | Zero allocated bytes on Julia 1.12.7 and 1.13.3. |
+| Frozen before/after captured snapshots | All 600 product/source/checkpoint component arrays bitwise equal across three changing states plus first-state reset/replay, for SCC and SCC-unfringed. |
+| Fresh frozen original-executor gates | Passed; SCC 54 / LLOWFS 27 assertions, unchanged original-executor error bounds and reset/replay gates. |
+
+The frozen snapshots retain **2,027 physical graph nodes** in both versions.
+One unprofiled 32-sample replay block per version measured SCC medians
+**17.692838 / 17.704292 ms** and SCC-unfringed **17.729497 / 17.981707 ms**.
+One cold preparation per process measured **58.240 / 64.305 s**, including
+**44.822 / 50.666 s** compilation. These small, non-isolated measurements establish
+no throughput or startup improvement. Preparation/JIT is separate from replay;
+no new full-source, deadline or causal-latency claim is made. Existing source
+throughput evidence below remains historical. No GPU buffers are added; new
+execution metadata is host-side (576 bytes for the representative grouped fixture).
+
+Focused reproduction uses the temporary-source environment described below:
+`test/proper/compiled_paths.jl` on Julia 1.12/1.13,
+`test/cuda_compiled_paths.jl`, `test/amdgpu_compiled_paths.jl`, and the two fitted
+selectors with `APP`. AMD uses its existing device-1/gfx1030 setup. GPU jobs are
+serialized. Source worktrees remain; temporary environments, snapshots, compiler
+dumps and logs are removed after retaining these concise results.
+
+## Prior accumulated verification
 
 Fresh local gates on implementation `e931beb6` with PROPER `1d4d16e`:
 
