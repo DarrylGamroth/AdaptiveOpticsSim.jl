@@ -1142,18 +1142,20 @@ function _compiled_paths_group_matches(sequence,index,last,::Val{N}) where {N}
     return true
 end
 
-function _compiled_paths_resample_frequency!(w,op,work,prepared::Bool=true)
+function _compiled_paths_resample_frequency!(w,op,work,prepared::Bool=true,finalize::Bool=true)
     if !isempty(op.auxiliary) && !(prepared && work.identity_roll)
         w.physical_fft.scratch .*=op.auxiliary
     end
     Backends._enqueue_mul!(work.temporary,op.array,w.physical_fft.scratch,_compiled_paths_mul_coefficients(w,prepared))
     Backends._enqueue_mul!(w.field,work.temporary,transpose(op.array),_compiled_paths_mul_coefficients(w,prepared))
-    normalization = size(op.array,2)^2
-    if prepared && !isempty(op.post)
-        @. w.field = (w.field / normalization) * op.post
-    else
-        w.field ./=normalization
-        isempty(op.post) || (w.field .*=op.post)
+    if finalize
+        normalization = size(op.array,2)^2
+        if prepared && !isempty(op.post)
+            @. w.field = (w.field / normalization) * op.post
+        else
+            w.field ./=normalization
+            isempty(op.post) || (w.field .*=op.post)
+        end
     end
     return nothing
 end
@@ -1343,14 +1345,22 @@ end
 # Preparation checks crop bounds. The wrapped coordinates stay in 1:n.
 # A final partial batch clears unused planes to prevent stale values growing
 # on replay; transforms and products never combine separate batch planes.
-KernelAbstractions.@kernel function _compiled_paths_pack_resample_kernel!(out, input, start, slot, valid)
+@inline _compiled_paths_resample_pixel(value,y,x,::Nothing) = value
+@inline function _compiled_paths_resample_pixel(value,y,x,finalization::Tuple)
+    normalization,post=finalization
+    value=value/normalization
+    return isempty(post) ? value : value*post[y,x]
+end
+
+KernelAbstractions.@kernel function _compiled_paths_pack_resample_kernel!(out, input, start, slot, valid, finalization)
     y,x = @index(Global,NTuple)
     n = size(out,1)
     if y <= n && x <= n
         sy,sx = y + fld(n,2), x + fld(n,2)
         sy > n && (sy -= n)
         sx > n && (sx -= n)
-        @inbounds out[y,x,slot] = input[sy+start,sx+start]
+        @inbounds out[y,x,slot] = _compiled_paths_resample_pixel(
+            input[sy+start,sx+start],sy+start,sx+start,finalization)
         for plane in valid+1:size(out,3)
             @inbounds out[y,x,plane] = zero(eltype(out))
         end
@@ -1363,20 +1373,20 @@ KernelAbstractions.@kernel function _compiled_paths_unpack_resample_kernel!(outp
     end
 end
 
-function _compiled_paths_stage_image!(::Nothing, owner, number, out, prepared)
+function _compiled_paths_stage_image!(::Nothing, owner, number, out, prepared, finalization=nothing)
     w,plan = owner.workspace, owner.plan
     _compiled_paths_crop!(w.crop,w.field,plan.crop_start)
     _compiled_paths_resample_image!(out,w.crop,owner,prepared)
     return nothing
 end
-function _compiled_paths_stage_image!(batch::PathResampleBatch{N}, owner, number, out, prepared) where {N}
+function _compiled_paths_stage_image!(batch::PathResampleBatch{N}, owner, number, out, prepared, finalization=nothing) where {N}
     prepared || return _compiled_paths_stage_image!(nothing,owner,number,out,prepared)
     n = owner.plan.image_size
     slot = mod1(number,N)
     valid = number == length(batch.outputs) ? slot : N
     backend = KernelAbstractions.get_backend(batch.field)
     _compiled_paths_pack_resample_kernel!(backend,(16,16))(
-        batch.field, owner.workspace.field, owner.plan.crop_start, slot, valid; ndrange=(n,n))
+        batch.field, owner.workspace.field, owner.plan.crop_start, slot, valid, finalization; ndrange=(n,n))
     if slot == N || number == length(batch.outputs)
         Backends.enqueue_fft_plan!(batch.field,batch.forward)
         AdaptiveOpticsSim.Optics._compiled_paths_resample_mul!(batch.field,batch.temporary,
@@ -1388,6 +1398,9 @@ function _compiled_paths_stage_image!(batch::PathResampleBatch{N}, owner, number
     end
     return nothing
 end
+
+_compiled_paths_terminal_finalization(::Nothing,op) = nothing
+_compiled_paths_terminal_finalization(::PathResampleBatch,op) = (size(op.array,2)^2,op.post)
 
 # Match independent suffixes without changing the existing prefix trie or its
 # cache allocation. Restrict cuts to common multiplier/transform-pair regions.
@@ -1513,9 +1526,15 @@ function _compiled_paths_branches!(owner,path,sharing,offset,index,pair)
                     n^2*previous.scale,one(previous_op.gouy),cld(n,2);ndrange=(n,n))
                 operation = plane == 1 ? a[end] : b[end]
                 work = w.operations[(plane == 1 ? offset : other)+length(a)]
-                _compiled_paths_resample_frequency!(w,operation,work)
+                # Only the image crop is consumed after this terminal GEMM.
+                # Its pack preserves division then post-multiplication, while
+                # avoiding a full-field pass. Checkpoint/nonbatched paths keep
+                # the ordinary finalized field. The next plane/path overwrites
+                # scratch before consuming it.
+                finalization=_compiled_paths_terminal_finalization(w.image_resample,operation)
+                _compiled_paths_resample_frequency!(w,operation,work,true,finalization===nothing)
                 output = plane == 1 ? w.closed_sources[slot] : w.only_sources[slot]
-                _compiled_paths_stage_image!(w.image_resample,owner,2index-2+plane,output,true)
+                _compiled_paths_stage_image!(w.image_resample,owner,2index-2+plane,output,true,finalization)
             end
         else
             outputs = (w.shared_prefixes[segment.closed_cache],w.shared_prefixes[segment.only_cache])

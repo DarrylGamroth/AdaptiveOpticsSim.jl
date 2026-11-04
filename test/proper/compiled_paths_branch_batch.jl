@@ -33,7 +33,7 @@ function compiled_paths_branch_fixture(;n=8,sign=1,dependent=false,zero_only=fal
     return fixture
 end
 
-function force_compiled_branch_batch(owner)
+function force_compiled_branch_batch(owner;image_batch=false)
     backend=AdaptiveOpticsSim.Backends
     w=owner.workspace
     # Force the generic numerical implementation on CPU/AMD as well as the
@@ -41,8 +41,11 @@ function force_compiled_branch_batch(owner)
     propagation=CP._compiled_paths_prepare_propagation(backend.CUDABackend(),owner.plan.paths,w.wavefront,w.context)
     pairs=CP._compiled_paths_branch_pairs(owner.plan,propagation)
     batch=CP._compiled_paths_branch_batch(w.field,pairs)
+    images=image_batch ? CP._compiled_paths_prepare_image_resample(owner.plan,
+        w.closed_sources,w.only_sources,w.mul_coefficients,Val(5)) : w.image_resample
     workspace=CP.CompiledPathsWorkspace(map(fieldnames(typeof(w))) do name
-        name===:propagation ? propagation : name===:branch_batch ? batch : getfield(w,name)
+        name===:propagation ? propagation : name===:branch_batch ? batch :
+            name===:image_resample ? images : getfield(w,name)
     end...)
     return CP.PreparedCompiledPaths(owner.plan,workspace,owner.inputs,owner.products,owner.execution_context,owner.synthesis)
 end
@@ -59,8 +62,19 @@ function check_compiled_branch_batch(array,target;captured=false)
                 prepare()=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
                     key->fixture.arrays[key];target,T,dm_opd=dm)
                 reference=prepare()
-                owner=force_compiled_branch_batch(prepare())
+                # Cover the combined lowering on two existing cases rather
+                # than repeating the full matrix. Twelve sources leave a final
+                # partial group of two in the forced five-plane image batch.
+                image_batch=(T===Float32 && n==7 && sign==1 && !dependent && !zero_only) ||
+                    (T===Float64 && n==8 && sign==-1 && dependent && !zero_only)
+                owner=force_compiled_branch_batch(prepare();image_batch)
                 w=owner.workspace;batch=w.branch_batch
+                if image_batch
+                    @test w.image_resample!==nothing
+                    @test size(w.image_resample.field,3)==5
+                    @test length(w.image_resample.outputs)%size(w.image_resample.field,3)==2
+                    @test any(pair->pair!==nothing && any(s->s.closed_cache==0,pair.segments),batch.pairs)
+                end
                 @test any(!isnothing,batch.pairs)
                 if dependent
                     @test batch.pairs[1]===nothing
@@ -84,6 +98,10 @@ function check_compiled_branch_batch(array,target;captured=false)
                     # Poison both independent planes: every used value must be
                     # produced by this invocation, including shared consumers.
                     fill!(batch.field,Complex{T}(NaN))
+                    if image_batch
+                        fill!(w.image_resample.field,Complex{T}(NaN))
+                        fill!(w.image_resample.temporary,Complex{T}(NaN))
+                    end
                     foreach(field->fill!(field,Complex{T}(NaN)),w.shared_prefixes)
                     foreach(field->fill!(field,Complex{T}(NaN)),reference.workspace.shared_prefixes)
                     CP._enqueue_compiled_paths!(reference,true,true,false)
@@ -108,6 +126,10 @@ function check_compiled_branch_batch(array,target;captured=false)
                         end
                     end
                     @test all(i->w.shared_prefixes[i]===retained[i],eachindex(retained))
+                    if image_batch
+                        @test all(isfinite,Array(w.image_resample.field))
+                        @test all(isfinite,Array(w.image_resample.temporary))
+                    end
                     current=map(name->Array(getproperty(owner.products,name)),(:fringed,:unfringed,:reference))
                     first_products===nothing && (first_products=current)
                     state==1 && @test current==first_products

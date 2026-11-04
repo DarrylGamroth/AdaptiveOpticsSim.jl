@@ -89,6 +89,12 @@ Two field stacks plus the reordered matrix add 3,516,552 bytes per owner,
 excluding FFT/library work areas. Other backends and unqualified shapes retain
 per-source execution. Prepared physical resampling also omits exactly verified
 identity rolls and fuses division followed by the existing post multiplier.
+Terminal paired paths with prepared image batching perform that division and
+post multiplication while packing the image crop, avoiding full-field
+finalization. Checkpoint and ordinary resampling paths retain finalized fields.
+This adds no buffers; the next plane/path overwrites or restores raw scratch
+before consuming it. Fused GPU complex multiplication can change contraction
+roundoff, so retain original-device comparisons at the existing accuracy gates.
 
 The same CUDA class and default math mode can pair independent closed/only
 physical propagation suffixes in two 512² planes. Preparation requires equal
