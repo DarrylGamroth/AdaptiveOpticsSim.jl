@@ -2739,6 +2739,11 @@ end
 end
 
 @testset "captured model-time replay" begin
+    unknown = CapturedModelTimestamp(ModelTimestamp(15),nothing,
+        (source=UInt32(7),sequence=UInt64(41)))
+    @test model_time_uncertainty(unknown) === nothing
+    @test isbitstype(typeof(unknown))
+    @test advance_model_time!(prepare_captured_model_time_driver((unknown,))) == ModelTimestamp(15)
     captures = (
         CapturedModelTimestamp(
             ModelTimestamp(15),
