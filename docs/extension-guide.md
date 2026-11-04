@@ -95,12 +95,30 @@ field batches. Its included files separate other responsibilities:
 
 - `compiled_paths/types.jl`: immutable numerical contracts and concrete storage owners
 - `compiled_paths/fields.jl`: normalization, shifts, crops, padding and FFT/filter primitives
+- `compiled_paths/scheduling.jl`: cold group selection, checkpoint boundaries and shared/unshared instruction ranges
 - `compiled_paths/preparation.jl`: validated program loading, shared-prefix preparation and workspace construction
+- `compiled_paths/execution.jl`: bounded instruction selection with statically specialized transform-group arities
 
 Batch-specific admission stays beside its executor so the dependency checks and
 the storage they protect can be reviewed together. All files extend the same
 module; splitting source files adds no dispatch or execution layer. Preserve
 both arithmetic order and checkpoint ownership when changing these routines.
+
+Fixed geometry is resolved when preparing the model. `PathExecutionPlan` stores
+only execution decisions and indices in concrete fixed-size host arrays; live
+OPD/amplitude inputs, FFT scratch and exact bindings stay in the prepared owner.
+Group selection and terminal cancellation cannot cross a checkpoint. Separate
+shared/unshared ranges retain the ordinary traversal's cache ownership. Rebuild
+these decisions when changing the prepared backend or propagation policy.
+
+The finite group arities use literal `Val(2/4/6/8/10)` calls, and paired terminal
+FFT handling uses a union of two concrete types. Wavelengths, grid dimensions,
+coefficients, path length and complete YAML topology remain data rather than
+creating a new method family for each prescription. This bounds specialization
+while allowing Julia to compile the numerical kernels for their concrete types.
+The ordinary executor does not consult the prepared instruction stream. Captured
+GPU replay launches the recorded graph; this scheduling cleanup alone does not
+remove a GPU kernel or establish a throughput improvement.
 
 ## Algorithm Graph Adapters
 

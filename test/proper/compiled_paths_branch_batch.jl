@@ -47,7 +47,8 @@ function force_compiled_branch_batch(owner;image_batch=false)
         name===:propagation ? propagation : name===:branch_batch ? batch :
             name===:image_resample ? images : getfield(w,name)
     end...)
-    return CP.PreparedCompiledPaths(owner.plan,workspace,owner.inputs,owner.products,owner.execution_context,owner.synthesis)
+    return CP.PreparedCompiledPaths(owner.plan,workspace,owner.inputs,owner.products,owner.execution_context,owner.synthesis,
+        CP._compiled_paths_prepare_execution(owner.plan,propagation))
 end
 
 function check_compiled_branch_batch(array,target;captured=false)
@@ -211,7 +212,7 @@ function check_compiled_input_groups(array,target;captured=false)
                     name===:branch_batch ? nothing : getfield(w,name)
                 end...)
                 owner=CP.PreparedCompiledPaths(forced.plan,workspace,forced.inputs,forced.products,
-                    forced.execution_context,forced.synthesis)
+                    forced.execution_context,forced.synthesis,forced.execution)
                 retained=Tuple(w.shared_prefixes)
                 operation()=CP._enqueue_compiled_paths!(owner)
                 operation();backend._synchronize_prepared_device_execution_context!(context)

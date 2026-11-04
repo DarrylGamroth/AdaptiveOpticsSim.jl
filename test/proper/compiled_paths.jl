@@ -1,4 +1,5 @@
 include("compiled_paths_helpers.jl")
+include("compiled_paths_schedule.jl")
 
 @testset "Compiled propagation groups preserve operation positions" begin
     fixtures=(compiled_paths_grouped_fixture(),

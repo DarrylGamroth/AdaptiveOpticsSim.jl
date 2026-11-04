@@ -488,7 +488,8 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
             basis, coefficient_rows[:, 1:1], reference_visibility, channels;
             output=products.reference, summation),
     )
-    owner = PreparedCompiledPaths(plan, workspace, inputs, products, execution_context, synthesis)
+    execution = _compiled_paths_prepare_execution(plan, propagation)
+    owner = PreparedCompiledPaths(plan, workspace, inputs, products, execution_context, synthesis, execution)
     # Prime PROPER's shape-dependent storage and plans outside execution.
     for p in paths, seq in (p.prefix, p.closed, p.only), op in seq
         if op.kind in (PathTransferFunction, PathFourierTransform)

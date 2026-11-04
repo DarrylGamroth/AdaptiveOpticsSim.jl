@@ -89,7 +89,7 @@ function compare_compiled_resample_fields(owner;synchronize=()->nothing,capture=
     end
     optimized()=begin
         AdaptiveOpticsSim.Backends.copyto_backend_async!(w.field,input)
-        CP._compiled_paths_proper_resample!(w,op,tf,resample,work,first,last)
+        CP._compiled_paths_proper_resample!(w,op,tf,resample,work,first,last,Val(last.direction==2))
     end
     fill!(input,one(eltype(input)))
     ordinary();optimized();synchronize()

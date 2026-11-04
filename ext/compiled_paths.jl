@@ -9,7 +9,9 @@ using KernelAbstractions: @index, @localmem, @synchronize
 # below keeps ordinary numerical routines beside their prepared lowerings.
 include("compiled_paths/types.jl")
 include("compiled_paths/fields.jl")
+include("compiled_paths/scheduling.jl")
 include("compiled_paths/preparation.jl")
+include("compiled_paths/execution.jl")
 
 # Execution: prepared and ordinary propagation, checkpoint continuations,
 # independent field batches, then spectral synthesis and pixel response.
@@ -93,22 +95,6 @@ function _compiled_paths_proper_group!(workspace,operations,masks,::NTuple{N,Not
     return nothing
 end
 
-function _compiled_paths_group_matches(sequence,index,last,::Val{N}) where {N}
-    stop=index+3(N÷2)-2
-    stop<=last || return false
-    # Leave a final PTP and its Fourier resampling to the transform pair
-    # lowering below. A checkpoint beyond `last` must still receive a field.
-    stop<last && sequence[stop].kind==PathTransferFunction &&
-        sequence[stop+1].kind==PathResample && return false
-    for pair in 0:N÷2-1
-        first=index+3pair
-        sequence[first].kind in (PathTransferFunction,PathFourierTransform) &&
-            sequence[first+1].kind in (PathTransferFunction,PathFourierTransform) || return false
-        pair==N÷2-1 || sequence[first+2].kind==PathMultiply || return false
-    end
-    return true
-end
-
 function _compiled_paths_resample_frequency!(w,op,work,prepared::Bool=true,finalize::Bool=true)
     if !isempty(op.auxiliary) && !(prepared && work.identity_roll)
         w.physical_fft.scratch .*=op.auxiliary
@@ -132,11 +118,7 @@ function _compiled_paths_resample!(w,op,work,prepared::Bool=true)
 end
 
 function _compiled_paths_proper_resample!(w,op,tf,resample,work,
-    first::Proper.PreparedPropagation,last::Proper.PreparedPropagation)
-    if last.direction!=2
-        _compiled_paths_proper_pair!(w,op,tf,first,last)
-        return _compiled_paths_resample!(w,resample,work)
-    end
+    first::Proper.PreparedPropagation,last::Proper.PreparedPropagation,::Val{true})
     # PTP ends with BFFT followed by scale; resampling immediately applies FFT.
     # FFT(BFFT(G)*s)=length(G)*s*G. Preserve phases, edge/gain positions and the
     # centered Fourier coordinates; only the redundant FFT pair is removed.
@@ -157,8 +139,8 @@ function _compiled_paths_proper_resample!(w,op,tf,resample,work,
         one(tf.gouy),cld(size(last.field,1),2);ndrange=size(w.field))
     return _compiled_paths_resample_frequency!(w,resample,work)
 end
-function _compiled_paths_proper_resample!(w,op,tf,resample,work,::Nothing,::Nothing)
-    _compiled_paths_proper_pair!(w,op,tf,nothing,nothing)
+function _compiled_paths_proper_resample!(w,op,tf,resample,work,first,last,::Val{false})
+    _compiled_paths_proper_pair!(w,op,tf,first,last)
     return _compiled_paths_resample!(w,resample,work)
 end
 function _compiled_paths_execute_group!(owner,sequence,offset,index,::Val{N},
@@ -175,25 +157,7 @@ function _compiled_paths_execute_group!(owner,sequence,offset,index,::Val{N},
     prepared=ntuple(i->owner.workspace.propagation[offset+positions[i]]::P,Val(N))
     _compiled_paths_proper_group!(owner.workspace,map(i->sequence[i],positions),masks,
         prepared,input,initial_mask)
-    return index+3(N÷2)-2
-end
-
-# Consume an initial sampled multiplier while packing the first transform.
-# The source may be the current field or a retained prefix checkpoint.
-function _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input)
-    first+2<=last && sequence[first].kind==PathMultiply &&
-        sequence[first+1].kind in (PathTransferFunction,PathFourierTransform) &&
-        owner.workspace.propagation[offset+first+1] !== nothing || return first-1
-    return _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input,
-        (Val(10),Val(8),Val(6),Val(4),Val(2)))
-end
-@inline _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input,::Tuple{}) = first-1
-@inline function _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input,groups::Tuple)
-    group=Base.first(groups)
-    if _compiled_paths_group_matches(sequence,first+1,last,group)
-        return _compiled_paths_execute_group!(owner,sequence,offset,first+1,group,input,sequence[first].array)
-    end
-    return _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input,Base.tail(groups))
+    return nothing
 end
 
 function _compiled_paths_interpolate!(work, kernel, source, coefficients)
@@ -204,87 +168,57 @@ function _compiled_paths_interpolate!(work, kernel, source, coefficients)
     return work.opd
 end
 
-function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(sequence), prepared::Bool=true)
+# Independent ordinary traversal: no schedule, grouping or prepared propagation.
+# Keep the original operation arithmetic as the numerical oracle.
+function _compiled_paths_execute_reference!(owner, sequence, offset, first, last)
     w = owner.workspace
-    index = first
-    while index <= last
+    for index in first:last
         op = sequence[index]
         work = w.operations[offset + index]
         if op.kind == PathMultiply
-            consumed = prepared ? _compiled_paths_multiplied_group!(owner,sequence,offset,index,last,w.field) : index-1
-            if consumed < index
-                w.field .*= op.array
-            else
-                index = consumed
-            end
+            w.field .*= op.array
         elseif op.kind == PathNormalize
             _compiled_paths_normalize!(w.field, w.normalization)
         elseif op.kind in (PathTransferFunction, PathFourierTransform)
-            if prepared && index+2<=last && sequence[index+1].kind==PathTransferFunction &&
-                    sequence[index+2].kind==PathResample
-                _compiled_paths_proper_resample!(w,op,sequence[index+1],sequence[index+2],
-                    w.operations[offset+index+2],w.propagation[offset+index],w.propagation[offset+index+1])
-                index+=2
-            elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(10))
-                index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(10))
-            elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(8))
-                index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(8))
-            elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(6))
-                index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(6))
-            elseif prepared && _compiled_paths_group_matches(sequence,index,last,Val(4))
-                index=_compiled_paths_execute_group!(owner,sequence,offset,index,Val(4))
-            elseif prepared && index < last && sequence[index+1].kind in (PathTransferFunction, PathFourierTransform)
-                _compiled_paths_proper_pair!(w, op, sequence[index+1],
-                    w.propagation[offset+index], w.propagation[offset+index+1])
-                index += 1
-            elseif prepared
-                _compiled_paths_proper!(w, op, w.propagation[offset + index])
-            else
-                _compiled_paths_proper!(w, op)
-            end
+            _compiled_paths_proper!(w, op)
         elseif op.kind == PathSpectralMultiplier
             _compiled_paths_filter!(w.field, w.field, op.array, w.physical_fft)
         elseif op.kind == PathResample
-            _compiled_paths_resample!(w,op,work,prepared)
+            _compiled_paths_resample!(w,op,work,false)
         elseif op.kind == PathLiveScreen
             input = op.source == 1 ? owner.inputs.dm_opd : owner.inputs.entrance_opd
-            _compiled_paths_interpolate!(work, op.array, input, _compiled_paths_mul_coefficients(w,prepared))
+            _compiled_paths_interpolate!(work, op.array, input, _compiled_paths_mul_coefficients(w,false))
             AdaptiveOpticsSim.Optics.apply_phase_async!(work.electric_field, work.opd)
             if op.source == 2
                 _compiled_paths_interpolate!(work, op.array, owner.inputs.entrance_attenuation,
-                    _compiled_paths_mul_coefficients(w,prepared))
+                    _compiled_paths_mul_coefficients(w,false))
                 @. w.field *= exp(-work.opd)
             end
         end
-        index += 1
     end
-    return offset + length(sequence)
+    return nothing
 end
 
 @inline _compiled_paths_slot(path, anchor, n_anchor) = (path - 1) * n_anchor + anchor
 
-function _compiled_paths_sequence!(owner,sequence,offset,sharing,share_prefix,prepared)
-    if !share_prefix
-        return _compiled_paths_execute!(owner,sequence,offset,1,length(sequence),prepared)
-    end
-    w=owner.workspace
-    first=sharing.count+1
-    if sharing.count>0
-        input=w.shared_prefixes[sharing.cache_index]
-        last=isempty(sharing.checkpoints) ? length(sequence) : sharing.checkpoints[1].index
-        consumed=prepared ? _compiled_paths_multiplied_group!(owner,sequence,offset,first,last,input) : first-1
-        if consumed < first
-            Backends.copyto_backend_async!(w.field,input)
-        else
-            first=consumed+1
+function _compiled_paths_sequence!(owner,sequence,offset,sharing,share_prefix,prepared,stage)
+    if prepared
+        schedule = share_prefix ? owner.execution.shared[stage] : owner.execution.unshared[stage]
+        _compiled_paths_execute_schedule!(owner,sequence,offset,schedule)
+    elseif !share_prefix
+        _compiled_paths_execute_reference!(owner,sequence,offset,1,length(sequence))
+    else
+        first=sharing.count+1
+        sharing.count>0 && Backends.copyto_backend_async!(owner.workspace.field,
+            owner.workspace.shared_prefixes[sharing.cache_index])
+        for checkpoint in sharing.checkpoints
+            _compiled_paths_execute_reference!(owner,sequence,offset,first,checkpoint.index)
+            Backends.copyto_backend_async!(owner.workspace.shared_prefixes[checkpoint.cache_index],owner.workspace.field)
+            first=checkpoint.index+1
         end
+        _compiled_paths_execute_reference!(owner,sequence,offset,first,length(sequence))
     end
-    for checkpoint in sharing.checkpoints
-        _compiled_paths_execute!(owner,sequence,offset,first,checkpoint.index,prepared)
-        Backends.copyto_backend_async!(w.shared_prefixes[checkpoint.cache_index],w.field)
-        first=checkpoint.index+1
-    end
-    return _compiled_paths_execute!(owner,sequence,offset,first,length(sequence),prepared)
+    return offset + length(sequence)
 end
 
 # Inputs remain independent through the resampling FFT and both matrix
@@ -388,9 +322,10 @@ function _compiled_paths_branch_pair(path, sharing, propagation, offset)
     # then wait for that producer in the original serial order.
     sharing.only.count > 0 && any(p -> p.cache_index == sharing.only.cache_index, left) && return nothing
     any(x -> any(y -> x.cache_index == y.cache_index, right), left) && return nothing
-    segments = PathBranchSegment[PathBranchSegment(p.index, p.cache_index, right[i].cache_index)
+    segments = [(last=p.index, closed_cache=p.cache_index, only_cache=right[i].cache_index)
         for (i, p) in enumerate(left)]
-    push!(segments, PathBranchSegment(length(a) - 1, 0, 0))
+    push!(segments, (last=length(a)-1, closed_cache=0, only_cache=0))
+    prepared_segments = PathBranchSegment[]
     first = sharing.closed.count + 1
     for segment in segments
         last = segment.last
@@ -404,11 +339,19 @@ function _compiled_paths_branch_pair(path, sharing, propagation, offset)
                 p !== nothing && p === q || return nothing
             end
         end
+        transforms = Union{PathBranchTransform{false},PathBranchTransform{true}}[]
+        for j in first+2:last
+            a[j].kind == PathMultiply && continue
+            mask = a[j-1].kind == PathMultiply ? j-1 : 0
+            push!(transforms,PathBranchTransform{j==length(a)-1}(j,mask))
+        end
+        push!(prepared_segments,PathBranchSegment(last,segment.closed_cache,
+            segment.only_cache,_compiled_paths_seal(transforms)))
         first = last + 1
     end
     a[end - 1].kind == PathTransferFunction || return nothing
     propagation[offset + length(a) - 1].direction == 2 || return nothing
-    return PathBranchPair(sharing.closed.count + 1, _compiled_paths_seal(segments))
+    return PathBranchPair(sharing.closed.count + 1, _compiled_paths_seal(prepared_segments))
 end
 
 function _compiled_paths_branch_pairs(plan, propagation)
@@ -443,11 +386,11 @@ end
 
 @inline _compiled_paths_branch_gain(op) = op.kind == PathFourierTransform ? op.gouy : one(op.gouy)
 
-function _compiled_paths_branch_fft!(batch, propagation, terminal::Bool=false)
+function _compiled_paths_branch_fft!(batch, propagation, ::Val{Terminal}=Val(false)) where {Terminal}
     if propagation.direction == 2
         Backends.enqueue_fft_plan!(batch.field, batch.forward)
         n = size(batch.field, 1)
-        if !terminal
+        if !Terminal
             Proper._propagation_batch_transfer_kernel!(KernelAbstractions.get_backend(batch.field), (16, 16))(
                 batch.field, propagation.transfer; ndrange = (n, n))
             Backends.enqueue_fft_plan!(batch.field, batch.backward)
@@ -459,6 +402,9 @@ function _compiled_paths_branch_fft!(batch, propagation, terminal::Bool=false)
     end
     return nothing
 end
+
+_compiled_paths_branch_fft!(batch, propagation, ::PathBranchTransform{Terminal}) where {Terminal} =
+    _compiled_paths_branch_fft!(batch,propagation,Val(Terminal))
 
 function _compiled_paths_branches!(owner, path, sharing, offset, index, pair)
     w = owner.workspace
@@ -481,14 +427,14 @@ function _compiled_paths_branches!(owner, path, sharing, offset, index, pair)
             batch.field, inputs, (a[first].array, b[first].array),
             _compiled_paths_edge(w.edge_multiplier, previous_op), previous.before, fld(n, 2); ndrange = (n, n))
         _compiled_paths_branch_fft!(batch, previous)
-        for j in initial + 1:segment.last
-            a[j].kind == PathMultiply && continue
+        for step in segment.transforms
+            j = step.index
             next = w.propagation[offset + j]
-            masks = a[j - 1].kind == PathMultiply ? (a[j - 1].array, b[j - 1].array) : (nothing, nothing)
+            masks = step.mask == 0 ? (nothing,nothing) : (a[step.mask].array,b[step.mask].array)
             Proper._propagation_batch_join_kernel!(backend, (16, 16))(
                 batch.field, previous.after, previous.scale, _compiled_paths_branch_gain(previous_op),
                 masks, _compiled_paths_edge(w.edge_multiplier, a[j]), next.before, fld(n, 2); ndrange = (n, n))
-            _compiled_paths_branch_fft!(batch, next, j == length(a) - 1)
+            _compiled_paths_branch_fft!(batch,next,step)
             previous, previous_op = next, a[j]
         end
         if segment.closed_cache == 0
@@ -535,7 +481,7 @@ function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true
         if !share_prefix || sharing.prefix.count==0
             Backends.copyto_backend_async!(w.field,path.entrance)
         end
-        offset=_compiled_paths_sequence!(owner,path.prefix,offset,sharing.prefix,share_prefix,prepared)
+        offset=_compiled_paths_sequence!(owner,path.prefix,offset,sharing.prefix,share_prefix,prepared,3index-2)
         pair = prepared && share_prefix ? _compiled_paths_branch_pair(w.branch_batch,index) : nothing
         if pair !== nothing
             offset = _compiled_paths_branches!(owner,path,sharing,offset,index,pair)
@@ -544,13 +490,13 @@ function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true
         if !share_prefix || sharing.only.count==0
             Backends.copyto_backend_async!(w.prefix,w.field)
         end
-        offset=_compiled_paths_sequence!(owner,path.closed,offset,sharing.closed,share_prefix,prepared)
+        offset=_compiled_paths_sequence!(owner,path.closed,offset,sharing.closed,share_prefix,prepared,3index-1)
         slot=_compiled_paths_slot(path.path_index,path.anchor_index,plan.n_anchor)
         _compiled_paths_stage_image!(w.image_resample,owner,2index-1,w.closed_sources[slot],prepared)
         if !share_prefix || sharing.only.count==0
             Backends.copyto_backend_async!(w.field,w.prefix)
         end
-        offset=_compiled_paths_sequence!(owner,path.only,offset,sharing.only,share_prefix,prepared)
+        offset=_compiled_paths_sequence!(owner,path.only,offset,sharing.only,share_prefix,prepared,3index)
         _compiled_paths_stage_image!(w.image_resample,owner,2index,w.only_sources[slot],prepared)
     end
     for a in 1:plan.n_anchor

@@ -24,6 +24,49 @@ struct PathOperation{T,A}
     source::UInt8 # 1 = DM OPD; 2 = entrance OPD and log-amplitude attenuation
 end
 
+# Closed execution vocabulary. Geometry and cache indices remain values; only
+# the finite transform-group arities specialize tuple arithmetic. This avoids
+# one Julia type/method family per complete YAML prescription.
+@enum PathExecutionKind begin
+    ExecuteMultiply
+    ExecuteNormalize
+    ExecutePropagation
+    ExecuteSpectralMultiplier
+    ExecuteResample
+    ExecuteLiveDM
+    ExecuteLiveEntrance
+    ExecutePropagationPair
+    ExecuteGroup2
+    ExecuteGroup4
+    ExecuteGroup6
+    ExecuteGroup8
+    ExecuteGroup10
+    ExecutePropagationResample
+    ExecuteCancelledResample
+    LoadCheckpoint
+    StoreCheckpoint
+end
+
+struct PathExecutionStep
+    kind::PathExecutionKind
+    index::Int # operation position within its sequence
+    mask::Int  # initial multiplier position for a transform group, or zero
+    cache::Int # checkpoint slot; zero means the current field for a group
+end
+
+struct PathSequenceExecution
+    first::Int
+    last::Int
+end
+
+# Immutable execution decisions only. Exact arrays, FFT plans and live inputs
+# are resolved through the prepared owner, never retained in this contract.
+struct PathExecutionPlan{S,R}
+    steps::S
+    shared::R
+    unshared::R
+end
+
 struct OpticalPathPlan{A,O}
     path_index::Int
     anchor_index::Int
@@ -124,10 +167,16 @@ struct PathResampleBatch{N,A,F,O,C}
     coefficients::C
 end
 
+struct PathBranchTransform{Terminal}
+    index::Int
+    mask::Int
+end
+
 struct PathBranchSegment
     last::Int
     closed_cache::Int
     only_cache::Int
+    transforms::FixedSizeVectorDefault{Union{PathBranchTransform{false},PathBranchTransform{true}}}
 end
 
 struct PathBranchPair{S}
@@ -179,11 +228,12 @@ struct CompiledPathsProducts{R}
 end
 
 """Prepared compiled optical path execution with exact input buffer bindings and products."""
-struct PreparedCompiledPaths{P,W,I,O,C,S}
+struct PreparedCompiledPaths{P,W,I,O,C,S,E}
     plan::P
     workspace::W
     inputs::I
     products::O
     execution_context::C
     synthesis::S
+    execution::E
 end
