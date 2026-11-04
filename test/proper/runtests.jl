@@ -8,6 +8,8 @@ include("../external_pupil_contract.jl")
 end
 include("../test_proper_optical_train.jl")
 include("runtime_opd.jl")
+include("prepared_train.jl")
+check_prepared_train(Array,AdaptiveOpticsSim.Backends.HostComputeDevice())
 include("external_pupil.jl")
 include("external_pupil_chopping.jl")
 include("shared_prefix.jl")

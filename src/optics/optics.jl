@@ -34,6 +34,7 @@ function propagate_compiled_optical_paths! end
 
 # Backend policy hooks for cold preparation; other backends retain the ordinary
 # multiplier storage and BLAS arithmetic.
+_prepared_optical_train_enabled(target, field) = false
 _compiled_paths_branch_batch_enabled(target, field) = false
 _compiled_paths_resample_batch_size(target, field, image_size, count) = 1
 function _compiled_paths_resample_mul!(field, temporary, kernel, coefficients)

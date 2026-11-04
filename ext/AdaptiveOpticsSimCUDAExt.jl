@@ -30,6 +30,17 @@ function _pyramid_modulation_batch_device_qualified(field)
     return size(field, 1) == size(field, 2)
 end
 
+function Optics._prepared_optical_train_enabled(
+    ::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
+    field::CUDA.CuMatrix{ComplexF32},
+)
+    size(field) == (1024,1024) || return false
+    device = CUDA.device(field)
+    return CUDA.capability(device) == v"8.6" &&
+        CUDA.attribute(device,CUDA.DEVICE_ATTRIBUTE_L2_CACHE_SIZE) == 5 * 1024 * 1024 &&
+        CUDA.math_mode() == CUDA.DEFAULT_MATH
+end
+
 function WavefrontSensors._pyramid_modulation_batch_limit(
     ::Backends.AcceleratorStyle{CUDA.CUDABackend},
     field::AbstractMatrix{ComplexF32}, point_count::Int, plane_bytes::Int,

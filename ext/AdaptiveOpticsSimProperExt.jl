@@ -248,13 +248,14 @@ function AOG.graph_node_ports(::Type{OpticalTrainNode{T}}, plan::OpticalTrainPla
     return (ports..., _runtime_opd_ports(T, plan.steps)...)
 end
 
-struct OpticalTrainWorkspace{W,C,A,M,S}
+struct OpticalTrainWorkspace{W,C,A,M,S,E}
     wavefront::W
     context::C
     padded_opd::A
     padded_amplitude::A
     masks::M
     shifted_mask::S
+    execution::E
 end
 
 struct OpticalTrainOwner{P,W,D,A,O,T}
@@ -401,9 +402,16 @@ function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, targ
     shifted_mask = any(step -> step.op === :sampled_mask, plan.steps) ?
         Backends.allocate_device_array(target, Complex{T}, n, n) : nothing
     workspace = OpticalTrainWorkspace(wavefront, context, padded_opd, padded_amplitude,
-        geometry.masks, shifted_mask)
+        geometry.masks, shifted_mask, nothing)
     owner = OpticalTrainOwner(plan, workspace, inputs.pupil_opd, inputs.pupil_amplitude, outputs.output, geometry.sampling_m)
     _prepare_train_capture!(owner, target)
+    execution = _prepare_train_execution(owner,target)
+    if execution !== nothing
+        workspace = OpticalTrainWorkspace(wavefront,context,padded_opd,padded_amplitude,
+            geometry.masks,shifted_mask,execution)
+        owner = OpticalTrainOwner(plan,workspace,inputs.pupil_opd,inputs.pupil_amplitude,
+            outputs.output,geometry.sampling_m)
+    end
     return (; owner, geometry.sampling_m)
 end
 
@@ -439,7 +447,7 @@ function _begin_optical_train!(owner::OpticalTrainOwner)
     return nothing
 end
 
-function AOG.step_graph_node!(owner::OpticalTrainOwner)
+function _step_optical_train_reference!(owner::OpticalTrainOwner)
     _begin_optical_train!(owner)
     plan, workspace = owner.plan, owner.workspace
     wf = workspace.wavefront
@@ -449,6 +457,9 @@ function AOG.step_graph_node!(owner::OpticalTrainOwner)
     _finish_optical_train!(wf, owner.output, plan.output_quantity)
     return nothing
 end
+
+AOG.step_graph_node!(owner::OpticalTrainOwner) =
+    _step_train_execution!(owner,owner.workspace.execution)
 
 AOG.optical_sampling_m(plan::OpticalTrainPlan) =
     _prepare_masks(plan, Backends.HostComputeDevice()).sampling_m
@@ -469,6 +480,7 @@ end
 include("proper_opd.jl")
 include("proper_spectrum.jl")
 include("proper_shared_prefix.jl")
+include("proper_prepared_train.jl")
 include("compiled_paths.jl")
 include("compiled_paths_node.jl")
 

@@ -245,7 +245,7 @@ function _step_opd_optic!(workspace, input, step, mask, interpolation::BilinearI
     return nothing
 end
 
-function AOG.step_graph_node!(owner::RuntimeOPDTrainOwner)
+function _step_runtime_opd_reference!(owner::RuntimeOPDTrainOwner)
     train = owner.train
     _begin_sampled_pupil!(train, owner.entrance)
     workspace = train.workspace
@@ -253,6 +253,9 @@ function AOG.step_graph_node!(owner::RuntimeOPDTrainOwner)
     _finish_optical_train!(workspace.wavefront, train.output, train.plan.output_quantity)
     return nothing
 end
+
+AOG.step_graph_node!(owner::RuntimeOPDTrainOwner) =
+    _step_train_execution!(owner,owner.train.workspace.execution)
 
 _begin_sampled_pupil!(train, ::Nothing) = _begin_optical_train!(train)
 

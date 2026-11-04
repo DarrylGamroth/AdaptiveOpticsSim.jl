@@ -122,3 +122,6 @@ include("cuda_proper_runtime_opd.jl")
 
 # Qualify the complex pupil handoff to the native analytic sensing model once.
 include("cuda_proper_pyramid_field.jl")
+
+include("proper/prepared_train.jl")
+check_prepared_train(CuArray,Backends.AcceleratorComputeDevice(Backends.CUDABackend(),0);captured=true)
