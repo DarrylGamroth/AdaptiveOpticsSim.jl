@@ -112,6 +112,26 @@ and terminal PTP/resampling cancellation are preserved. This adds no field or
 coefficient storage. Propagation tuple construction narrows the preparation-time
 common type before submission; captured replay retains the same ownership rules.
 
+Qualified CUDA 1024² ComplexF32 scalar optical trains can retain fixed phases and
+sampled multipliers, joining mapping passes around their original FFTs. Ordinary
+PROPER propagation supplies nominal geometry; runtime OPD retains its original
+interpolation and phase arithmetic. Exact reflection checks compress symmetric
+masks. Preparation falls back to ordinary execution beyond a 128 MiB cache
+budget. The live field remains the original FFT scratch; shared-prefix partial
+execution and checkpoint ownership are unchanged. Other devices retain ordinary
+execution. The portable forced path is checked on CPU and AMDGPU; this does not
+qualify its performance there. YAML steps and live pupil/DM inputs remain
+configurable; fixed changes require preparation and capture again.
+
+External-pupil GPU exposure helpers capture validation, accumulation, finish,
+clear and detector scaling separately. Float64 scientific accumulation and
+callback/error ordering are retained. Each replay acquires bound arrays through
+the backend's public stream-ownership protocol, including callback writes from
+another stream. Chopped variants share scientific exposure storage under the
+existing serialized-owner contract. CPU and unsupported representations retain
+ordinary helpers. Compare against the original device executor for exact
+exposure arithmetic; cross-backend division can differ in the last bit.
+
 Run `julia --project=test/proper test/proper/compiled_paths.jl` for the focused
 CPU equations and warmed zero-allocation checks. The CUDA/AMDGPU compiled-path
 selectors exercise the same odd/even, mixed-defocus and ghost fixtures with

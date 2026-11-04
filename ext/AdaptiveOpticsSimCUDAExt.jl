@@ -509,6 +509,32 @@ end
     return nothing
 end
 
+function Backends._capture_prepared_device_kernel_graph(
+    f::F, context::CUDAPreparedDeviceExecutionContext,
+) where {F}
+    graph = @static if Base.pkgversion(CUDA) >= v"6.5"
+        CUDA.capture(f; stream=context.stream)
+    else
+        CUDA.capture(f)
+    end
+    _require_cuda_graph_fixed_storage(graph)
+    return CUDAPreparedDeviceGraph(graph, CUDA.instantiate(graph),
+        CUDA.CuArray{UInt8,1,CUDA.DeviceMemory}(undef, 0))
+end
+
+function Backends._launch_prepared_device_graph!(captured::CUDAPreparedDeviceGraph,
+        context::CUDAPreparedDeviceExecutionContext,arrays::Tuple)
+    # pointer(array) uses CUDA's public managed-memory ownership transfer: it
+    # completes a previous foreign stream and records this stream as the writer.
+    # This owner is serialized, including callbacks, so no competing acquisition
+    # can occur between these transfers and submission of the retained graph.
+    GC.@preserve arrays begin
+        foreach(pointer,arrays)
+        Backends._launch_prepared_device_graph!(captured,context)
+    end
+    return nothing
+end
+
 struct CUDAOutputSnapshot{D,H,V,C,S,T}
     device_values::D
     host_owner::H

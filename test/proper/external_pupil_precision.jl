@@ -63,3 +63,58 @@
         fill(value,1,1), ModelTimestamp(0), ModelDuration(10_000_000))
     @test only(images)[1] ≈ Float64(value)
 end
+
+@testset "prepared exposure kernels preserve validation and ordered Float64 arithmetic" begin
+    # Run the portable kernels on the host independently of graph capture. The
+    # oracle is the original exposure broadcast, including conversion order.
+    cpu = AlgorithmGraphs.KernelAbstractions.CPU()
+    for T in (Float32,Float64), count in (1,257,1025)
+        values = reshape(T[isodd(i) ? 1e-3 : 1e30 for i in 1:count],count,1)
+        flags = fill(UInt8(255),cld(count,256))
+        validate!() = AlgorithmGraphs._validate_external_intensity_kernel!(cpu)(
+            flags,values,Float32,1.0;ndrange=256length(flags),workgroupsize=256)
+        validate!()
+        @test all(iszero,flags)
+        for invalid in (T(-1),T(NaN),T(Inf))
+            values[end] = invalid
+            validate!()
+            @test any(flag -> !iszero(flag & UInt8(1)),flags)
+            values[end] = T(1)
+            validate!()
+            @test all(iszero,flags) # A replay overwrites earlier rejection flags.
+        end
+        values[end] = T(1e35)
+        AlgorithmGraphs._validate_external_intensity_kernel!(cpu)(
+            flags,values,Float32,1e10;ndrange=256length(flags),workgroupsize=256)
+        @test all(flag -> iszero(flag & UInt8(1)),flags)
+        @test any(flag -> !iszero(flag & UInt8(2)),flags)
+        actual = zeros(Float64,size(values))
+        expected = copy(actual)
+        overlap = Int64[0]
+        for span in (1,3,10_000_000,7)
+            overlap[1] = span
+            expected .+= Float64.(values) .* span
+            AlgorithmGraphs._accumulate_external_intensity_kernel!(cpu)(
+                actual,values,overlap;ndrange=length(values))
+            @test isequal(actual,expected)
+        end
+    end
+end
+
+@testset "exposure callback failure retains publication and clear ordering" begin
+    exposure = IntensityExposure((1,1),ModelDuration(4))
+    failure = ErrorException("consumer rejected image")
+    callback = function (image,pts,duration,sequence)
+        @test image == fill(3.0,1,1)
+        @test exposure.integrated == fill(12.0,1,1)
+        @test exposure.covered_ns == 4 && exposure.next_ns == 4
+        @test exposure.start_ns == 0 && exposure.sequence == sequence == 1
+        throw(failure)
+    end
+    @test_throws typeof(failure) integrate_intensity!(callback,exposure,fill(3f0,1,1),
+        ModelTimestamp(0),ModelDuration(4))
+    @test exposure.integrated == fill(12.0,1,1)
+    @test exposure.image == fill(3.0,1,1)
+    @test exposure.covered_ns == 4 && exposure.next_ns == 4
+    @test exposure.start_ns == 0 && exposure.sequence == 1
+end

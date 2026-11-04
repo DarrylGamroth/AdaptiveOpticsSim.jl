@@ -225,6 +225,17 @@ function Backends._capture_prepared_device_graph(
     return AMDGPUPreparedDeviceGraph(graph, executable)
 end
 
+function Backends._launch_prepared_device_graph!(captured::AMDGPUPreparedDeviceGraph,
+        context::AMDGPUPreparedDeviceExecutionContext,arrays::Tuple)
+    # ROCArray's public pointer operation preserves its documented implicit
+    # stream ordering. Submission and callbacks share one serialized owner.
+    GC.@preserve arrays begin
+        foreach(pointer,arrays)
+        Backends._launch_prepared_device_graph!(captured,context)
+    end
+    return nothing
+end
+
 @inline function Backends._launch_prepared_device_graph!(
     captured::AMDGPUPreparedDeviceGraph,
     context::AMDGPUPreparedDeviceExecutionContext,

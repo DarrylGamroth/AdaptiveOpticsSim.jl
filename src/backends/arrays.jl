@@ -421,6 +421,18 @@ function _capture_prepared_device_graph(
     ))
 end
 
+# Kernel-only helpers need no library handle or cuBLAS workspace. Backends may
+# specialize this cold capture seam while retaining the same launch protocol.
+_capture_prepared_device_kernel_graph(f, context) =
+    _capture_prepared_device_graph(f, context)
+
+# Captured helper commands retain raw device addresses. Backends must restore
+# their public array stream-ownership protocol before replaying those commands.
+function _launch_prepared_device_graph!(captured,
+        context::_AbstractPreparedDeviceExecutionContext,arrays::Tuple)
+    throw(InvalidConfiguration("prepared device graph array ownership is unsupported for $(typeof(context))"))
+end
+
 function _launch_prepared_device_graph!(
     captured,
     context::_AbstractPreparedDeviceExecutionContext,
