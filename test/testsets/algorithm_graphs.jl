@@ -2246,6 +2246,7 @@ end
         :pixel_mtf,
         :pixel_integration_f32,
         :pixel_integration_f64,
+        :detector_frame_layout_f32,
         :deformable_mirror_surface_f32,
         :gaussian_deformable_mirror_surface_f32,
         :grid_gaussian_deformable_mirror_surface_f32,

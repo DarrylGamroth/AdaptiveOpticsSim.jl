@@ -55,7 +55,7 @@ const TEST_SUITE_SPECS = (
     ),
     TestSuiteSpec("algorithm-graphs", "testsets/algorithm_graphs.jl",
         "testsets/ideal_pupil_relay.jl", "testsets/pyramid_field_graph.jl",
-        "testsets/pixel_integration.jl"),
+        "testsets/pixel_integration.jl", "test_detector_frame_layout.jl"),
     TestSuiteSpec("spatial-ao-residual", "testsets/spatial_ao_residual.jl"),
     TestSuiteSpec("zemax", "test_zemax.jl", "test_zemax_gpi_records.jl", "test_zemax_components.jl", "test_zemax_variants.jl", "test_zemax_precision.jl"),
     TestSuiteSpec("second-order-response", "testsets/second_order_response.jl"),

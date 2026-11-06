@@ -1585,6 +1585,7 @@ function builtin_graph_node_types()
         pixel_mtf=_pixel_mtf_f32_node,
         pixel_integration_f32=_pixel_integration_f32_node,
         pixel_integration_f64=_pixel_integration_f64_node,
+        detector_frame_layout_f32=_detector_frame_layout_f32_node,
         deformable_mirror_surface_f32=
             _deformable_mirror_surface_f32_node,
         gaussian_deformable_mirror_surface_f32=

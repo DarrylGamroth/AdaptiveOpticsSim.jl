@@ -321,6 +321,16 @@ Factory functions include:
 - `second_order_response_node` for an explicit unity-static-gain mechanical
   response before modal expansion or other physical coordinate use
 
+The built-in `detector_frame_layout_f32` graph selector places a Float32
+`detector_frame` into a zero-padded `frame` at an explicit zero-based
+`origin`. Configure `input_size` and `output_size` in `(rows, columns)` order,
+`scale`, `bias`, `input_schema`, and `output_schema`. Optional `range` clamps
+the affine result; `rounding: nearest_even` then rounds ties to even.
+`output_element_type: uint16` requires nearest-even rounding and integral range
+bounds within 0:65535; the default output type is Float32. Each declared shape
+is bounded to 512 MiB using Float32 element width. CPU execution supports
+one-based views, and CUDA/AMDGPU execution supports fixed-address capture.
+
 `Optics.SecondOrderResponsePlan(; natural_frequency_hz, damping_ratio,
 sample_period_s, T=Float32)` prepares exact zero-order-hold coefficients for
 independent coordinates. `prepare_second_order_response(input, plan; output)`

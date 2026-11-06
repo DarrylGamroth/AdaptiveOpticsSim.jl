@@ -9,6 +9,14 @@ defined here before they become public API.
 
 ## Naming Rules
 
+**Detector frame layout** is the built-in `detector_frame_layout_f32` graph
+node's placement of an input Float32 detector frame into a zero-padded output
+frame at an explicit zero-based `(row, column)` origin. It applies Float32
+scale and bias, optional clamping, then optional nearest-even rounding.
+Output is Float32 by default; UInt16 output requires nearest-even rounding
+and integral clipping bounds within 0:65535. The operation adds no exposure,
+noise or detector-response model and infers no quantity conversion from schemas.
+
 **Measured-influence resampling** (`Optics.resample_measured_influences`) maps a
 decoded source-grid influence cube onto the complete square pupil with bilinear
 interpolation. Source columns increase rightward and source rows downward;
