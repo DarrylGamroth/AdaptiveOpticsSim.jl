@@ -9,6 +9,16 @@ defined here before they become public API.
 
 ## Naming Rules
 
+**Measured-influence resampling** (`Optics.resample_measured_influences`) maps a
+decoded source-grid influence cube onto the complete square pupil with bilinear
+interpolation. Source columns increase rightward and source rows downward;
+native pupil arrays increase in x on the first axis and y on the second. Each
+plane maps to an explicit physical-command column. The positive OPD scale in
+metres per stored sample unit divided by the signed reference command in metres
+gives dimensionless response columns stored as Float32. This operation adds no
+extrapolation, aperture masking, normalization or reflection factor; file
+decoding, artifact identity and pupil-registration admission belong to callers.
+
 An **external pupil contract** (`AlgorithmGraphs.external_pupil_contract`) binds
 OPD in metres and relative field amplitude to a declared pupil plane, diameter,
 collimated carrier and sampling. Its Float32 packet has logical axes

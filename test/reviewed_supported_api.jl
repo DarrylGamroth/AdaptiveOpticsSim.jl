@@ -111,7 +111,7 @@ const REVIEWED_SUPPORTED_API = (
             :prepare_compiled_optical_paths, :propagate_compiled_optical_paths!,
             :prepare_telescope, :propagation_input_metadata, :propagation_output_metadata,
             :propagation_plan, :spatial_filter_output, :spatial_filter_plan,
-            :validate_direct_imaging_batch,
+            :resample_measured_influences, :validate_direct_imaging_batch,
         ),
         public_extension =
         (

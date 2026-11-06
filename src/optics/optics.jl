@@ -34,6 +34,7 @@ using FixedSizeArrays: FixedSizeVector, FixedSizeVectorDefault, FixedSizeMatrixD
 using KernelAbstractions
 using LinearAlgebra
 using Statistics
+import Interpolations
 
 import ..AdaptiveOpticsSim:
     DimensionMismatchError,
@@ -98,6 +99,7 @@ include("ncpa.jl")
 include("controllable_optics.jl")
 include("second_order_response.jl")
 include("deformable_mirror.jl")
+include("measured_influences.jl")
 
 # Canonical Optics-owned operation; do not extend Base.filter! because this
 # contract transforms optical products rather than filtering a collection.

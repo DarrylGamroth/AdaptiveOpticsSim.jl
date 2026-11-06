@@ -59,6 +59,7 @@ export prepare_spatial_filter, filter!
 export ActuatorGridTopology, SampledActuatorTopology
 export GaussianInfluenceWidth, GaussianMechanicalCoupling
 export DenseInfluenceMatrix, MeasuredInfluenceFunctions
+public resample_measured_influences
 export ClippedActuators, ActuatorHealthMap, CompositeDMActuatorModel
 export DeformableMirror
 export influence_model, influence_width, mechanical_coupling, n_actuators

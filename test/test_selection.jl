@@ -67,7 +67,7 @@ const TEST_SUITE_SPECS = (
     TestSuiteSpec("output-snapshot", "testsets/output_snapshot.jl"),
     TestSuiteSpec("prepared-optics-ownership",
         "testsets/prepared_optics_ownership.jl"),
-    TestSuiteSpec("core-optics", "testsets/core_optics.jl"),
+    TestSuiteSpec("core-optics", "testsets/core_optics.jl", "test_measured_influences.jl"),
     TestSuiteSpec("direct-science", "testsets/direct_science.jl"),
     TestSuiteSpec(
         "direct-imaging-batch",
