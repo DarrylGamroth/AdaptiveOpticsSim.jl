@@ -47,6 +47,7 @@ export capture_model_time_origin, capture_model_timestamp
 export next_model_timestamp, advance_model_time!, reset_model_time!
 export step_graph_at!, model_time_sequence, model_time_exhausted
 
+public copyto_graph_input!
 public prepared_graph_node
 public PreparedGraphOutputSnapshot, prepare_graph_output_snapshot
 public try_snapshot_graph_output!, poll_graph_output_snapshot!

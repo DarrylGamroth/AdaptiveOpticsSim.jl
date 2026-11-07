@@ -69,6 +69,50 @@ end
     ))
 end
 
+"""
+    copyto_graph_input!(graph::PreparedAlgorithmGraph, name::Symbol, source::AbstractArray) -> graph
+
+Copy values into an existing prepared input under the graph's exact device
+execution context. Shape and element type must match exactly. This operation
+preserves the input binding, physical units and schema; it does not convert or
+reinterpret a quantity, change topology, advance model time or submit a frame.
+
+The graph must have no pending frame and must not be failed. Its single writer
+must serialize copying with stepping, reset and other input mutations. Source
+production must be complete before this call; retain the source unchanged until
+subsequent graph completion, because device copying may be asynchronous. Copies
+and subsequent graph work share the prepared context's stream ordering. Caller
+device/context selections are restored before return.
+
+Validation failures leave the graph healthy and unchanged. A copying or device
+error stops the graph until `reset_graph!`; partial input copies are not rolled
+back. Reset does not restore caller-owned external input values.
+"""
+function copyto_graph_input!(graph::PreparedAlgorithmGraph, name::Symbol, source::AbstractArray)
+    state = graph.state
+    state.failed && throw(AlgorithmGraphError(
+        "the algorithm graph is stopped after a failed step; reset it before reuse",
+    ))
+    state.pending && _throw_graph_step_pending(state.pending_sequence)
+    destination = graph_input(graph, name)
+    size(destination) == size(source) || throw(AlgorithmGraphError(
+        "prepared graph input $name shape differs from source",
+    ))
+    eltype(destination) === eltype(source) || throw(AlgorithmGraphError(
+        "prepared graph input $name element type differs from source",
+    ))
+    try
+        _with_prepared_device_execution_context(graph.context) do
+            copyto!(destination, source)
+        end
+    catch
+        state.failed = true
+        _drain_failed_graph_submission!(graph)
+        rethrow()
+    end
+    return graph
+end
+
 function _drain_failed_graph_submission!(graph::PreparedAlgorithmGraph)
     try
         _with_prepared_device_execution_context(graph.context) do

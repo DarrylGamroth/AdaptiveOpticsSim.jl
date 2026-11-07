@@ -53,6 +53,7 @@ const TEST_SUITE_SPECS = (
         "execution-strategies",
         "testsets/execution_strategies.jl",
     ),
+    TestSuiteSpec("graph-input-copy", "testsets/graph_input_copy.jl"),
     TestSuiteSpec("algorithm-graphs", "testsets/algorithm_graphs.jl",
         "testsets/ideal_pupil_relay.jl", "testsets/pyramid_field_graph.jl",
         "testsets/pixel_integration.jl", "test_detector_frame_layout.jl"),

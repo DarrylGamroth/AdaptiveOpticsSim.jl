@@ -295,6 +295,18 @@ Use `load_algorithm_graph(path; bindings=...)` to compile a versioned YAML graph
 (after `using YAML` activates the optional extension)
 or construct the same definition directly in Julia.
 
+### Prepared input copies
+
+`AlgorithmGraphs.copyto_graph_input!(graph, name::Symbol, source::AbstractArray)`
+copies into an existing input under its prepared device context. Shape and
+element type must match; units, schema, binding and model time remain unchanged.
+The single writer must finish any pending graph ticket before copying. Failed
+graphs reject copies until reset. Validation errors leave storage unchanged;
+a copy/device error makes the graph fail until reset, without rolling back
+partial input values. Keep source production complete and source storage stable
+until the subsequent graph completion. This preserves prepared stream ordering
+for ordinary and captured execution without exposing backend context internals.
+
 ### Native Nodes
 
 Factory functions include:
