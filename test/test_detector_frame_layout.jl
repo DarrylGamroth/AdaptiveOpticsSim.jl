@@ -103,8 +103,6 @@ end
 struct AdapterOffsetArray{T,N,A<:AbstractArray{T,N}} <: AbstractArray{T,N}
     parent::A
 end
-AdapterOffsetArray(parent::AbstractArray{T,N}) where {T,N} =
-    AdapterOffsetArray{T,N,typeof(parent)}(parent)
 Base.size(array::AdapterOffsetArray) = size(array.parent)
 Base.axes(array::AdapterOffsetArray) = map(n -> 0:(n-1), size(array))
 Base.getindex(array::AdapterOffsetArray, indices::Vararg{Int}) =
