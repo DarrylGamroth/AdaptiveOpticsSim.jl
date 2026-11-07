@@ -1416,6 +1416,56 @@ end
         mark_ka_cpu_kernel!(:_pyramid_input_field_kernel!)
     end
 
+    @testset "Pixel integration overlap and validation kernels" begin
+        for T in (Float32, Float64)
+            input = T[10y + x for y in 1:4, x in 1:6]
+            for (output_shape, sampling, center) in (
+                    ((2, 2), (2.0, 3.0), (1.5, 1.5)),
+                    ((4, 6), (1.0, 1.0), (2.5, 3.75)))
+                node = pixel_integration_node(:pixels;
+                    input_shape=size(input), output_shape,
+                    input_sampling_m=(1.0, 1.0), output_sampling_m=sampling,
+                    input_center_pixel=(2.5, 3.5), output_center_pixel=center,
+                    input_schema="test.relative-power.optical-grid/1",
+                    output_schema="test.relative-power.detector-grid/1", T)
+                graph = prepare_algorithm_graph(algorithm_graph((node,);
+                    inputs=(graph_input(:flux, :pixels=>:input, input),),
+                    outputs=(graph_output(:flux, :pixels=>:output),)))
+                step_graph!(graph)
+                owner = AlgorithmGraphs.prepared_graph_node(graph, :pixels)
+                rows, columns = owner.plan.rows, owner.plan.columns
+                output = similar(owner.output)
+                Backends.launch_kernel!(KA_CPU_STYLE,
+                    AlgorithmGraphs._pixel_integration_kernel!, output, input,
+                    collect(rows.offsets), collect(rows.indices), collect(rows.weights),
+                    collect(columns.offsets), collect(columns.indices), collect(columns.weights);
+                    ndrange=output_shape)
+                expected = if output_shape == (2, 2)
+                    T[sum(input[2y-1:2y, 3x-2:3x]) for y in 1:2, x in 1:2]
+                else
+                    # A quarter-cell registration shift sends 3/4 to the
+                    # original column and 1/4 to the next; the last is cropped.
+                    shifted = T(0.75) .* input
+                    shifted[:, 2:end] .+= T(0.25) .* input[:, 1:end-1]
+                    shifted
+                end
+                @test output == expected
+                @test output == owner.output
+            end
+            failure = zeros(UInt32, 1)
+            for invalid in (nothing, T(-1), T(NaN), T(Inf))
+                source = copy(input)
+                invalid === nothing || (source[end] = invalid)
+                fill!(failure, 0)
+                Backends.launch_kernel!(KA_CPU_STYLE,
+                    AlgorithmGraphs._validate_pixel_integration_kernel!,
+                    failure, source; ndrange=length(source))
+                @test only(failure) == (invalid === nothing ? UInt32(0) : UInt32(1))
+            end
+        end
+        mark_ka_cpu_kernel!(:_pixel_integration_kernel!, :_validate_pixel_integration_kernel!)
+    end
+
     @testset "KA CPU kernel inventory" begin
         # Deferred kernels are still accounted for: most require larger
         # end-to-end wfs/tomography fixtures. Accelerator-only publication,
