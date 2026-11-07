@@ -144,6 +144,7 @@ import ..WavefrontSensors:
 include("definitions.jl")
 include("model_time_values.jl")
 include("preparation.jl")
+include("boundary_contracts.jl")
 include("native_nodes.jl")
 include("second_order_response_node.jl")
 include("ingaas_detector_node.jl")

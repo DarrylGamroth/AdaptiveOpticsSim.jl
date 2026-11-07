@@ -55,6 +55,7 @@ const TEST_SUITE_SPECS = (
     ),
     TestSuiteSpec("graph-input-copy", "testsets/graph_input_copy.jl"),
     TestSuiteSpec("algorithm-graphs", "testsets/algorithm_graphs.jl",
+        "testsets/boundary_contracts.jl",
         "testsets/ideal_pupil_relay.jl", "testsets/pyramid_field_graph.jl",
         "testsets/pixel_integration.jl", "test_detector_frame_layout.jl"),
     TestSuiteSpec("spatial-ao-residual", "testsets/spatial_ao_residual.jl"),

@@ -340,6 +340,7 @@ const REVIEWED_SUPPORTED_API = (
         public_advanced =
         (
             :copyto_graph_input!,
+            :graph_input_contract, :graph_output_contract,
             :CCDDetectorAcquisitionNode, :CCDDetectorAcquisitionNodeConfig,
             :external_pupil_contract,
             :optical_execution_graph,

@@ -150,6 +150,12 @@ For a lockstep external RTC, `prepare_graph_hil_boundary` binds one graph input
 as the complete DM command and one graph output as the complete detector frame.
 Transport and wall-clock pacing remain outside the simulation graph.
 
+Applications can inspect declared boundary schemas before preparation with
+qualified `AlgorithmGraphs.graph_input_contract(definition, name)` and
+`graph_output_contract(definition, name)`. These return immutable port descriptions
+from the node adapters without allocating or stepping numerical owners. Transport
+adapters can check scientific schemas without depending on graph storage layouts.
+
 For advanced controllable-optic and DM modeling, see:
 
 - `ModalControllableOptic(...)` with basis specs such as

@@ -54,6 +54,7 @@ public try_snapshot_graph_output!, poll_graph_output_snapshot!
 public snapshot_values, snapshot_metadata, release_graph_output_snapshot!
 public reset_graph_output_snapshot!
 public graph_port_contract
+public graph_input_contract, graph_output_contract
 public graph_node_bindings, graph_node_configuration
 public compose_proper_camera_graph
 public graph_node_ports, prepare_graph_node
