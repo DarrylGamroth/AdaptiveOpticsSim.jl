@@ -33,16 +33,18 @@ function compiled_paths_branch_fixture(;n=8,sign=1,dependent=false,zero_only=fal
     return fixture
 end
 
-function force_compiled_branch_batch(owner;image_batch=false)
+function force_compiled_branch_batch(owner;image_batch=false,crop_resample=false)
     backend=AdaptiveOpticsSim.Backends
     w=owner.workspace
     # Force the generic numerical implementation on CPU/AMD as well as the
     # automatically selected CUDA class, without changing the backend policy.
     propagation=CP._compiled_paths_prepare_propagation(backend.CUDABackend(),owner.plan.paths,w.wavefront,w.context)
     pairs=CP._compiled_paths_branch_pairs(owner.plan,propagation)
-    batch=CP._compiled_paths_branch_batch(w.field,pairs)
     images=image_batch ? CP._compiled_paths_prepare_image_resample(owner.plan,
         w.closed_sources,w.only_sources,w.mul_coefficients,Val(5)) : w.image_resample
+    resampling=crop_resample ? CP._compiled_paths_prepare_branch_resampling(
+        owner.plan,w.field,pairs,images) : nothing
+    batch=CP._compiled_paths_branch_batch(w.field,pairs,resampling)
     workspace=CP.CompiledPathsWorkspace(map(fieldnames(typeof(w))) do name
         name===:propagation ? propagation : name===:branch_batch ? batch :
             name===:image_resample ? images : getfield(w,name)
@@ -60,18 +62,22 @@ function check_compiled_branch_batch(array,target;captured=false)
                 dependent && zero_only && continue
                 fixture=compiled_paths_branch_fixture(;n,sign,dependent,zero_only)
                 dm=array(zeros(T,n,n))
+                # Twelve sources leave a partial group of two in the forced
+                # five-plane image batch. Nontrivial Fourier coefficients expose
+                # a wrong row selection or transpose in the terminal crop.
+                image_batch=(T===Float32 && n==7 && sign==1 && !dependent && !zero_only) ||
+                    (T===Float64 && n==8 && sign==-1 && dependent && !zero_only)
+                if image_batch
+                    fixture.arrays["identity"] .= [cis(.1i*j) for i in 1:n,j in 1:n]
+                end
                 prepare()=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
                     key->fixture.arrays[key];target,T,dm_opd=dm)
                 reference=prepare()
-                # Cover the combined lowering on two existing cases rather
-                # than repeating the full matrix. Twelve sources leave a final
-                # partial group of two in the forced five-plane image batch.
-                image_batch=(T===Float32 && n==7 && sign==1 && !dependent && !zero_only) ||
-                    (T===Float64 && n==8 && sign==-1 && dependent && !zero_only)
-                owner=force_compiled_branch_batch(prepare();image_batch)
+                owner=force_compiled_branch_batch(prepare();image_batch,crop_resample=image_batch)
                 w=owner.workspace;batch=w.branch_batch
                 if image_batch
                     @test w.image_resample!==nothing
+                    @test size(batch.resampling.temporary)==(owner.plan.image_size,n)
                     @test size(w.image_resample.field,3)==5
                     @test length(w.image_resample.outputs)%size(w.image_resample.field,3)==2
                     @test any(pair->pair!==nothing && any(s->s.closed_cache==0,pair.segments),batch.pairs)
@@ -102,6 +108,8 @@ function check_compiled_branch_batch(array,target;captured=false)
                     if image_batch
                         fill!(w.image_resample.field,Complex{T}(NaN))
                         fill!(w.image_resample.temporary,Complex{T}(NaN))
+                        fill!(batch.resampling.temporary,Complex{T}(NaN))
+                        fill!(w.crop,Complex{T}(NaN))
                     end
                     foreach(field->fill!(field,Complex{T}(NaN)),w.shared_prefixes)
                     foreach(field->fill!(field,Complex{T}(NaN)),reference.workspace.shared_prefixes)

@@ -95,10 +95,15 @@ function _compiled_paths_proper_group!(workspace,operations,masks,::NTuple{N,Not
     return nothing
 end
 
-function _compiled_paths_resample_frequency!(w,op,work,prepared::Bool=true,finalize::Bool=true)
+function _compiled_paths_apply_resampling_roll!(frequency, op, work, prepared)
     if !isempty(op.auxiliary) && !(prepared && work.identity_roll)
-        w.physical_fft.scratch .*=op.auxiliary
+        frequency .*= op.auxiliary
     end
+    return nothing
+end
+
+function _compiled_paths_resample_frequency!(w,op,work,prepared::Bool=true,finalize::Bool=true)
+    _compiled_paths_apply_resampling_roll!(w.physical_fft.scratch, op, work, prepared)
     Backends._enqueue_mul!(work.temporary,op.array,w.physical_fft.scratch,_compiled_paths_mul_coefficients(w,prepared))
     Backends._enqueue_mul!(w.field,work.temporary,transpose(op.array),_compiled_paths_mul_coefficients(w,prepared))
     if finalize
@@ -283,14 +288,15 @@ function _compiled_paths_stage_image!(::Nothing, owner, number, out, prepared, f
     return nothing
 end
 
-function _compiled_paths_stage_image!(batch::PathResampleBatch{N}, owner, number, out, prepared, finalization=nothing) where {N}
+function _compiled_paths_stage_image!(batch::PathResampleBatch{N}, owner, number, out, prepared,
+        finalization=nothing, input=owner.workspace.field, start=owner.plan.crop_start) where {N}
     prepared || return _compiled_paths_stage_image!(nothing, owner, number, out, prepared)
     n = owner.plan.image_size
     slot = mod1(number, N)
     valid = number == length(batch.outputs) ? slot : N
     backend = KernelAbstractions.get_backend(batch.field)
     _compiled_paths_pack_resample_kernel!(backend, (16, 16))(
-        batch.field, owner.workspace.field, owner.plan.crop_start, slot, valid, finalization; ndrange = (n, n))
+        batch.field, input, start, slot, valid, finalization; ndrange = (n, n))
     if slot == N || number == length(batch.outputs)
         Backends.enqueue_fft_plan!(batch.field, batch.forward)
         AdaptiveOpticsSim.Optics._compiled_paths_resample_mul!(batch.field, batch.temporary,
@@ -365,20 +371,74 @@ function _compiled_paths_branch_pairs(plan, propagation)
     end
     return _compiled_paths_seal(pairs)
 end
-function _compiled_paths_branch_batch(field, pairs)
+function _compiled_paths_branch_batch(field, pairs, resampling=nothing)
     n = size(field, 1)
     planes = similar(field, n, n, 2)
     fill!(planes, zero(eltype(planes)))
     return PathBranchBatch(planes, (view(planes, :, :, 1), view(planes, :, :, 2)),
         Backends.plan_fft_backend!(planes, (1, 2)),
-        Backends.plan_bfft_backend!(planes, (1, 2)), pairs)
+        Backends.plan_bfft_backend!(planes, (1, 2)), pairs, resampling)
 end
 
-function _compiled_paths_prepare_branch_batch(plan, field, propagation)
+function _compiled_paths_prepare_branch_resampling(plan, field::A, pairs, image_resample) where {A}
+    image_resample === nothing && return nothing
+    plan.image_size < plan.grid || return nothing
+    rows = plan.crop_start .+ (1:plan.image_size)
+    kernels, posts = IdDict{A,A}(), IdDict{A,A}()
+    operators = Union{Nothing,Tuple{A,A}}[]
+    for (path, pair) in zip(plan.paths, pairs)
+        if pair === nothing
+            push!(operators, nothing)
+            continue
+        end
+        # Pair admission proves both terminal operations share these arrays.
+        op = last(path.closed)
+        kernel = get!(kernels, op.array) do
+            op.array[rows, :]
+        end
+        post = if isempty(op.post)
+            op.post
+        else
+            get!(posts, op.post) do
+                op.post[rows, rows]
+            end
+        end
+        push!(operators, (kernel, post))
+    end
+    return PathBranchResampling(_compiled_paths_seal(operators),
+        similar(field, plan.image_size, plan.grid))
+end
+
+function _compiled_paths_prepare_branch_batch(plan, field, propagation, image_resample)
     AdaptiveOpticsSim.Optics._compiled_paths_branch_batch_enabled(plan.target, field) || return nothing
     pairs = _compiled_paths_branch_pairs(plan, propagation)
     all(isnothing, pairs) && return nothing
-    return _compiled_paths_branch_batch(field, pairs)
+    resampling = _compiled_paths_prepare_branch_resampling(plan, field, pairs, image_resample)
+    return _compiled_paths_branch_batch(field, pairs, resampling)
+end
+
+function _compiled_paths_stage_branch_image!(::Nothing, owner, op, work, index, number, output)
+    w = owner.workspace
+    finalization = _compiled_paths_terminal_finalization(w.image_resample, op)
+    _compiled_paths_resample_frequency!(w, op, work, true, finalization === nothing)
+    _compiled_paths_stage_image!(w.image_resample, owner, number, output, true, finalization)
+    return nothing
+end
+
+function _compiled_paths_stage_branch_image!(resampling::PathBranchResampling{O,A},
+        owner, op, work, index, number, output) where {O,A}
+    w = owner.workspace
+    kernel, post = resampling.operators[index]::Tuple{A,A}
+    frequency = w.physical_fft.scratch
+    _compiled_paths_apply_resampling_roll!(frequency, op, work, true)
+    coefficients = w.prepared_mul_coefficients
+    # The camera consumes only the crop, so select the output rows on both
+    # sides of the Fourier re-evaluation. Keep the full frequency axes.
+    Backends._enqueue_mul!(resampling.temporary, kernel, frequency, coefficients)
+    Backends._enqueue_mul!(w.crop, resampling.temporary, transpose(kernel), coefficients)
+    _compiled_paths_stage_image!(w.image_resample, owner, number, output, true,
+        (owner.plan.grid^2, post), w.crop, 0)
+    return nothing
 end
 @inline _compiled_paths_branch_pair(::Nothing, index) = nothing
 
@@ -448,15 +508,9 @@ function _compiled_paths_branches!(owner, path, sharing, offset, index, pair)
                     n^2 * previous.scale, one(previous_op.gouy), cld(n, 2); ndrange = (n, n))
                 operation = plane == 1 ? a[end] : b[end]
                 work = w.operations[(plane == 1 ? offset : other) + length(a)]
-                # Only the image crop is consumed after this terminal GEMM.
-                # Its pack preserves division then post-multiplication, while
-                # avoiding a full-field pass. Checkpoint/nonbatched paths keep
-                # the ordinary finalized field. The next plane/path overwrites
-                # scratch before consuming it.
-                finalization = _compiled_paths_terminal_finalization(w.image_resample, operation)
-                _compiled_paths_resample_frequency!(w, operation, work, true, finalization === nothing)
                 output = plane == 1 ? w.closed_sources[slot] : w.only_sources[slot]
-                _compiled_paths_stage_image!(w.image_resample, owner, 2index - 2 + plane, output, true, finalization)
+                _compiled_paths_stage_branch_image!(batch.resampling, owner, operation, work,
+                    index, 2index - 2 + plane, output)
             end
         else
             outputs = (w.shared_prefixes[segment.closed_cache], w.shared_prefixes[segment.only_cache])

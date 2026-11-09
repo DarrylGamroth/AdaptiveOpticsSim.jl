@@ -464,7 +464,7 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
     image_resample = batch_size == 1 ? nothing : _compiled_paths_prepare_image_resample(
         plan, closed_sources, only_sources, coefficients, Val(batch_size))
     propagation = _compiled_paths_prepare_propagation(paths, wf, ctx)
-    branch_batch = _compiled_paths_prepare_branch_batch(plan, field, propagation)
+    branch_batch = _compiled_paths_prepare_branch_batch(plan, field, propagation, image_resample)
     workspace = CompiledPathsWorkspace(field, prefix, prefix_fields, wf, ctx, operations,
         physical_fft, image_fft, phantom_fft,
         _compiled_paths_array(target, Complex{T}, image_size, image_size),

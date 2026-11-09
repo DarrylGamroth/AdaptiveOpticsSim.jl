@@ -184,12 +184,18 @@ struct PathBranchPair{S}
     segments::S
 end
 
-struct PathBranchBatch{A,V,F,B,P}
+struct PathBranchResampling{O,A}
+    operators::O
+    temporary::A
+end
+
+struct PathBranchBatch{A,V,F,B,P,R}
     field::A
     planes::V
     forward::F
     backward::B
     pairs::P
+    resampling::R
 end
 
 struct CompiledPathsWorkspace{A,W,C,O,F,V,N,M,L,B,P,E,K,R,Q}
