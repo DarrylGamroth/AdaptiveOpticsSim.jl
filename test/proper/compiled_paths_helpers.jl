@@ -8,8 +8,8 @@ using SHA
 
 # Redistributable compiler-contract fixture. The oracle uses the defining
 # centred Fresnel equations, independently of PROPER and the prepared runtime.
-function compiled_paths_synthetic_fixture(; forward=true, from_waist=true)
-    n, m = 8, 5
+function compiled_paths_synthetic_fixture(; forward=true, from_waist=true,n=8)
+    m = 5
     lambda, dx, dz = 1.6e-6, 4e-5, forward ? 0.013 : -0.013
     q = collect(0:n-1) .- n÷2
     entrance = ComplexF64[exp(-0.07*(x*x+y*y))*cis(0.2x+0.03y*y) for y in q, x in q]
@@ -49,6 +49,69 @@ function compiled_paths_synthetic_fixture(; forward=true, from_waist=true)
     return (; metadata, arrays, n, m, lambda, dx, dz, forward, from_waist)
 end
 
+function compiled_paths_grouped_fixture()
+    fixture=compiled_paths_synthetic_fixture()
+    prefix=only(fixture.metadata["propagations"])["prefix"]
+    for _ in 1:3
+        append!(prefix,[Dict("kind"=>"mult","array"=>"mask"),
+            deepcopy(prefix[4]),deepcopy(prefix[5])])
+    end
+    push!(prefix,deepcopy(prefix[3]))
+    return fixture
+end
+
+function compiled_paths_resample_fixture(;n=8,distance=0.004)
+    fixture=compiled_paths_synthetic_fixture(;n)
+    prefix=only(fixture.metadata["propagations"])["prefix"]
+    transfer=deepcopy(prefix[4])
+    transfer["dz"]=distance
+    append!(prefix,[transfer,Dict("kind"=>"resample","kernel"=>"identity",
+        "roll"=>"edge","post"=>"mask"),deepcopy(prefix[3])])
+    return fixture
+end
+
+function compare_compiled_resample_fields(owner;synchronize=()->nothing,capture=nothing,replay=nothing)
+    w=owner.workspace
+    path=only(owner.plan.paths)
+    op,tf,resample=path.prefix[5:7]
+    wf,ctx=w.wavefront,w.context
+    wf.wavelength_m=op.wavelength_m;wf.sampling_m=op.dx
+    first=Proper.prepare_propagation(wf,op.dz,ctx;kind=op.from_waist ? :wts : :stw)
+    wf.wavelength_m=tf.wavelength_m;wf.sampling_m=tf.dx
+    last=Proper.prepare_propagation(wf,tf.dz,ctx;kind=:ptp)
+    work=w.operations[7]
+    input=similar(w.field)
+    T=real(eltype(input));n=size(input,1)
+    ordinary()=begin
+        AdaptiveOpticsSim.Backends.copyto_backend_async!(w.field,input)
+        CP._compiled_paths_proper_pair!(w,op,tf,first,last)
+        CP._compiled_paths_resample!(w,resample,work)
+    end
+    optimized()=begin
+        AdaptiveOpticsSim.Backends.copyto_backend_async!(w.field,input)
+        CP._compiled_paths_proper_resample!(w,op,tf,resample,work,first,last,Val(last.direction==2))
+    end
+    fill!(input,one(eltype(input)))
+    ordinary();optimized();synchronize()
+    captures=capture===nothing ? nothing : map(capture,(ordinary,optimized))
+    # Native graph arguments retain addresses; explicitly retain all backing
+    # arrays while comparing changed-input replays of the complex field.
+    GC.@preserve first last input w begin
+        for state in 1:3
+            copyto!(input,Complex{T}[sin(.3y+.11x+state)+im*cos(.2y-.17x-state) for y in 1:n,x in 1:n])
+            captures===nothing ? ordinary() : replay(captures[1])
+            synchronize();expected=Array(w.field)
+            captures===nothing ? optimized() : replay(captures[2])
+            synchronize();actual=Array(w.field)
+            gate=T===Float32 ? 1e-5 : 2e-12
+            @test norm(actual-expected)/norm(expected)<=gate
+            @test maximum(abs,actual-expected)/maximum(abs,expected)<=gate
+            last.direction==0 && @test actual==expected
+        end
+    end
+    return nothing
+end
+
 function compiled_paths_synthetic_oracle(fixture, dm, entrance_opd, attenuation)
     f = fixture
     fftc(a) = FFTW.fftshift(FFTW.fft(FFTW.ifftshift(a)))
@@ -77,8 +140,8 @@ end
 
 # Multiple live branches and spectral anchors, plus an independent ghost.
 # Branches fork after the original fixture's full Fresnel prefix.
-function compiled_paths_shared_fixture()
-    fixture = compiled_paths_synthetic_fixture()
+function compiled_paths_shared_fixture(;n=8)
+    fixture = compiled_paths_synthetic_fixture(;n)
     metadata, arrays = fixture.metadata, fixture.arrays
     metadata["n_env"] = 3
     metadata["wavelengths"] = [fixture.lambda, 1.1fixture.lambda]
@@ -116,6 +179,64 @@ function compiled_paths_shared_fixture()
         "ghost_field_anchor"=>source == -1 ? ["ghost", "ghost"] : String[])
         for source in (0, 1, 2, -1)]
     return fixture
+end
+
+# Nonseparable complex filters, odd/even image sizes, an independent ghost,
+# and defocus on only part of the fast batch expose ordering and slot errors.
+function compiled_paths_filtered_fixture(; image_size=5, phantom_pad=2)
+    fixture = compiled_paths_shared_fixture()
+    metadata, arrays = fixture.metadata, fixture.arrays
+    m = image_size
+    metadata["image_size"] = m
+    metadata["crop_start"] = (fixture.n - m) ÷ 2
+    metadata["fast"]["phantom_pad"] = phantom_pad
+    q = collect(0:m-1) .- m÷2
+    freq = FFTW.fftshift(FFTW.fftfreq(m))
+    arrays["resample"] = exp.(2im*pi .* (q * transpose(freq)))
+    arrays["phase"] = ComplexF64[cis(0.07x*y + 0.03y) for y in q, x in q]
+    arrays["ghost"] = 0.01 .* arrays["phase"]
+    arrays["pixel"] = ones(ComplexF64, m+2, m+2)
+    for (k, path) in enumerate(metadata["fast_paths"])
+        shift = "shift_$k"
+        arrays[shift] = ComplexF64[(1+0.02y-0.01x)*cis(0.03k*x-0.05y+0.01x*y) for y in q, x in q]
+        path["shift_transfer"] = shift
+        phases = ["phase_$(k)_$a" for a in 1:2]
+        for (a, name) in enumerate(phases)
+            arrays[name] = ComplexF64[(1+0.01a*x)*cis(0.02k*y-0.04a*x+0.03x*y) for y in q, x in q]
+        end
+        path["phase_multiplier"] = phases
+        if k in (1, 3)
+            p = m + 2phantom_pad
+            f = FFTW.fftshift(FFTW.fftfreq(p))
+            transfers = ["defocus_$(k)_$a" for a in 1:2]
+            for (a, name) in enumerate(transfers)
+                arrays[name] = ComplexF64[cis(0.8a*(fy^2+1.3fx^2)+0.2k*fy*fx) for fy in f, fx in f]
+            end
+            path["defocus_transfer"] = transfers
+        end
+    end
+    return merge(fixture, (; m))
+end
+
+function compiled_paths_fast_oracle(owner, sources, free_ghost)
+    plan = owner.plan
+    fftc(a) = FFTW.fftshift(FFTW.fft(FFTW.ifftshift(a)))
+    ifftc(a) = FFTW.fftshift(FFTW.ifft(FFTW.ifftshift(a)))
+    filter(a, transfer) = ifftc(fftc(a) .* transfer)
+    return [begin
+        if path.source_index == 0
+            input = free_ghost ? copy(path.ghost[a]) : zeros(eltype(path.ghost[a]), plan.image_size, plan.image_size)
+        else
+            input = copy(sources[(path.source_index-1)*plan.n_anchor+a])
+            if !isempty(path.defocus_transfer)
+                pad = plan.phantom_pad
+                padded = zeros(eltype(input), plan.image_size+2pad, plan.image_size+2pad)
+                padded[pad+1:pad+plan.image_size, pad+1:pad+plan.image_size] .= input
+                input = filter(padded, path.defocus_transfer[a])[pad+1:pad+plan.image_size, pad+1:pad+plan.image_size]
+            end
+        end
+        filter(input, path.shift_transfer) .* path.phase_multiplier[a]
+    end for path in plan.fast_paths for a in 1:plan.n_anchor]
 end
 
 function compiled_paths_allocated(owner)

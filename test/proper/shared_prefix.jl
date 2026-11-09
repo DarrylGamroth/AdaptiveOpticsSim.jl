@@ -64,7 +64,8 @@ function shared_prefix_test_owner(;shared_prefix=true,T=Float64,llowfs_keywords=
     # Preserve the original independent propagation as the numerical oracle.
     # This test-only reconstruction supplies no production optimization switch.
     return PreparedExternalPupil(owner.graphs,owner.exposures,owner.pupil_opd,
-        owner.pupil_amplitude,owner.observations,owner.input_names,nothing,owner.state)
+        owner.pupil_amplitude,owner.observations,owner.input_names,nothing,
+        owner.exposure_execution,owner.state)
 end
 
 shared_prefix_branches(owner) = (owner.graphs.scc,

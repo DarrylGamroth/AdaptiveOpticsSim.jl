@@ -52,6 +52,105 @@ device-residency, type-stability, and steady-state allocation gates to both;
 focused tuning and counter work defaults to CUDA unless backend-specific
 evidence identifies an AMDGPU defect or regression.
 
+Compiled optical paths batch independent fast-path/anchor fields over the third
+array axis; FFTs transform only canonical `(y,x)` axes `(1,2)`. Frozen filter
+transfers use corner ordering internally. Fused packing retains centred input,
+padding and cropping semantics; unpacking applies the frozen phase. The two branches reuse
+one image batch and one optional defocus batch in stream order.
+
+Cold preparation may select measured backend-specific lowering without changing
+YAML topology or optical coefficients. The CUDA 512² ComplexF32 path on sm86
+with 5 MiB L2 retains an exactly verified real, even edge multiplier as a
+quarter-sized indexed view. It adds 266,244 bytes per owner while preserving the
+original complex array for the ordinary numerical executor. Complex, asymmetric
+or multiple distinct edges retain their original storage. CPU, AMDGPU, other
+grids/precisions and unqualified CUDA devices retain the existing policy.
+
+For the same CUDA class, default math mode selects cuBLAS `Cgemm3m` for cubic
+512² products. This Gaussian complex algorithm uses three full-precision real
+products and changes rounding; it does not enable TF32 or reduce input precision.
+Smaller/rectangular products and explicit non-default math modes keep ordinary
+GEMM. The retained `prepared=false` executor always uses the original coefficients
+and GEMM selection. Compare changed inputs and reset against that executor at
+the fitted model's existing accuracy limit before claiming a performance gain.
+Shared FFT/field/checkpoint storage remains serialized; concurrent replay of an
+owner is unsupported. Reprepare and recapture after changing fixed configuration
+or the execution policy. Live DM/pupil inputs remain bound and can change.
+
+The same qualified CUDA class groups four independent 221² image resamplings.
+Crop and inverse centering share one pack pass; FFTs transform only `(y,x)`.
+A column-permuted copy of the fixed resampling matrix accepts raw FFT order,
+then two ordinary FP32 strided-batched GEMMs produce the original source slots.
+The dot-product summation order changes, so validate complex fields/intensities
+against the retained ordinary executor. A final partial group zeros unused
+planes before execution and writes only valid outputs. Prefix/checkpoint order
+is unchanged and the batch is drained before source products are consumed.
+Two field stacks plus the reordered matrix add 3,516,552 bytes per owner,
+excluding FFT/library work areas. Other backends and unqualified shapes retain
+per-source execution. Prepared physical resampling also omits exactly verified
+identity rolls and fuses division followed by the existing post multiplier.
+Terminal paired paths with prepared image batching perform that division and
+post multiplication while packing the image crop, avoiding full-field
+finalization. Checkpoint and ordinary resampling paths retain finalized fields.
+This adds no buffers; the next plane/path overwrites or restores raw scratch
+before consuming it. Fused GPU complex multiplication can change contraction
+roundoff, so retain original-device comparisons at the existing accuracy gates.
+
+The same CUDA class and default math mode can pair independent closed/only
+physical propagation suffixes in two 512² planes. Preparation requires equal
+geometry, shared-prefix reuse counts and checkpoint cuts, disjoint checkpoint
+outputs and no dependency on a current sibling producer. Unsupported operation
+sequences retain serial execution. Shared prefixes execute once, roots finish
+in their original order, and each checkpoint retains its original buffer.
+Private PROPER kernels reuse common phase factors while preserving the scalar
+multiplier order; FFTs transform axes `(1,2)` only. The two-plane field adds
+4,194,304 bytes per owner, excluding FFT work areas. Existing scalar mapping
+scratch consumes terminal planes in order. Other backend policies remain
+unchanged; focused CPU/CUDA/AMDGPU tests force the portable numerical path and
+compare complex fields, checkpoints and intensities, including zero fields,
+changed inputs, poisoned scratch and replay. This optimization changes execution
+prepared from YAML, not its topology or scientific coefficients.
+
+Prepared scalar groups also admit six/ten-transform stencils, bounded by the
+next checkpoint. The first sampled multiplier can execute in the existing pack,
+which reads a retained prefix input directly. Multiplier order, checkpoint buffers
+and terminal PTP/resampling cancellation are preserved. This adds no field or
+coefficient storage. Propagation tuple construction narrows the preparation-time
+common type before submission; captured replay retains the same ownership rules.
+
+Qualified CUDA 1024² ComplexF32 scalar optical trains can retain fixed phases and
+sampled multipliers, joining mapping passes around their original FFTs. Ordinary
+PROPER propagation supplies nominal geometry; runtime OPD retains its original
+interpolation and phase arithmetic. Exact reflection checks compress symmetric
+masks. Preparation falls back to ordinary execution beyond a 128 MiB cache
+budget. The live field remains the original FFT scratch; shared-prefix partial
+execution and checkpoint ownership are unchanged. Other devices retain ordinary
+execution. The portable forced path is checked on CPU and AMDGPU; this does not
+qualify its performance there. YAML steps and live pupil/DM inputs remain
+configurable; fixed changes require preparation and capture again.
+
+External-pupil GPU exposure helpers capture validation, accumulation, finish,
+clear and detector scaling separately. Float64 scientific accumulation and
+callback/error ordering are retained. Each replay acquires bound arrays through
+the backend's public stream-ownership protocol, including callback writes from
+another stream. Chopped variants share scientific exposure storage under the
+existing serialized-owner contract. CPU and unsupported representations retain
+ordinary helpers. Compare against the original device executor for exact
+exposure arithmetic; cross-backend division can differ in the last bit.
+
+Run `julia --project=test/proper test/proper/compiled_paths.jl` for the focused
+CPU equations and warmed zero-allocation checks. The CUDA/AMDGPU compiled-path
+selectors exercise the same odd/even, mixed-defocus and ghost fixtures with
+streamed execution, capture replay, changed live inputs and reset. The private
+qualification hook `_enqueue_compiled_paths!(owner, share_prefix, batch_fast)`
+can select the original per-plane filters with `batch_fast=false`; this is not
+an instrument setting. Compare all products and individual envelopes before
+timing the exact fitted model. Record both model-step latency and retained
+storage: the 221-square, 39-plane image batch and 285-square, 21-plane defocus
+batch add 57,768,384 bytes of Float32 complex fields/transfers (55.09 MiB),
+excluding FFT-provider work areas. Float64 doubles that payload. CPU checks do
+not establish accelerator capture support or deadline performance.
+
 ## AMDGPU
 
 The maintained local ROCm target is:

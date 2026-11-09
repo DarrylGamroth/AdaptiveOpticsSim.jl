@@ -1473,6 +1473,16 @@ end
         # backend suites; atomic kernels are not portable to the KA CPU Array
         # backend on Julia 1.12.
         deferred = Set([
+            # Accelerator-only paths: amdgpu_pixel_integration.jl,
+            # cuda_external_exposure.jl, amdgpu_external_exposure_execution.jl
+            # and cuda_spectral_synthesis.jl.
+            :_pixel_integration_kernel!,
+            :_validate_pixel_integration_kernel!,
+            :_validate_external_intensity_kernel!,
+            :_accumulate_external_intensity_kernel!,
+            :_spectral_synthesis_pack_kernel!,
+            :_spectral_synthesis_fields_kernel!,
+            :_spectral_synthesis_accumulate_kernel!,
             # Scalar/KA-CPU parity is exercised by detector-pixel-mtf.
             :_pixel_mtf_pad_kernel!,
             :_pixel_mtf_multiply_kernel!,

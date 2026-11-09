@@ -11,4 +11,11 @@ const COMPILED_TARGET=Backends.AcceleratorComputeDevice(Backends.AMDGPUBackend()
 const COMPILED_ARRAY=ROCArray
 const COMPILED_SYNCHRONIZE=AMDGPU.synchronize
 include("proper/compiled_paths_gpu.jl")
+
+include("proper/compiled_paths_resampling_batch.jl")
+check_compiled_image_resampling_batch(ROCArray,COMPILED_TARGET;captured=true)
+
+include("proper/compiled_paths_branch_batch.jl")
+check_compiled_branch_batch(ROCArray,COMPILED_TARGET;captured=true)
+check_compiled_input_groups(ROCArray,COMPILED_TARGET;captured=true)
 @test !any(id->id.name=="CUDA",keys(Base.loaded_modules))

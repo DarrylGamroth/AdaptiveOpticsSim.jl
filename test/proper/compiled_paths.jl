@@ -1,4 +1,103 @@
 include("compiled_paths_helpers.jl")
+include("compiled_paths_schedule.jl")
+
+@testset "Compiled propagation groups preserve operation positions" begin
+    fixtures=(compiled_paths_grouped_fixture(),
+        (compiled_paths_resample_fixture(;n,distance) for n in (7,8),distance in (-0.004,0.0,0.004))...)
+    for fixture in fixtures
+    dm=zeros(fixture.n,fixture.n)
+    owner=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->fixture.arrays[ref];dm_opd=dm)
+    reference=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->fixture.arrays[ref];dm_opd=dm)
+    for state in 1:3
+        @. dm=state*3e-8*sin(.2*(1:fixture.n))
+        CP._enqueue_compiled_paths!(reference,false,false,false)
+        CP._enqueue_compiled_paths!(owner)
+        for name in (:fringed,:unfringed,:reference)
+            @test getproperty(owner.products,name)==getproperty(reference.products,name)
+        end
+    end
+    @test compiled_paths_allocated(owner)==0
+    end
+    for T in (Float32,Float64),n in (7,8),distance in (-0.004,0.0,0.004)
+        fixture=compiled_paths_resample_fixture(;n,distance)
+        owner=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+            ref->fixture.arrays[ref];T)
+        compare_compiled_resample_fields(owner)
+    end
+end
+
+@testset "Compiled fast filter batches" begin
+    for T in (Float32, Float64), image_size in (5, 6), phantom_pad in (0, 2)
+        fixture = compiled_paths_filtered_fixture(; image_size, phantom_pad)
+        dm, opd, attenuation = (zeros(T, fixture.n, fixture.n) for _ in 1:3)
+        prepare() = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
+            fixture.metadata, ref -> fixture.arrays[ref]; T,
+            dm_opd=dm, entrance_opd=opd, entrance_attenuation=attenuation)
+        owner, scalar = prepare(), prepare()
+        fast = owner.workspace.fast
+        @test size(fast.image.field) == (image_size, image_size, 8)
+        @test size(fast.defocus.field) == (image_size+2phantom_pad, image_size+2phantom_pad, 4)
+        @test collect(fast.defocus_slots) == [1, 2, 0, 0, 3, 4, 0, 0]
+        retained = (fast.image.field, fast.image.transfer, fast.defocus.field, fast.defocus.transfer)
+        rtol, atol = T === Float32 ? (3e-5, 3e-7) : (5e-12, 1e-14)
+        for frame in 1:3
+            for x in 1:fixture.n, y in 1:fixture.n
+                dm[y,x] = T(frame*2e-8sin(0.2x+0.3y))
+                opd[y,x] = T(frame*3e-8cos(0.4x-0.2y))
+                attenuation[y,x] = T(frame*(0.01x+0.005y))
+            end
+            fill!(fast.image.field, complex(T(NaN)))
+            fill!(fast.defocus.field, complex(T(NaN)))
+            AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner)
+            CP._enqueue_compiled_paths!(scalar, true, false)
+            for name in (:fringed, :unfringed, :reference)
+                @test getproperty(owner.products, name) ≈ getproperty(scalar.products, name) rtol=rtol atol=atol
+            end
+            for (actual, sources, free_ghost) in (
+                    (owner.workspace.closed_envelopes, owner.workspace.closed_sources, true),
+                    (owner.workspace.only_envelopes, owner.workspace.only_sources, false))
+                expected = compiled_paths_fast_oracle(owner, sources, free_ghost)
+                for (values, reference) in zip(actual, expected)
+                    @test values ≈ reference rtol=rtol atol=atol
+                end
+            end
+            @test all(((fast.image.field, fast.image.transfer, fast.defocus.field, fast.defocus.transfer) .=== retained))
+        end
+        @test compiled_paths_allocated(owner) == 0
+    end
+    # Execute the exact accelerator pack/unpack kernels on KA's CPU backend.
+    # Odd/even grids and workgroups extending beyond their bounds exercise
+    # every wrap direction, cropped access, padding and disabled ghost plane.
+    ka = CP.KernelAbstractions
+    for m in (5, 6), pad in (0, 2)
+        p = m+2pad
+        input = ComplexF64[complex(y, 2x-y) for y in 1:m, x in 1:m]
+        field = fill(complex(NaN), p, p, 2)
+        expected = zeros(ComplexF64, p, p)
+        expected[pad+1:pad+m, pad+1:pad+m] .= input
+        for enabled in (true, false)
+            CP._compiled_paths_pack_filter_kernel!(ka.CPU(), (4, 4))(
+                field, input, 2, pad, enabled; ndrange=(p, p))
+            ka.synchronize(ka.CPU())
+            @test field[:,:,2] == (enabled ? FFTW.ifftshift(expected) : zeros(ComplexF64,p,p))
+            @test all(isnan, field[:,:,1])
+        end
+        defocus = reshape(ComplexF64.(1:2p^2), p, p, 2)
+        image = zeros(ComplexF64, m, m, 2)
+        CP._compiled_paths_pack_defocus_kernel!(ka.CPU(), (4, 4))(
+            image, defocus, 1, 2, pad; ndrange=(m, m))
+        ka.synchronize(ka.CPU())
+        @test image[:,:,1] == FFTW.ifftshift(FFTW.fftshift(defocus[:,:,2])[pad+1:pad+m,pad+1:pad+m])
+        phase = cis.(0.03 .* real.(input))
+        out = similar(input)
+        CP._compiled_paths_unpack_filter_kernel!(ka.CPU(), (4, 4))(
+            out, image, phase, 1; ndrange=(m, m))
+        ka.synchronize(ka.CPU())
+        @test out == FFTW.fftshift(image[:,:,1]) .* phase
+    end
+end
 
 @testset "Frozen compiled_paths native execution" begin
     for forward in (true,false), from_waist in (true,false)
@@ -388,9 +487,10 @@ end
         owner = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
             fixture.metadata, ref -> fixture.arrays[ref];
             dm_opd=dm, entrance_opd=opd, entrance_attenuation=attenuation, summation)
-        @test length(owner.workspace.shared_prefixes) == 2
-        @test all(p -> p.count == 5, owner.plan.shared_prefixes)
-        @test [p.cache_index for p in owner.plan.shared_prefixes] == [1, 2, 1, 2, 1, 2]
+        @test length(owner.workspace.shared_prefixes) == 1
+        @test [p.prefix.count for p in owner.plan.shared_prefixes] == [0,5,5,0,5,5]
+        @test all(p -> only(p.prefix.checkpoints).index==5,owner.plan.shared_prefixes[[1,4]])
+        @test [p.prefix.cache_index for p in owner.plan.shared_prefixes] == [0,1,1,0,1,1]
         oracle = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
             fixture.metadata, ref -> fixture.arrays[ref];
             dm_opd=dm, entrance_opd=opd, entrance_attenuation=attenuation, summation)
@@ -413,6 +513,30 @@ end
         end
         @test compiled_paths_allocated(owner) == 0
     end
+    # Nested sharing must retain shorter forks and reuse a complete deeper
+    # prefix plus its closed continuation, rather than stopping at one common
+    # prefix for the entire family. Compare changing inputs with no sharing.
+    fixture=compiled_paths_shared_fixture()
+    for path in fixture.metadata["propagations"]
+        path["path_index"]==2 && (path["prefix"][end]["array"]="branch_0")
+    end
+    dm=zeros(fixture.n,fixture.n)
+    nested=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->fixture.arrays[ref];dm_opd=dm)
+    reference=AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(fixture.metadata,
+        ref->fixture.arrays[ref];dm_opd=dm)
+    @test maximum(p.prefix.count for p in nested.plan.shared_prefixes)>5
+    @test any(p->p.closed.count>0,nested.plan.shared_prefixes)
+    for frame in 1:3
+        @. dm=3e-8*sin(frame*.2*(1:fixture.n))
+        foreach(field->fill!(field,complex(NaN)),nested.workspace.shared_prefixes)
+        CP._enqueue_compiled_paths!(reference,false)
+        CP._enqueue_compiled_paths!(nested)
+        for name in (:fringed,:unfringed,:reference)
+            @test getproperty(nested.products,name)==getproperty(reference.products,name)
+        end
+    end
+    @test compiled_paths_allocated(nested)==0
     fixture = compiled_paths_shared_fixture()
     fixture.arrays["other_entrance"] = copy(fixture.arrays["entrance"])
     # Different entrance bindings and different leading live wavelengths must
@@ -421,7 +545,8 @@ end
     fixture.metadata["propagations"][5]["prefix"][1]["lam"] *= 1.01
     owner = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
         fixture.metadata, ref -> fixture.arrays[ref])
-    @test [p.count for p in owner.plan.shared_prefixes] == [0, 5, 0, 5, 0, 5]
+    @test [p.prefix.count for p in owner.plan.shared_prefixes] == [0,0,0,5,5,0]
+    @test only(owner.plan.shared_prefixes[3].prefix.checkpoints).index==5
     independent = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
         fixture.metadata, ref -> fixture.arrays[ref])
     CP._enqueue_compiled_paths!(independent, false)
@@ -443,3 +568,20 @@ end
         @test graph_output(graph, :fringed) == original
     end
 end
+
+@testset "Compiled multiplication backend fallback" begin
+    field=zeros(ComplexF32,512,512)
+    coefficients=AdaptiveOpticsSim.Backends._prepare_mul_coefficients(field)
+    @test AdaptiveOpticsSim.Optics._prepare_compiled_paths_mul_coefficients(field,coefficients) === coefficients
+    @test !AdaptiveOpticsSim.Optics._compiled_paths_edge_cache_enabled(
+        AdaptiveOpticsSim.Backends.HostComputeDevice(),field)
+end
+
+include("compiled_paths_resampling_batch.jl")
+check_compiled_image_resampling_batch(Array,AdaptiveOpticsSim.Backends.HostComputeDevice())
+
+include("compiled_paths_branch_batch.jl")
+check_compiled_branch_batch(Array,AdaptiveOpticsSim.Backends.HostComputeDevice())
+check_compiled_branch_rejections()
+
+check_compiled_input_groups(Array,AdaptiveOpticsSim.Backends.HostComputeDevice())

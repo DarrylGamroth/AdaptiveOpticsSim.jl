@@ -99,13 +99,17 @@ Discard partial coverage and align to the exposure containing `time`. Preserve
 the emitted sequence and last borrowed image; integration resumes at `time`.
 """
 function reset_intensity_exposure!(exposure::IntensityExposure,time::ModelTimestamp)
+    return Backends._with_compute_device(compute_device(exposure.integrated)) do
+        _reset_intensity_exposure!(exposure,time,nothing)
+    end
+end
+
+function _reset_intensity_exposure!(exposure,time,execution)
     exposure.covered_ns>0 && (exposure.incomplete+=1)
     exposure.start_ns=fld(model_nanoseconds(time),exposure.duration_ns)*exposure.duration_ns
     exposure.covered_ns=0
     exposure.next_ns=model_nanoseconds(time)
-    Backends._with_compute_device(compute_device(exposure.integrated)) do
-        fill!(exposure.integrated,0)
-    end
+    _clear_exposure!(execution,exposure)
     return exposure
 end
 
@@ -118,6 +122,148 @@ end
 
 _scaled_intensity_valid(::Type{T},intensity,scale) where {T} =
     all(value -> isfinite(T(value*scale)),intensity)
+
+# Exact graph bindings and replaceable scratch belong to this owner, separate
+# from the scientific Float64 exposure state. Each owner is externally serialized
+# together with its optical graph and uses that graph's retained stream.
+struct _ExternalExposureExecution{C,V,H,D,O,G,A,F,R,S}
+    context::C
+    validation::V
+    host_validation::H
+    overlap::D
+    host_overlap::O
+    validate::G
+    accumulate::A
+    finish::F
+    clear::R
+    scale::S
+end
+
+@kernel function _validate_external_intensity_kernel!(flags, intensity, ::Type{T}, scale) where {T}
+    index = @index(Global, Linear)
+    lane = @index(Local, Linear)
+    block = @index(Group, Linear)
+    partial = @localmem UInt32 (256,)
+    status = UInt32(0)
+    if index <= length(intensity)
+        value = intensity[index]
+        if !(value isa Real && isfinite(value) && isfinite(Float64(value)) && value >= 0)
+            status |= UInt32(1)
+        end
+        isfinite(T(value*scale)) || (status |= UInt32(2))
+    end
+    partial[lane] = status
+    @synchronize
+    # One fixed block owns each flag. Every lane participates in each barrier,
+    # including padding beyond the image, and every replay overwrites all flags.
+    for offset in (128,64,32,16,8,4,2,1)
+        if lane <= offset
+            partial[lane] |= partial[lane+offset]
+        end
+        @synchronize
+    end
+    if lane == 1
+        flags[block] = UInt8(partial[1])
+    end
+end
+
+@kernel function _accumulate_external_intensity_kernel!(integrated, intensity, overlap)
+    index = @index(Global, Linear)
+    if index <= length(integrated)
+        integrated[index] = integrated[index] + Float64(intensity[index]) * overlap[1]
+    end
+end
+
+_prepare_external_exposure_execution(target, graph, exposure, intensity, response) = nothing
+
+function _prepare_external_exposure_execution(target::Union{
+        AcceleratorComputeDevice{Backends.CUDABackend},
+        AcceleratorComputeDevice{Backends.AMDGPUBackend}}, graph, exposure, intensity, response)
+    # Unusual real representations keep the ordinary portable validation path.
+    return _prepare_external_exposure_execution(eltype(intensity), graph, exposure, intensity, response)
+end
+
+_prepare_external_exposure_execution(::Type, graph, exposure, intensity, response) = nothing
+function _prepare_external_exposure_execution(::Type{T}, graph, exposure, intensity, response) where {T<:Union{Float32,Float64}}
+    context = graph.context
+    return _with_prepared_device_execution_context(context) do
+        target = compute_device(intensity)
+        validation = allocate_device_array(target, UInt8, cld(length(intensity),256))
+        host_validation = FixedSizeVector{UInt8,Vector{UInt8}}(undef,length(validation))
+        overlap = allocate_device_array(target, Int64, 1)
+        host_overlap = FixedSizeVector{Int64,Vector{Int64}}(undef,1)
+        host_overlap[1] = 0
+        copyto!(overlap,parent(host_overlap))
+        style = execution_style(intensity)
+        rate_type = response === nothing ? Float64 : eltype(graph_input(response.graph,response.input))
+        rate_scale = response === nothing ? 1 : response.normalized_to_photon_rate
+        validate = () -> launch_kernel_async!(style, _validate_external_intensity_kernel!,
+            validation,intensity,rate_type,rate_scale;ndrange=256length(validation))
+        accumulate = () -> launch_kernel_async!(style, _accumulate_external_intensity_kernel!,
+            exposure.integrated,intensity,overlap;ndrange=length(intensity))
+        finish = () -> (exposure.image .= exposure.integrated ./ exposure.duration_ns; nothing)
+        clear = () -> (fill!(exposure.integrated,0); nothing)
+        scale = response === nothing ? nothing :
+            () -> (graph_input(response.graph,response.input) .= exposure.image .* rate_scale; nothing)
+        # Compile and warm each exact enqueue before capture. Only scratch and
+        # zero-valued cold exposure buffers are touched; no history/RNG advances.
+        validate(); accumulate(); clear(); finish()
+        scale === nothing || scale()
+        _synchronize_prepared_device_execution_context!(context)
+        capture = f -> Backends._capture_prepared_device_kernel_graph(f,context)
+        return _ExternalExposureExecution(context,validation,host_validation,overlap,host_overlap,
+            capture(validate),capture(accumulate),capture(finish),capture(clear),
+            scale === nothing ? nothing : capture(scale))
+    end
+end
+
+function _external_exposure_execution(prepared, name, graph)
+    variants = getproperty(prepared.exposure_execution,name)
+    return graph === getproperty(prepared.graphs,name) ? first(variants) : last(variants)
+end
+
+function _validate_external_intensity!(execution::_ExternalExposureExecution, intensity, response;
+        check_scale=true)
+    _with_prepared_device_execution_context(execution.context) do
+        _launch_prepared_device_graph!(execution.validate,execution.context,
+            (intensity,execution.validation))
+        copyto!(parent(execution.host_validation),execution.validation)
+    end
+    # The host copy completes this graph's stream before admission or mutation.
+    all(flag -> iszero(flag & UInt8(1)),execution.host_validation) ||
+        throw(AlgorithmGraphError("intensity must be real, finite, nonnegative and representable as Float64"))
+    !check_scale || all(flag -> iszero(flag & UInt8(2)),execution.host_validation) ||
+        throw(AlgorithmGraphError("scaled photon rate exceeds response input precision"))
+    return nothing
+end
+
+function _validate_external_intensity!(::Nothing, intensity, response;check_scale=true)
+    _validate_intensity(intensity)
+    if check_scale && response !== nothing
+        target_type = eltype(graph_input(response.graph,response.input))
+        _scaled_intensity_valid(target_type,intensity,response.normalized_to_photon_rate) ||
+            throw(AlgorithmGraphError("scaled photon rate exceeds response input precision"))
+    end
+    return nothing
+end
+
+_accumulate_exposure!(::Nothing,exposure,intensity,overlap) =
+    (exposure.integrated .+= Float64.(intensity) .* overlap; nothing)
+function _accumulate_exposure!(execution::_ExternalExposureExecution,exposure,intensity,overlap)
+    execution.host_overlap[1] = overlap
+    copyto!(execution.overlap,parent(execution.host_overlap))
+    _launch_prepared_device_graph!(execution.accumulate,execution.context,
+        (exposure.integrated,intensity,execution.overlap))
+    return nothing
+end
+_finish_exposure!(::Nothing,exposure) =
+    (exposure.image .= exposure.integrated ./ exposure.duration_ns; nothing)
+_finish_exposure!(execution::_ExternalExposureExecution,exposure) =
+    _launch_prepared_device_graph!(execution.finish,execution.context,
+        (exposure.integrated,exposure.image))
+_clear_exposure!(::Nothing,exposure) = (fill!(exposure.integrated,0); nothing)
+_clear_exposure!(execution::_ExternalExposureExecution,exposure) =
+    _launch_prepared_device_graph!(execution.clear,execution.context,(exposure.integrated,))
 
 """
     integrate_intensity!(emit, exposure, intensity, timestamp, duration)
@@ -147,8 +293,8 @@ function integrate_intensity!(emit,exposure::IntensityExposure,intensity::Abstra
     end
 end
 
-function _integrate_intensity!(emit,exposure,intensity,timestamp,duration)
-    _validate_intensity(intensity)
+function _integrate_intensity!(emit,exposure,intensity,timestamp,duration,execution=nothing)
+    _validate_external_intensity!(execution,intensity,nothing;check_scale=false)
     start=model_nanoseconds(timestamp);span=model_nanoseconds(duration)
     span>0 || throw(AlgorithmGraphError("input coverage must be positive"))
     start==exposure.next_ns || throw(AlgorithmGraphError("intensity coverage must be contiguous; reset after a gap"))
@@ -157,12 +303,12 @@ function _integrate_intensity!(emit,exposure,intensity,timestamp,duration)
         boundary=Base.checked_add(exposure.start_ns,exposure.duration_ns)
         overlap=min(finish,boundary)-cursor
         overlap>0 || throw(AlgorithmGraphError("nonmonotonic exposure input"))
-        exposure.integrated .+= Float64.(intensity) .* overlap
+        _accumulate_exposure!(execution,exposure,intensity,overlap)
         exposure.covered_ns+=overlap;cursor+=overlap
         exposure.next_ns=cursor
         if cursor==boundary
             if exposure.covered_ns==exposure.duration_ns
-                exposure.image .= exposure.integrated ./ exposure.duration_ns
+                _finish_exposure!(execution,exposure)
                 # A consumer may copy the borrowed image to the host or submit
                 # a detector graph on another stream. Publish completed pixels.
                 Backends.synchronize_backend!(execution_style(exposure.image))
@@ -172,7 +318,7 @@ function _integrate_intensity!(emit,exposure,intensity,timestamp,duration)
                 exposure.incomplete+=1
             end
             exposure.start_ns=boundary;exposure.covered_ns=0
-            fill!(exposure.integrated,0)
+            _clear_exposure!(execution,exposure)
         end
     end
     return exposure
@@ -195,7 +341,7 @@ one intensity output and sampling node per graph; input names bind the two
 pupil quantities explicitly. Transport adapters retain ownership of packet
 formats and convert their metadata to model timestamps/durations.
 """
-struct PreparedExternalPupil{G,E,A,O,I,P}
+struct PreparedExternalPupil{G,E,A,O,I,P,X}
     graphs::G
     exposures::E
     pupil_opd::A
@@ -203,6 +349,7 @@ struct PreparedExternalPupil{G,E,A,O,I,P}
     observations::O
     input_names::I
     propagation::P
+    exposure_execution::X
     state::_ExternalPupilState
 end
 
@@ -499,7 +646,14 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
         opd=zeros(T,size(opd));amplitude=zeros(T,size(amplitude))
     end
     propagation = _prepare_external_pupil_propagation(graphs, observations, input_names)
-    return PreparedExternalPupil(graphs,exposures,opd,amplitude,observations,input_names,propagation,
+    exposure_execution = NamedTuple{keys(graphs)}(map(keys(graphs)) do name
+        observation = getproperty(observations,name)
+        map(_observation_graphs(getproperty(graphs,name),observation)) do graph
+            _prepare_external_exposure_execution(target,graph,getproperty(exposures,name),
+                graph_output(graph,observation.output),_observation_response(observation))
+        end
+    end)
+    return PreparedExternalPupil(graphs,exposures,opd,amplitude,observations,input_names,propagation,exposure_execution,
         _ExternalPupilState(-1,0,0,nothing,0,0,0))
 end
 
@@ -565,8 +719,8 @@ end
 function _integrate_observation!(emit, prepared, name, graph, observation,
         timestamp, duration, generation, kind=nothing)
     sampling = optical_sampling_m(prepared_graph_node(graph, observation.sampling_node))
-    integrate_intensity!(getproperty(prepared.exposures,name),
-            graph_output(graph,observation.output),timestamp,duration) do image,pts,exposure,output_sequence
+    execution = _external_exposure_execution(prepared,name,graph)
+    receive = function (image,pts,exposure,output_sequence)
         metadata = (;pts=model_nanoseconds(pts),duration=UInt64(model_nanoseconds(exposure)),
             generation,sequence=output_sequence,sampling_m=sampling)
         kind === nothing || (metadata = merge(metadata,(;chopped_image_kind=kind)))
@@ -575,12 +729,53 @@ function _integrate_observation!(emit, prepared, name, graph, observation,
             emit(name,image,metadata)
         else
             input = graph_input(response.graph, response.input)
-            _with_prepared_device_execution_context(response.graph.context) do
-                input .= image .* response.normalized_to_photon_rate
+            if execution === nothing
+                _with_prepared_device_execution_context(response.graph.context) do
+                    input .= image .* response.normalized_to_photon_rate
+                end
+            else
+                _launch_prepared_device_graph!(execution.scale,execution.context,(image,input))
+                # Response graphs own a different stream. Publish scaled pixels
+                # before their submission, as with the original host broadcast.
+                _synchronize_prepared_device_execution_context!(execution.context)
             end
             step_graph!(response.graph)
             emit(name,graph_output(response.graph, response.output),
                 merge(metadata,(;quantity=:detector_frame,frame_schema=response.frame_schema)))
+        end
+    end
+    if execution === nothing
+        integrate_intensity!(receive,getproperty(prepared.exposures,name),
+            graph_output(graph,observation.output),timestamp,duration)
+    else
+        _with_prepared_device_execution_context(execution.context) do
+            _integrate_intensity!(receive,getproperty(prepared.exposures,name),
+                graph_output(graph,observation.output),timestamp,duration,execution)
+            # Both chopping variants share scientific accumulation storage but
+            # retain separate streams; complete the final clear before handing
+            # that storage to the next variant or the caller.
+            _synchronize_prepared_device_execution_context!(execution.context)
+        end
+    end
+    return nothing
+end
+
+function _reset_external_exposure!(prepared,name,time;image=false)
+    exposure = getproperty(prepared.exposures,name)
+    execution = first(getproperty(prepared.exposure_execution,name))
+    if execution === nothing
+        reset_intensity_exposure!(exposure,time)
+        if image
+            Backends._with_compute_device(compute_device(exposure.image)) do
+                fill!(exposure.image,0)
+            end
+        end
+    else
+        _with_prepared_device_execution_context(execution.context) do
+            _reset_intensity_exposure!(exposure,time,execution)
+            image && _finish_exposure!(execution,exposure)
+            # A chopped variant may next integrate on its own stream.
+            _synchronize_prepared_device_execution_context!(execution.context)
         end
     end
     return nothing
@@ -630,8 +825,8 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
     changed=generation!=state.generation
     if changed || start!=state.last_end_ns || sequence!=state.sequence+1 || lost_samples!=state.lost_samples
         state.discontinuities+=1
-        for exposure in values(prepared.exposures)
-            reset_intensity_exposure!(exposure,timestamp)
+        for (name,exposure) in pairs(prepared.exposures)
+            _reset_external_exposure!(prepared,name,timestamp)
             changed && (exposure.sequence=0)
         end
         changed && _reset_observation_graphs!(prepared)
@@ -658,14 +853,9 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
         end
         intensity=graph_output(graph,getproperty(prepared.observations,name).output)
         _with_prepared_device_execution_context(graph.context) do
-            _validate_intensity(intensity)
             response = _observation_response(getproperty(prepared.observations,name))
-            if response !== nothing
-                target_type = eltype(graph_input(response.graph, response.input))
-                scale = response.normalized_to_photon_rate
-                _scaled_intensity_valid(target_type,intensity,scale) ||
-                    throw(AlgorithmGraphError("scaled photon rate exceeds response input precision"))
-            end
+            _validate_external_intensity!(_external_exposure_execution(prepared,name,graph),
+                intensity,response)
         end
     end
     for (name,graph) in pairs(prepared.graphs)
@@ -707,13 +897,10 @@ function reset_external_pupil!(prepared::PreparedExternalPupil)
         response = _observation_response(observation)
         response === nothing || reset_graph!(response.graph)
     end
-    for exposure in values(prepared.exposures)
-        reset_intensity_exposure!(exposure, ModelTimestamp(0))
+    for (name,exposure) in pairs(prepared.exposures)
+        _reset_external_exposure!(prepared,name,ModelTimestamp(0);image=true)
         exposure.sequence = 0
         exposure.incomplete = 0
-        Backends._with_compute_device(compute_device(exposure.image)) do
-            fill!(exposure.image, 0)
-        end
     end
     fill!(prepared.pupil_opd, 0)
     fill!(prepared.pupil_amplitude, 0)

@@ -93,7 +93,12 @@ The qualified advanced API includes `SpectralSynthesisPlan`,
 `SpectralSynthesisWorkspace`, `SpectralSynthesisProducts`, and
 `PreparedSpectralSynthesis`. `synthesize_spectrum!` executes on the caller's
 current stream; the caller owns completion before reading output or changing
-bound inputs.
+bound inputs. Accelerator preparation retains resident calibration and packed
+scratch; each call packs the live envelopes, interpolates all channels, then
+accumulates intensity without changing anchor, path, mode, or channel order.
+The additional packed scratch contains `length(output) * n_path *
+(n_anchor + length(channels))` complex elements. CPU execution retains its
+independent per-path arithmetic and zero-allocation warmed execution.
 
 ## Atmospheres
 

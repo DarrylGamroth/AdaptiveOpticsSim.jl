@@ -45,6 +45,81 @@ Do not put exact caller-array identity into a reusable plan. Bind it in the
 prepared owner. Do not store `Any` or an abstract array element type to make an
 extension appear generic; specialize at preparation or add a function barrier.
 
+## Reusing Prepared Optical Execution
+
+The shared optical execution code accepts numerical plans and array backends;
+instrument configuration, including YAML, supplies the prescription and
+calibration. Prefer these
+existing owners over copying a fast kernel into another instrument:
+
+| Reuse point | Existing use | Conditions to preserve |
+| --- | --- | --- |
+| PROPER prepared field arithmetic | Compiled optical paths and prepared scalar trains | Fixed wavelength, sampling and geometry; serialize shared FFT scratch. The public field API requires caller fields separate from that scratch. The field operation does not advance wavefront geometry. |
+| Scalar optical-train owner | Scalar, runtime-OPD and per-wavelength polychromatic trains | Keep live OPD inputs live, restore the prepared geometry, and retain the owner’s exact input/output bindings. |
+| `Optics.prepare_spectral_synthesis` / `synthesize_spectrum!` | Calibrated multi-path spectral synthesis | Fields already share one detector grid; preserve path/anchor order, coherence, quadrature, response and normalization. See the [spectral recipe](model-cookbook.md#synthesize-calibrated-spectral-channels). |
+| `CapturedGraphExecution` | Prepared algorithm graphs with capture-safe nodes | Fixed buffer/plan identities and device-work topology; input contents may change between completed replays. Host-side effects are not replayed. |
+
+Compiled paths use PROPER's public `prepare_propagation` / `propagate!` surface,
+with private lowerings for sibling batching and terminal cancellation. Scalar
+trains coordinate private in-place kernels whose live field is the FFT scratch.
+These lowerings require their owners' additional aliasing and scheduling proofs.
+Use the public surface when starting a new prescription.
+
+Polychromatic train preparation constructs the same scalar owner per wavelength,
+so it already shares that implementation. Measure performance for each new
+spectral configuration. New fixed-geometry PROPER prescription segments are
+also possible callers of the public field-propagation API; keep changing DM/RNG
+state outside immutable geometry preparation and validate against ordinary
+`prop_*` execution.
+
+The companion PipeWireAORTC external-pupil owner already batches completed
+camera publications per optical source step. That transport concern stays in
+RTC; optical kernels should produce fields and products without a PipeWire
+dependency.
+
+Native AOS Fresnel propagation and Pyramid modulation already have their own
+prepared paths. Their metadata, flux normalization, phase arithmetic and batch
+contracts differ. Reuse the ownership and validation patterns there; replacing
+their algorithms requires separate numerical and performance evidence.
+
+Backend qualification remains separate from optical configuration. A portable
+kernel does not establish that every batch size, phase-cache policy or GEMM
+choice is faster on another card. Keep the ordinary executors as numerical
+oracles and retain conservative fallbacks for unqualified combinations.
+
+### Compiled-Path Source Layout
+
+Within the PROPER extension, `ext/compiled_paths.jl` contains the ordered
+executor, ordinary/prepared propagation, checkpoint continuations and independent
+field batches. Its included files separate other responsibilities:
+
+- `compiled_paths/types.jl`: immutable numerical contracts and concrete storage owners
+- `compiled_paths/fields.jl`: normalization, shifts, crops, padding and FFT/filter primitives
+- `compiled_paths/scheduling.jl`: cold group selection, checkpoint boundaries and shared/unshared instruction ranges
+- `compiled_paths/preparation.jl`: validated program loading, shared-prefix preparation and workspace construction
+- `compiled_paths/execution.jl`: bounded instruction selection with statically specialized transform-group arities
+
+Batch-specific admission stays beside its executor so the dependency checks and
+the storage they protect can be reviewed together. All files extend the same
+module; splitting source files adds no dispatch or execution layer. Preserve
+both arithmetic order and checkpoint ownership when changing these routines.
+
+Fixed geometry is resolved when preparing the model. `PathExecutionPlan` stores
+only execution decisions and indices in concrete fixed-size host arrays; live
+OPD/amplitude inputs, FFT scratch and exact bindings stay in the prepared owner.
+Group selection and terminal cancellation cannot cross a checkpoint. Separate
+shared/unshared ranges retain the ordinary traversal's cache ownership. Rebuild
+these decisions when changing the prepared backend or propagation policy.
+
+The finite group arities use literal `Val(2/4/6/8/10)` calls, and paired terminal
+FFT handling uses a union of two concrete types. Wavelengths, grid dimensions,
+coefficients, path length and complete YAML topology remain data rather than
+creating a new method family for each prescription. This bounds specialization
+while allowing Julia to compile the numerical kernels for their concrete types.
+The ordinary executor does not consult the prepared instruction stream. Captured
+GPU replay launches the recorded graph; this scheduling cleanup alone does not
+remove a GPU kernel or establish a throughput improvement.
+
 ## Algorithm Graph Adapters
 
 A graph adapter is separate from the scientific implementation. It declares

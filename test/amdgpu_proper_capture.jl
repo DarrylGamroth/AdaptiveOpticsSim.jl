@@ -111,3 +111,7 @@ end
     end
 end
 @test !any(p.name == "CUDA" for p in keys(Base.loaded_modules))
+
+include("proper/prepared_train.jl")
+check_prepared_train(ROCArray,AdaptiveOpticsSim.Backends.AcceleratorComputeDevice(
+    AdaptiveOpticsSim.Backends.AMDGPUBackend(),1);captured=true)
