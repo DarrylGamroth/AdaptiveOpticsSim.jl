@@ -182,6 +182,9 @@ include("filtergraphs/emccd.jl")
 include("filtergraphs/detector_frame_layout.jl")
 include("filtergraphs/pwfs.jl")
 include("filtergraphs/pwfs_camera.jl")
+if isdefined(FG, :prepare_cpu_loan_node)
+    include("filtergraphs/cpu_loans.jl")
+end
 
 mutable struct FilterGraphsPropagation{F,U,C,E,L}
     fringed::F

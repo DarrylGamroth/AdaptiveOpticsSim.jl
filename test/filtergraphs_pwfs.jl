@@ -148,4 +148,28 @@ end
     FilterGraphs.reset!(direct)
     @test FilterGraphs.process!((; frame), direct, (; opd=host_opd)) === (; frame=true)
     @test frame == first(original_frames)
+
+    if selection == "cpu" && isdefined(FilterGraphs, :prepare_cpu_loans)
+        inputs = ntuple(_ -> (; opd=copy(host_opd)), 2)
+        outputs = ntuple(_ -> (; frame=similar(frame)), 3)
+        loans = FilterGraphs.prepare_cpu_loans(recipe.document; algorithms=recipe.algorithms,
+            input_slots=inputs, output_slots=outputs)
+        first_slot, second_slot = loans.nodes_by_input
+        first_pyramid = first_slot[1].prepared.workspace
+        second_pyramid = second_slot[1].prepared.workspace
+        @test first_pyramid.opd === inputs[1].opd
+        @test second_pyramid.opd === inputs[2].opd
+        @test first_pyramid.owner.prepared.workspace === second_pyramid.owner.prepared.workspace
+        @test first_slot[2].prepared === second_slot[2].prepared
+        detector = first_slot[2].prepared.workspace
+        @test first_pyramid.photon_rate === second_pyramid.photon_rate === detector.photon_rate
+        @test detector.frame === only(loans.graph.node_outputs[2])
+        @test FilterGraphs.process_cpu_loan!(loans, 1, 3) === (; frame=true)
+        @test FilterGraphs.process_cpu_loan!(loans, 2, 1) === (; frame=true)
+        @test outputs[3].frame == original_frames[1]
+        @test outputs[1].frame == original_frames[2]
+        FilterGraphs.reset!(loans)
+        @test FilterGraphs.process_cpu_loan!(loans, 2, 2) === (; frame=true)
+        @test outputs[2].frame == original_frames[1]
+    end
 end

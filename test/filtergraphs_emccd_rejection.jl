@@ -74,4 +74,22 @@ end
     @test frame == first_frame
     @test FilterGraphs.process!((; frame), graph, (; photon_rate=rates), metadata(2)) === (; frame=true)
     @test frame == second_frame
+
+    if selection == "cpu" && isdefined(FilterGraphs, :prepare_cpu_loans)
+        inputs = ((; photon_rate=copy(rates)), (; photon_rate=rejected), (; photon_rate=copy(rates)))
+        outputs = ((; frame=zeros(Float32, shape)), (; frame=zeros(Float32, shape)))
+        loans = FilterGraphs.prepare_cpu_loans(document;
+            algorithms=(Ext.PixelIntegrationF32, Ext.EMCCDF32),
+            input_slots=inputs, output_slots=outputs)
+        @test FilterGraphs.process_cpu_loan!(loans, 1, 2, metadata(1)) === (; frame=true)
+        @test outputs[2].frame == first_frame
+        @test FilterGraphs.process_cpu_loan!(loans, 2, 1, metadata(2)) === Ext.InvalidOpticalInput
+        @test outputs[2].frame == first_frame
+        @test FilterGraphs.output_metadata(loans).frame == metadata(1).photon_rate
+        @test FilterGraphs.process_cpu_loan!(loans, 3, 1, metadata(3)) === (; frame=true)
+        @test outputs[1].frame == second_frame
+        FilterGraphs.reset!(loans)
+        @test FilterGraphs.process_cpu_loan!(loans, 3, 1, metadata(1)) === (; frame=true)
+        @test outputs[1].frame == first_frame
+    end
 end

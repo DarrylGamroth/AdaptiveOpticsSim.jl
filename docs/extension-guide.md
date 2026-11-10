@@ -441,3 +441,19 @@ model-time exposure, and DM command sequence under AOS ownership. The
 AOS CPU path binds the Pyramid and EMCCD to the graph's buffers during
 preparation. Standalone CPU execution accepts caller arrays per frame and
 uses the Algorithms' preallocated staging.
+
+With a FilterGraphs build that provides CPU loan pools, standalone callers
+can register the pupil OPD and raw frame arrays during preparation and
+select them independently on each sample.
+
+~~~julia
+camera = FilterGraphs.prepare_cpu_loans(description.document;
+    algorithms=description.algorithms, input_slots, output_slots)
+result = FilterGraphs.process_cpu_loan!(camera, input_index, output_index, sample_metadata)
+~~~
+
+The Pyramid shares its optical workspace across OPD slots. The EMCCD has
+one noise stream on fixed internal buffers. Frame layout writes to the
+selected output slot. The caller supplies an idle output slot and publishes
+it only when the result reports a completed frame. Keep the arrays alive
+and retain their shapes and storage while the camera is prepared.
