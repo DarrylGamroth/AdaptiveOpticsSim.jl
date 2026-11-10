@@ -100,7 +100,7 @@ end
 FGA.enqueue!(node::CapturedEMCCD{O,Nothing}) where {O} =
     AOG.enqueue_captured_graph_node!(node.owner)
 
-@kernel function commit_emccd_rng!(committed, candidate, status)
+@kernel function commit_detector_rng!(committed, candidate, status)
     if iszero(@inbounds status[1])
         @inbounds committed[1] = candidate[1]
     end
@@ -114,7 +114,7 @@ function FGA.enqueue!(node::CapturedEMCCD)
     # the detector stream. The shared status is ordered before this commit.
     B.copyto_backend_async!(candidate, committed)
     AOG._enqueue_detector_acquisition!(owner.prepared, node.candidate_rng, owner.output)
-    B.launch_kernel_async!(B.execution_style(committed), commit_emccd_rng!,
+    B.launch_kernel_async!(B.execution_style(committed), commit_detector_rng!,
         committed, candidate, node.status; ndrange=1)
     return nothing
 end

@@ -474,3 +474,13 @@ frame after a successful step. A failed step can leave scratch data in
 the selected slot. Adopt the matching command sequence through the normal
 HIL interface before advancing again. The prepared owner and its driver
 remain single-writer. Reset does not overwrite caller-owned frame slots.
+
+The standalone `Optics.shack_hartmann_rate_filter_graph(definition)` and
+`Optics.cmos_filter_graph(definition)` recipes expose the prepared AOS
+Float32 Shack–Hartmann optical-rate and global-shutter CMOS acquisition
+nodes through FilterGraphAlgorithms. Their one-node graphs retain the
+authored pupil and detector port contracts. The detector's configured
+exposure and random state stay with the AOS model. Select a supported
+device and use native capture for the accelerator path. The focused
+selectors are `test/filtergraphs_shack_hartmann.jl` and
+`test/filtergraphs_cmos.jl`.

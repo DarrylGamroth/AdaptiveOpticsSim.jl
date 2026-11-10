@@ -69,6 +69,33 @@ the maintained package.
 9. Close remaining production-surface gaps with local CPU, AMDGPU, CUDA, and
    aarch64 evidence as applicable.
 
+## FilterGraphs migration pilots
+
+AOS will keep the physical models, detector random state, model-time drivers,
+independent exposure scheduling, and the DM command hold. Each FilterGraphs
+executor runs the graph for an admitted sample. Sample metadata carries its
+AOS timestamp and exposure duration. Accelerator execution requires native
+capture.
+
+1. Compose the Float32 Shack–Hartmann optical-rate and CMOS acquisition
+   adapters with the existing detector layout. Compare seeded frames,
+   exposure metadata, reset replay, and native CUDA capture with the AOS
+   camera.
+2. Port the fitted GPI2 source, atmosphere, mirror, and pupil OPD composition
+   in dependency order. Compare detector and mirror outputs and the
+   one-frame command hold in a full-plant capture.
+3. Port independent SCC and LLOWFS paths while AOS continues to select
+   completed exposures and the shared DM command. Compare each camera's
+   sequence and timing separately before switching the application.
+4. Qualify the remaining authored simulations and retire duplicate execution
+   paths once their behavior and performance match.
+
+Keep complex optical fields inside prepared algorithms where possible. A
+complex value that needs to cross a graph edge requires a port-format change.
+Preserve typed delayed-edge commits across a whole successful step where an
+authored graph depends on that behavior. Qualify such a graph before deciding
+whether its delay belongs in AOS orchestration or the shared executor.
+
 ## Graph Scope
 
 YAML is the user-facing format for static graphs because it is readable,

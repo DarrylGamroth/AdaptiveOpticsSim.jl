@@ -64,6 +64,23 @@ FilterGraphAlgorithms before calling.
 function pwfs_filter_graph end
 
 """
+    shack_hartmann_rate_filter_graph(definition)
+
+Return a FilterGraphs recipe for an AOS Float32 Shack–Hartmann optical-rate
+node. The graph accepts pupil OPD and produces the photon-rate mosaic.
+"""
+function shack_hartmann_rate_filter_graph end
+
+"""
+    cmos_filter_graph(definition)
+
+Return a FilterGraphs recipe for an AOS Float32 CMOS acquisition node.
+The graph accepts photon rate and produces the detector frame using the
+configured exposure and seeded noise model.
+"""
+function cmos_filter_graph end
+
+"""
     with_filtergraphs_pwfs(definition; node=:pyramid)
 
 Replace the named Float32 OPD-input Pyramid node with the FilterGraphAlgorithms

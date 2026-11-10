@@ -50,6 +50,11 @@ function prepare_cpu_camera_algorithm(::Type{AOG.PyramidRateNode{Float32}}, defi
         prepare_host_pyramid(definition, input, output))
 end
 
+function prepare_cpu_camera_algorithm(::Type{AOG.ShackHartmannRateNode{Float32}}, definition, input, output)
+    return prepare_bound_camera_algorithm(ShackHartmannRateF32, definition,
+        prepare_host_shack_hartmann(definition, input, output))
+end
+
 function prepare_cpu_camera_algorithm(::Type{AOG.EMCCDDetectorAcquisitionNode{Float32}}, definition, input, output)
     return prepare_bound_camera_algorithm(EMCCDF32, definition,
         prepare_host_emccd(definition, input, output))
@@ -69,6 +74,7 @@ camera_algorithm_format(format::AOG._GraphPortFormat{T}) where {T} =
     FGA.AlgorithmFormat(T, format.shape, format.schema)
 
 captured_camera_algorithm(::Type{AOG.PyramidRateNode{Float32}}) = prepare_captured_pyramid
+captured_camera_algorithm(::Type{AOG.ShackHartmannRateNode{Float32}}) = prepare_captured_shack_hartmann
 captured_camera_algorithm(::Type{AOG.EMCCDDetectorAcquisitionNode{Float32}}) = prepare_captured_emccd
 captured_camera_algorithm(::Type{AOG.DetectorFrameLayoutNode}) = prepare_captured_detector_frame_layout
 
@@ -85,7 +91,9 @@ end
 
 AOG.reset_graph_node!(node::BoundCameraAlgorithm) = FGA.reset!(node.algorithm)
 
-const CapturedCameraAlgorithm = Union{CapturedPyramidRate,CapturedEMCCD,CapturedDetectorFrameLayout}
+const CapturedCameraAlgorithm = Union{
+    CapturedPyramidRate,CapturedShackHartmannRate,CapturedEMCCD,CapturedCMOS,CapturedDetectorFrameLayout,
+}
 AOG.graph_node_capture_capability(::CapturedCameraAlgorithm) = AOG.GraphNodeCaptureSafe()
 AOG.enqueue_captured_graph_node!(node::CapturedCameraAlgorithm) = FGA.enqueue!(node)
 AOG.enqueue_graph_node!(node::CapturedPyramidRate) = FGA.enqueue!(node)
