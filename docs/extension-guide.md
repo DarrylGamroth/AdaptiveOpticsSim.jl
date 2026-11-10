@@ -328,3 +328,29 @@ same ownership, metadata, reset, backend, and allocation contracts. See
 - applicable AMDGPU/CUDA paths run with scalar indexing disabled
 - graph adapters have direct Julia and YAML tests when both surfaces are public
 - new public terminology is added to [`glossary.md`](glossary.md)
+
+## Fitted SCC on FilterGraphs
+
+The optional FilterGraphAlgorithms extension exposes the fitted SCC propagator
+and fitted pixel MTF as two Algorithm declarations. Load Proper, FITSIO, YAML
+and FilterGraphAlgorithms with AdaptiveOpticsSim. Select this chain explicitly
+by preparing the in-memory definition.
+
+```julia
+using AdaptiveOpticsSim, Proper, FITSIO, YAML, FilterGraphAlgorithms, FilterGraphs
+
+pilot = AdaptiveOpticsSim.Optics.fitted_scc_filter_graph(model_path, model_sha256)
+graph = FilterGraphs.prepare_graph(pilot.document; algorithms=pilot.algorithms)
+```
+
+The inputs are `dm_opd`, `pupil_opd` and `attenuation` on the compiled model's
+native grids. OPD is in metres. Attenuation is the additional log-amplitude
+value in `exp(-attenuation)`. The three raw optical products are `fringed`,
+`unfringed` and `reference`. The `detector` product applies the fitted
+pixel MTF to `fringed`. All ports use Float32. Exposure integration, detector
+noise and model time are handled by the application around this chain.
+
+On the CPU, call `FilterGraphAlgorithms.process!` with caller-owned outputs.
+On GPU, call `FilterGraphs.prepare_captured_graph(graph, device)` and then
+`FilterGraphs.process_device!` to consume completed device products.
+GPU preparation requires native capture for the complete chain.

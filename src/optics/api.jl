@@ -86,6 +86,7 @@ public AbstractSource, AbstractTelescope
 public SpectralSynthesisPlan, SpectralSynthesisWorkspace, SpectralSynthesisProducts
 public PreparedSpectralSynthesis, prepare_spectral_synthesis, synthesize_spectrum!
 public prepare_compiled_optical_paths, propagate_compiled_optical_paths!
+public fitted_scc_filter_graph
 public AbstractTelescopeDefinition, TelescopeDefinition, prepare_telescope
 public validate_telescope_target
 public AbstractPropagationModel, AbstractPropagationPlan

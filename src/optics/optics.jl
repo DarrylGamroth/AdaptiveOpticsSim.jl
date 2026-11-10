@@ -32,6 +32,17 @@ physical radiometry remain the caller's responsibility. Requires Proper.jl.
 """
 function propagate_compiled_optical_paths! end
 
+"""
+    fitted_scc_filter_graph(model_path, model_sha256)
+
+Construct an opt-in FilterGraphs definition and its Algorithm declarations for
+a fitted SCC optical model and a downstream pixel MTF. Inputs are the native
+DM and entrance OPD in metres and the entrance log-amplitude attenuation.
+Load Proper, FITSIO, YAML and FilterGraphAlgorithms before calling. Prepare
+the returned dictionary with FilterGraphs and select native capture on GPU.
+"""
+function fitted_scc_filter_graph end
+
 # Backend policy hooks for cold preparation; other backends retain the ordinary
 # multiplier storage and BLAS arithmetic.
 _prepared_optical_train_enabled(target, field) = false
