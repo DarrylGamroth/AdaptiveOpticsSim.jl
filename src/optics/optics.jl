@@ -44,7 +44,18 @@ the returned dictionary with FilterGraphs and select native capture on GPU.
 function fitted_scc_filter_graph end
 
 """
-    prepare_filtergraphs_external_pupil(prepared; single_scc_product=false, merge_scc_fields=false)
+    llowfs_filter_graph(definition)
+
+Build a FilterGraphs description and its Algorithm declarations from a Float32
+AOS LLOWFS optical train followed by pixel integration. The graph accepts
+real pupil OPD, pupil amplitude and DM OPD, and exports real detector-grid
+intensity. Load Proper, FilterGraphs and FilterGraphAlgorithms before calling.
+"""
+function llowfs_filter_graph end
+
+"""
+    prepare_filtergraphs_external_pupil(prepared; single_scc_product=false,
+        merge_scc_fields=false, llowfs_definition=nothing)
 
 Select the experimental FilterGraphs optical executor for an unused, fitted
 SPIDERS SCC/LLOWFS external pupil. The returned owner takes over the original
@@ -63,6 +74,11 @@ complex fields before their common transforms changes Float32 roundoff.
 Set `merge_scc_fields=true` with `single_scc_product=true` to merge the fringed
 fields after the second differing mask and use only the closed field for the
 unfringed image when the compiled prescription admits that traversal.
+
+Supply the authored LLOWFS graph definition as `llowfs_definition` to prepare
+its two direct Algorithms once in their own FilterGraphs graph. Use the same
+prescription as the prepared AOS observation. The returned owner feeds the
+detector-grid intensity to the existing exposure accumulator.
 """
 function prepare_filtergraphs_external_pupil end
 

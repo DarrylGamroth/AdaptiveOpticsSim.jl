@@ -46,7 +46,9 @@ function propagate!(observation, intensity, opd, amplitude)
     return nothing
 end
 
-function FGA.capture_support(::Type{OpticalObservationF32}, device)
+FGA.capture_support(::Type{OpticalObservationF32}, device) = optical_capture_support(device)
+
+function optical_capture_support(device)
     for (extension, backend, device_type) in (
         (:AdaptiveOpticsSimCUDAExt, :CUDA, :CuDevice),
         (:AdaptiveOpticsSimAMDGPUExt, :AMDGPU, :HIPDevice),
@@ -172,16 +174,21 @@ function prepare_execution(graph, target::B.AcceleratorComputeDevice{B.AMDGPUBac
 end
 prepare_execution(graph, target) = throw(ArgumentError("native FilterGraphs capture is unavailable for $target"))
 
-mutable struct FilterGraphsPropagation{F,U,C,E}
+include("filtergraphs/optical_train.jl")
+include("filtergraphs/pixel_integration.jl")
+include("filtergraphs/llowfs.jl")
+
+mutable struct FilterGraphsPropagation{F,U,C,E,L}
     fringed::F
     unfringed::U
     crossing::C
     context::E
+    llowfs::L
     failed::Bool
 end
 
 function O.prepare_filtergraphs_external_pupil(prepared::AOG.PreparedExternalPupil;
-        single_scc_product::Bool=false, merge_scc_fields::Bool=false)
+        single_scc_product::Bool=false, merge_scc_fields::Bool=false, llowfs_definition=nothing)
     merge_scc_fields && !single_scc_product && throw(ArgumentError("SCC field merging requires single_scc_product"))
     keys(prepared.graphs) == (:llowfs, :scc) ||
         throw(ArgumentError("FilterGraphs pilot requires SCC and LLOWFS observations"))
@@ -203,11 +210,13 @@ function O.prepare_filtergraphs_external_pupil(prepared::AOG.PreparedExternalPup
             throw(ArgumentError("FilterGraphs pilot requires stateless Float32 optical observations"))
     end
     target = B.compute_device(scc)
+    direct = prepare_direct_llowfs(llowfs_definition, llowfs, target)
+    wrapped = direct === nothing ? (; llowfs) : (;)
     propagation = FilterGraphsPropagation(
-        prepare_observations((; llowfs, scc), target, single_scc_product, merge_scc_fields),
-        prepare_observations((; llowfs, scc=unfringed), target, single_scc_product, merge_scc_fields),
-        prepare_observations((; llowfs, scc, scc_unfringed=unfringed), target, single_scc_product, merge_scc_fields),
-        scc.context, false,
+        prepare_observations((; wrapped..., scc), target, single_scc_product, merge_scc_fields),
+        prepare_observations((; wrapped..., scc=unfringed), target, single_scc_product, merge_scc_fields),
+        prepare_observations((; wrapped..., scc, scc_unfringed=unfringed), target, single_scc_product, merge_scc_fields),
+        scc.context, direct, false,
     )
     return AOG.PreparedExternalPupil(prepared.graphs, prepared.exposures, prepared.pupil_opd,
         prepared.pupil_amplitude, prepared.observations, prepared.input_names, propagation,
@@ -215,6 +224,7 @@ function O.prepare_filtergraphs_external_pupil(prepared::AOG.PreparedExternalPup
 end
 
 function AOG._external_pupil_execution_graph(propagation::FilterGraphsPropagation, graph, name, unfringed)
+    name === :llowfs && propagation.llowfs !== nothing && return propagation.llowfs.graph
     return unfringed ? propagation.unfringed.graph : propagation.fringed.graph
 end
 
@@ -222,6 +232,7 @@ function AOG._reset_external_pupil_propagation!(propagation::FilterGraphsPropaga
     FG.reset!(propagation.fringed.graph)
     FG.reset!(propagation.unfringed.graph)
     FG.reset!(propagation.crossing.graph)
+    propagation.llowfs === nothing || FG.reset!(propagation.llowfs.graph)
     propagation.failed = false
     return nothing
 end
@@ -259,6 +270,7 @@ function AOG._propagate_external_pupil!(propagation::FilterGraphsPropagation, pr
     active = AOG._active_observation_graphs(scc, observation, start, finish,
         prepared.exposures.scc.duration_ns)
     try
+        run_direct_llowfs!(propagation.llowfs, prepared)
         if length(active) == 2
             return run_observations!(propagation.crossing, prepared, propagation.context)
         elseif first(active) === scc

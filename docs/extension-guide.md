@@ -377,3 +377,23 @@ boundary. The SCC and LLOWFS exposure accumulators still publish on their own
 model-time windows, and the detector responses still run after their exposures.
 Apply controller commands at the same model sample boundary as with the original
 owner. Preparing an external pupil without the opt-in call uses AOS execution.
+
+For the direct LLOWFS port, pass the same authored LLOWFS definition used to
+prepare the pupil.
+
+~~~julia
+O = AdaptiveOpticsSim.Optics
+pilot = O.prepare_filtergraphs_external_pupil(prepared; llowfs_definition)
+~~~
+
+This prepares the optical train and pixel integration as separate
+FilterGraphAlgorithms nodes in one LLOWFS graph. Pupil OPD, pupil amplitude,
+DM OPD, and intensity are real Float32 arrays. Complex wavefields are private
+to the optical train. On GPU the LLOWFS graph requires native capture and
+replays separately from the SCC graph for the active chop phase. The completed
+intensity is copied into the AOS exposure input on the same device.
+
+To prepare just the LLOWFS computation, use
+`description = O.llowfs_filter_graph(llowfs_definition)` and pass its
+`document` and `algorithms` to `FilterGraphs.prepare_graph`. AOS still owns
+the exposure clocks, detector responses, and when a DM command takes effect.
