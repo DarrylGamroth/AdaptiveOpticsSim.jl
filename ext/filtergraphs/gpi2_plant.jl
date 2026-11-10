@@ -84,9 +84,10 @@ function O.gpi2_plant_filter_graph(definition::AOG.AlgorithmGraphDefinition)
     return (; document=(; nodes, links, inputs, outputs), algorithms=Tuple(unique(algorithms)))
 end
 
-struct PreparedGPI2HIL{G,I,O,C,F}
+struct PreparedGPI2HIL{G,I,R,O,C,F}
     graph::G
     inputs::I
+    replay_inputs::R
     outputs::O
     active_commands::C
     command_buffer::C
@@ -104,6 +105,29 @@ function gpi2_outputs(graph::FG.PreparedGraph)
 end
 
 gpi2_outputs(graph::FG.PreparedCapturedGraph) = graph.device_outputs
+
+prepare_gpi2_execution(graph, inputs, commands, target) =
+    (prepare_execution(graph, target), inputs)
+
+function prepare_gpi2_execution(checked, inputs, commands,
+        target::B.AcceleratorComputeDevice{B.CUDABackend})
+    graph = prepare_execution(checked, target; readback=(:frame,))
+    if haskey(inputs, :pupil_amplitude) && !haskey(commands, :pupil_amplitude)
+        amplitude = graph.device_inputs.pupil_amplitude
+        FG._with_captured_context(graph.context) do
+            try
+                FG._copy_to_captured!(graph.context, amplitude, inputs.pupil_amplitude)
+                FG._synchronize_captured_graph!(graph.context)
+            catch
+                FG._drain_captured_storage!(graph.context, graph, inputs)
+                rethrow()
+            end
+        end
+        # Supplying the captured input itself leaves its fixed storage resident.
+        return graph, merge(inputs, (; pupil_amplitude=amplitude))
+    end
+    return graph, inputs
+end
 
 function O.prepare_filtergraphs_gpi2_hil(definition::AOG.AlgorithmGraphDefinition;
         command_input::Tuple, target=B.HostComputeDevice(), exposure_ns=nothing)
@@ -123,10 +147,10 @@ function O.prepare_filtergraphs_gpi2_hil(definition::AOG.AlgorithmGraphDefinitio
         eltype(command) === Float32
     end || throw(ArgumentError("GPI2 HIL commands require Float32 arrays"))
     AOG._validate_hil_command(active)
-    graph = prepare_execution(checked, target)
+    graph, replay_inputs = prepare_gpi2_execution(checked, inputs, active, target)
     outputs = gpi2_outputs(graph)
     frame = zeros(UInt16, size(outputs.frame))
-    return PreparedGPI2HIL(graph, inputs, outputs, active, map(copy, active),
+    return PreparedGPI2HIL(graph, inputs, replay_inputs, outputs, active, map(copy, active),
         map(copy, active), frame, duration, AOG.GraphHILBoundaryState())
 end
 
@@ -155,8 +179,13 @@ function run_gpi2_plant!(owner::PreparedGPI2HIL{<:FG.PreparedGraph}, metadata)
 end
 
 function run_gpi2_plant!(owner::PreparedGPI2HIL{<:FG.PreparedCapturedGraph}, metadata)
-    result = FG.process_device!(owner.graph, owner.inputs, metadata) do outputs
-        copyto!(owner.frame_buffer, outputs.frame)
+    graph = owner.graph
+    result = if keys(graph.host_outputs) === (:frame,)
+        FG.process!((; frame=owner.frame_buffer), graph, owner.replay_inputs, metadata)
+    else
+        FG.process_device!(graph, owner.replay_inputs, metadata) do outputs
+            copyto!(owner.frame_buffer, outputs.frame)
+        end
     end
     result isa NamedTuple && all(values(result)) ||
         throw(AOG.AlgorithmGraphError("the captured GPI2 plant did not complete a frame"))

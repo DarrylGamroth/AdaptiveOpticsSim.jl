@@ -164,9 +164,9 @@ function prepare_observations(observations, target, single_scc_product, merge_sc
 end
 
 prepare_execution(graph, ::B.HostComputeDevice) = graph
-function prepare_execution(graph, target::B.AcceleratorComputeDevice{B.CUDABackend})
+function prepare_execution(graph, target::B.AcceleratorComputeDevice{B.CUDABackend}; kwargs...)
     extension = Base.get_extension(AdaptiveOpticsSim, :AdaptiveOpticsSimCUDAExt)
-    return FG.prepare_captured_graph(graph, extension._require_cuda_device(target))
+    return FG.prepare_captured_graph(graph, extension._require_cuda_device(target); kwargs...)
 end
 function prepare_execution(graph, target::B.AcceleratorComputeDevice{B.AMDGPUBackend})
     extension = Base.get_extension(AdaptiveOpticsSim, :AdaptiveOpticsSimAMDGPUExt)

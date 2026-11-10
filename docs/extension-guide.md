@@ -528,3 +528,8 @@ model-time driver and exposure. The host frame is available through
 are available through `graph_output` between completed frames. Use the
 diagnostics and active inputs as read-only borrows. Keep their storage
 valid through any use and serialize stepping, adoption and reset.
+
+On CUDA, preparation uploads the fixed pupil amplitude once. The raw
+frame readback is queued on the capture stream with the frame status.
+The HIL owner publishes the host frame after successful completion.
+Diagnostics remain available on the device for explicit reads.
