@@ -342,6 +342,7 @@ const REVIEWED_SUPPORTED_API = (
         (),
         public_advanced =
         (
+            :PreparedBorrowedFrameHILBoundary, :hil_frame_exposure_nanoseconds,
             :copyto_graph_input!,
             :graph_input_contract, :graph_output_contract,
             :CCDDetectorAcquisitionNode, :CCDDetectorAcquisitionNodeConfig,

@@ -65,6 +65,7 @@ mutable struct PWFSLoanState
     slot::Int
     published::Int
     metadata::Union{Nothing,FGA.SampleMetadata}
+    destination::Union{Nothing,Matrix{UInt16}}
 end
 
 struct PreparedPWFSLoanCamera{C}
@@ -80,17 +81,26 @@ function AOG.prepare_graph_node(::Type{PWFSLoanCamera}, config, ::NamedTuple{()}
     # The compiled camera order is Pyramid, EMCCD, layout. AOS diagnostics
     # use the same two buffers that connect those Algorithms.
     buffers = ((outputs.photon_rate,), (outputs.detector_frame,), last(graph.node_outputs))
-    slots = map(frame -> (; frame), config.frame_slots)
+    slots = loan_camera_slots(config.frame_slots, outputs.frame)
     camera = FG._prepare_cpu_loans(graph, ((; inputs.opd),), slots, buffers)
     exposure_ns = round(Int, Float64(config.camera_nodes[2].config.exposure_duration_s)*1e9)
-    return PreparedPWFSLoanCamera(camera, exposure_ns, PWFSLoanState(0, 0, nothing))
+    return PreparedPWFSLoanCamera(camera, exposure_ns, PWFSLoanState(0, 0, nothing, nothing))
 end
+
+loan_camera_slots(slots::Tuple, frame) = map(slot -> (; frame=slot), slots)
+loan_camera_slots(::Nothing, frame) = ((; frame),)
 
 # Keep the nested camera executor separate from the enclosing AOS schedule.
 @noinline function AOG.step_graph_node!(owner::PreparedPWFSLoanCamera)
     state = owner.state
-    state.slot > 0 || throw(AOG.AlgorithmGraphError("PWFS camera requires an admitted HIL frame slot"))
-    result = FG.process_cpu_loan!(owner.camera, 1, state.slot, (; opd=state.metadata))
+    metadata = (; opd=state.metadata)
+    destination = state.destination
+    result = if destination === nothing
+        state.slot > 0 || throw(AOG.AlgorithmGraphError("PWFS camera requires an admitted HIL frame slot"))
+        FG.process_cpu_loan!(owner.camera, 1, state.slot, metadata)
+    else
+        FG._process_cpu_output_loan!(owner.camera, PermutedDimsArray(destination, (2, 1)), metadata)
+    end
     result === (; frame=true) || throw(AOG.AlgorithmGraphError("PWFS camera rejected the frame"))
     return nothing
 end
@@ -100,6 +110,7 @@ function AOG.reset_graph_node!(owner::PreparedPWFSLoanCamera)
     owner.state.slot = 0
     owner.state.published = 0
     owner.state.metadata = nothing
+    owner.state.destination = nothing
     return nothing
 end
 
@@ -109,12 +120,22 @@ struct PreparedPWFSLoanHIL{H,C,S}
     frame_slots::S
 end
 
+struct PreparedPWFSBorrowedHIL{H,C} <: AOG.PreparedBorrowedFrameHILBoundary
+    boundary::H
+    camera::C
+end
+
+const PWFSHIL = Union{PreparedPWFSLoanHIL,PreparedPWFSBorrowedHIL}
+
 function O.prepare_filtergraphs_pwfs_hil(definition::AOG.AlgorithmGraphDefinition;
-        command_input, frame_slots::Tuple)
+        command_input, frame_slots::Union{Tuple,Nothing}=nothing)
+    frame_slots === nothing && !isdefined(FG, :_process_cpu_output_loan!) &&
+        throw(ArgumentError("borrowed camera frames require transient output loan support in FilterGraphs"))
     camera_nodes = pwfs_camera_nodes(definition)
     graph = AOG.prepare_algorithm_graph(loan_camera_definition(definition, camera_nodes, frame_slots))
     camera = AOG.prepared_graph_node(graph, AOG._node_name(last(camera_nodes)))
     boundary = AOG.prepare_graph_hil_boundary(graph; command_input, frame_output=:frame)
+    frame_slots === nothing && return PreparedPWFSBorrowedHIL(boundary, camera)
     # Check external storage that lives outside the camera subgraph as well.
     for input in values(graph.inputs), frame in frame_slots
         input isa Array && FG._cpu_loan_overlap(input, frame) &&
@@ -123,9 +144,9 @@ function O.prepare_filtergraphs_pwfs_hil(definition::AOG.AlgorithmGraphDefinitio
     return PreparedPWFSLoanHIL(boundary, camera, frame_slots)
 end
 
-AOG.hil_command_buffer(owner::PreparedPWFSLoanHIL) = AOG.hil_command_buffer(owner.boundary)
-AOG.hil_boundary_status(owner::PreparedPWFSLoanHIL) = AOG.hil_boundary_status(owner.boundary)
-AOG.adopt_hil_command!(owner::PreparedPWFSLoanHIL, sequence) =
+AOG.hil_command_buffer(owner::PWFSHIL) = AOG.hil_command_buffer(owner.boundary)
+AOG.hil_boundary_status(owner::PWFSHIL) = AOG.hil_boundary_status(owner.boundary)
+AOG.adopt_hil_command!(owner::PWFSHIL, sequence) =
     AOG.adopt_hil_command!(owner.boundary, sequence)
 
 function AOG.hil_frame_buffer(owner::PreparedPWFSLoanHIL)
@@ -133,12 +154,33 @@ function AOG.hil_frame_buffer(owner::PreparedPWFSLoanHIL)
     return slot == 0 ? AOG.hil_frame_buffer(owner.boundary) : owner.frame_slots[slot]
 end
 
+AOG.hil_frame_buffer(owner::PreparedPWFSBorrowedHIL) = AOG.hil_frame_buffer(owner.boundary)
+
+AOG.hil_frame_exposure_nanoseconds(owner::PreparedPWFSBorrowedHIL) = UInt64(owner.camera.exposure_ns)
+
 function AOG.graph_output(owner::PreparedPWFSLoanHIL, name::Symbol)
-    return name === :frame ? AOG.hil_frame_buffer(owner) : AOG.graph_output(owner.boundary.graph, name)
+    name === :frame && return AOG.hil_frame_buffer(owner)
+    return AOG.graph_output(owner.boundary.graph, name)
+end
+
+function AOG.graph_output(owner::PreparedPWFSBorrowedHIL, name::Symbol)
+    name === :frame && throw(ArgumentError("the raw frame belongs to the caller's output loan"))
+    return AOG.graph_output(owner.boundary.graph, name)
 end
 
 function AOG.step_hil_frame_at!(owner::PreparedPWFSLoanHIL, driver::AOG._ModelTimeDriver, slot::Int)
     1 <= slot <= length(owner.frame_slots) || throw(BoundsError(owner.frame_slots, slot))
+    return step_pwfs_hil!(owner, driver, slot, nothing)
+end
+
+function AOG.step_hil_frame_at!(owner::PreparedPWFSBorrowedHIL, driver::AOG._ModelTimeDriver,
+        destination::Matrix{UInt16})
+    size(destination) == reverse(size(AOG.hil_frame_buffer(owner))) ||
+        throw(DimensionMismatch("the row-major frame destination has the wrong storage shape"))
+    return step_pwfs_hil!(owner, driver, 0, destination)
+end
+
+function step_pwfs_hil!(owner, driver, slot, destination)
     boundary = owner.boundary
     AOG._require_hil_frame_step(boundary)
     model_time = AOG.model_time_sequence(driver)
@@ -151,6 +193,7 @@ function AOG.step_hil_frame_at!(owner::PreparedPWFSLoanHIL, driver::AOG._ModelTi
         state.metadata = FGA.SampleMetadata(model_time+UInt64(1); timestamp_nanoseconds=AOG.model_nanoseconds(next),
             exposure_duration_nanoseconds=owner.camera.exposure_ns, terminal=true)
         state.slot = slot
+        state.destination = destination
         timestamp = AOG.step_graph_at!(boundary.graph, driver)
         sequence = AOG._publish_completed_hil_frame!(boundary)
         state.published = slot
@@ -161,10 +204,11 @@ function AOG.step_hil_frame_at!(owner::PreparedPWFSLoanHIL, driver::AOG._ModelTi
     finally
         state.slot = 0
         state.metadata = nothing
+        state.destination = nothing
     end
 end
 
-function AOG.reset_hil_boundary!(owner::PreparedPWFSLoanHIL, driver::AOG._ModelTimeDriver)
+function AOG.reset_hil_boundary!(owner::PWFSHIL, driver::AOG._ModelTimeDriver)
     AOG.reset_hil_boundary!(owner.boundary, driver)
     return owner
 end

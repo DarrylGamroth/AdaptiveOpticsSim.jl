@@ -13,6 +13,23 @@ GraphHILBoundaryState() = GraphHILBoundaryState(
 )
 
 """
+    PreparedBorrowedFrameHILBoundary
+
+A prepared CPU HIL boundary whose caller supplies the output storage for each
+step. Use `step_hil_frame_at!(boundary, driver, destination)` while holding
+the loan. The boundary retains no reference to the destination after the step.
+`hil_frame_buffer(boundary)` supplies the logical frame shape and element type.
+"""
+abstract type PreparedBorrowedFrameHILBoundary end
+
+"""
+    hil_frame_exposure_nanoseconds(boundary::PreparedBorrowedFrameHILBoundary)
+
+Return the prepared camera's exposure duration for transport admission.
+"""
+function hil_frame_exposure_nanoseconds end
+
+"""
     PreparedGraphHILBoundary
 
 One transport-neutral, single-writer lockstep binding between a prepared

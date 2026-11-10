@@ -6,6 +6,7 @@ export PreparedAlgorithmGraph, GraphStepTicket
 export StreamGraphExecution, GroupedStreamGraphExecution
 export CapturedGraphExecution
 export PreparedGraphHILBoundary, PreparedGraphCalibrationBoundary
+public PreparedBorrowedFrameHILBoundary, hil_frame_exposure_nanoseconds
 export ModelTimestamp, ModelDuration, PeriodicSchedule
 export model_nanoseconds, model_time_seconds, model_duration_seconds
 export schedule_period, schedule_phase, schedule_timestamp
