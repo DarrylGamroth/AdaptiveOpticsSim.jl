@@ -684,6 +684,30 @@ function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bo
     return products
 end
 
+function _compiled_paths_selected!(owner, ::Val{:unfringed})
+    w = owner.workspace
+    _compiled_paths_slow!(owner)
+    _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true)
+    AdaptiveOpticsSim.Optics.synthesize_spectrum!(owner.synthesis[1])
+    return owner.products.unfringed
+end
+
+function _compiled_paths_selected!(owner, ::Val{:fringed})
+    plan, w = owner.plan, owner.workspace
+    _compiled_paths_slow!(owner)
+    # Each subsequent shift, defocus and phase operation is linear and uses
+    # the same operator for both fields. The free ghosts enter only once.
+    for slot in eachindex(w.closed_sources)
+        gain = plan.pinhole_gain[mod1(slot, plan.n_anchor)]
+        closed = w.closed_sources[slot]
+        only = w.only_sources[slot]
+        @. closed = closed + gain * only
+    end
+    _compiled_paths_fast!(w.open_envelopes, w.closed_sources, owner, true)
+    AdaptiveOpticsSim.Optics.synthesize_spectrum!(owner.synthesis[2])
+    return owner.products.fringed
+end
+
 """Update the prepared canonical `(y,x)` fringed, unfringed and reference images."""
 function AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner::PreparedCompiledPaths)
     owner.execution_context === nothing && throw(ArgumentError(

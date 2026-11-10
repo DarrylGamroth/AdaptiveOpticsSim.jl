@@ -21,6 +21,7 @@ proper_extension() = Base.get_extension(AdaptiveOpticsSim, :AdaptiveOpticsSimPro
 
     @configuration OpticalObservationConfiguration begin
         observation::AOG.PreparedAlgorithmGraph => graph_rebuild
+        single_scc_product::Bool => graph_rebuild
     end
 
     ports(c) = (
@@ -32,8 +33,8 @@ proper_extension() = Base.get_extension(AdaptiveOpticsSim, :AdaptiveOpticsSimPro
             "org.adaptiveopticssim.optical-intensity/1"; metadata_from=:pupil_opd),
     )
 
-    prepare(c) = c.observation
-    process!(observation) = propagate!(observation, intensity, pupil_opd, pupil_amplitude)
+    prepare(c) = (; c.observation, c.single_scc_product)
+    process!(plan) = propagate!(plan.observation, intensity, pupil_opd, pupil_amplitude)
 end
 
 function propagate!(observation, intensity, opd, amplitude)
@@ -56,13 +57,14 @@ function FGA.capture_support(::Type{OpticalObservationF32}, device)
     return FGA.NoCapture()
 end
 
-struct CapturedObservation{G,I,O,S,K,V}
+struct CapturedObservation{G,I,O,S,K,V,F}
     observation::G
     inputs::I
     intensity::O
     status::S
     check!::K
     validation::V
+    propagate!::F
     invalid::Int32
 end
 
@@ -79,13 +81,33 @@ _validation(owner::AOG._PixelIntegrationOwner, proper) = owner.validation.device
 function FGA.prepare_capture(::FGA.CompleteTransition, device,
         prepared::FGA.PreparedAlgorithm{OpticalObservationF32},
         outputs::Tuple, inputs::Tuple, status, index::Integer)
-    observation = prepared.plan
+    observation = prepared.plan.observation
     AOG._capture_safe_node_count(values(observation.nodes))
     check! = check_optical_status!(get_backend(status), 1)
     invalid = (Int32(index) << 8) | Int32(InvalidOpticalInput)
     proper = proper_extension()
     validation = map(child -> _validation(child.owner, proper), values(observation.nodes))
-    return CapturedObservation(observation, inputs, only(outputs), status, check!, validation, invalid)
+    product = AOG.graph_output(observation, :intensity)
+    select = prepared.plan.single_scc_product && length(observation.nodes) == 1 &&
+        keys(observation.outputs) == (:intensity,)
+    propagate! = map(values(observation.nodes)) do child
+        capture_observation(child.owner, product, proper, select)
+    end
+    return CapturedObservation(observation, inputs, only(outputs), status, check!, validation,
+        propagate!, invalid)
+end
+
+function capture_observation(owner, product, proper, select)
+    if select && owner isa proper.CompiledPathsOwner &&
+            owner.propagation.workspace.pixel_mtf === nothing &&
+            B.compute_device(product) isa B.AcceleratorComputeDevice{B.CUDABackend}
+        if product === owner.outputs.fringed
+            return Base.Fix2(proper._enqueue_captured_scc_product!, Val(:fringed))
+        elseif product === owner.outputs.unfringed
+            return Base.Fix2(proper._enqueue_captured_scc_product!, Val(:unfringed))
+        end
+    end
+    return AOG.enqueue_captured_graph_node!
 end
 
 FGA.preflight(::CapturedObservation) = nothing
@@ -103,8 +125,8 @@ function FGA.enqueue!(node::CapturedObservation)
     observation = node.observation
     B.copyto_backend_async!(AOG.graph_input(observation, :pupil_opd), node.inputs[1])
     B.copyto_backend_async!(AOG.graph_input(observation, :pupil_amplitude), node.inputs[2])
-    for (child, validation) in zip(values(observation.nodes), node.validation)
-        AOG.enqueue_captured_graph_node!(child.owner)
+    for (child, validation, propagate!) in zip(values(observation.nodes), node.validation, node.propagate!)
+        propagate!(child.owner)
         validation === nothing || node.check!(node.status, validation, node.invalid; ndrange=1)
     end
     B.copyto_backend_async!(node.intensity, AOG.graph_output(observation, :intensity))
@@ -114,12 +136,13 @@ end
 # The pilot borrows exact prepared AOS buffers so DM and detector bindings stay
 # in place. The owned-description API copies its configuration, so use the
 # spec compiler with explicit bindings in this extension.
-function prepare_observations(observations, target)
+function prepare_observations(observations, target, single_scc_product)
     specs = FG.NodeSpec[]
     inputs = FG.Endpoint[]
     outputs = FG.Endpoint[]
     for (name, observation) in pairs(observations)
-        config = Dict("observation" => observation)
+        config = Dict{String,Union{AOG.PreparedAlgorithmGraph,Bool}}(
+            "observation" => observation, "single_scc_product" => single_scc_product)
         push!(specs, FG.NodeSpec(name, FGA.algorithm_label(OpticalObservationF32),
             config, Dict{String,Nothing}()))
         push!(inputs, FG.Endpoint(name, :pupil_opd, Symbol(name, :_opd)),
@@ -152,7 +175,8 @@ mutable struct FilterGraphsPropagation{F,U,C,E}
     failed::Bool
 end
 
-function O.prepare_filtergraphs_external_pupil(prepared::AOG.PreparedExternalPupil)
+function O.prepare_filtergraphs_external_pupil(prepared::AOG.PreparedExternalPupil;
+        single_scc_product::Bool=false)
     keys(prepared.graphs) == (:llowfs, :scc) ||
         throw(ArgumentError("FilterGraphs pilot requires SCC and LLOWFS observations"))
     prepared.state.sequence == 0 && prepared.propagation === nothing ||
@@ -174,9 +198,9 @@ function O.prepare_filtergraphs_external_pupil(prepared::AOG.PreparedExternalPup
     end
     target = B.compute_device(scc)
     propagation = FilterGraphsPropagation(
-        prepare_observations((; llowfs, scc), target),
-        prepare_observations((; llowfs, scc=unfringed), target),
-        prepare_observations((; llowfs, scc, scc_unfringed=unfringed), target),
+        prepare_observations((; llowfs, scc), target, single_scc_product),
+        prepare_observations((; llowfs, scc=unfringed), target, single_scc_product),
+        prepare_observations((; llowfs, scc, scc_unfringed=unfringed), target, single_scc_product),
         scc.context, false,
     )
     return AOG.PreparedExternalPupil(prepared.graphs, prepared.exposures, prepared.pupil_opd,
