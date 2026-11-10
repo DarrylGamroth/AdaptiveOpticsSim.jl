@@ -44,7 +44,7 @@ the returned dictionary with FilterGraphs and select native capture on GPU.
 function fitted_scc_filter_graph end
 
 """
-    prepare_filtergraphs_external_pupil(prepared; single_scc_product=false)
+    prepare_filtergraphs_external_pupil(prepared; single_scc_product=false, merge_scc_fields=false)
 
 Select the experimental FilterGraphs optical executor for an unused, fitted
 SPIDERS SCC/LLOWFS external pupil. The returned owner takes over the original
@@ -60,6 +60,9 @@ Set `single_scc_product=true` to select the experimental CUDA path for a
 fitted SCC observation with one compiled optical node and no pixel MTF.
 It computes only the intensity used by the current exposure. Combining the
 complex fields before their common transforms changes Float32 roundoff.
+Set `merge_scc_fields=true` with `single_scc_product=true` to merge the fringed
+fields after the second differing mask and use only the closed field for the
+unfringed image when the compiled prescription admits that traversal.
 """
 function prepare_filtergraphs_external_pupil end
 

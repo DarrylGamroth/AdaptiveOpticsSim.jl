@@ -8,10 +8,10 @@ end
 # One bounded opcode selection per prepared action. Group arities enter the
 # numerical executor as literal Val parameters; there is no topology search,
 # dictionary, arbitrary callable registry or model-specific generated method.
-function _compiled_paths_execute_schedule!(owner, sequence, offset, schedule)
+function _compiled_paths_execute_schedule!(owner, sequence, offset, schedule, steps=owner.execution.steps)
     w = owner.workspace
     for position in schedule.first:schedule.last
-        step = owner.execution.steps[position]
+        step = steps[position]
         kind = step.kind
         if kind == LoadCheckpoint
             Backends.copyto_backend_async!(w.field,w.shared_prefixes[step.cache])

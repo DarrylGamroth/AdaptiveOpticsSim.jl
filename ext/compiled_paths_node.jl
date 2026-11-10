@@ -161,12 +161,17 @@ function AOG.enqueue_captured_graph_node!(owner::CompiledPathsOwner)
     _enqueue_compiled_paths_inputs!(Backends.execution_style(owner.inputs.dm_opd),owner)
     return _enqueue_compiled_paths_node!(owner)
 end
-function _enqueue_captured_scc_product!(owner::CompiledPathsOwner, product::Val{P}) where {P}
+_enqueue_captured_scc_product!(owner::CompiledPathsOwner, product::Val) =
+    _enqueue_captured_scc_product!(owner, (product, nothing))
+
+function _enqueue_captured_scc_product!(owner::CompiledPathsOwner, selection::Tuple{Val{P},M}) where {P,M}
+    product, merge = selection
     _enqueue_compiled_paths_inputs!(Backends.execution_style(owner.inputs.dm_opd), owner)
     propagation = owner.propagation
     _interpolate_grid!(propagation.inputs.dm_opd, owner.inputs.dm_opd, owner.mapping.dm)
     _compiled_paths_entrance!(owner, owner.mapping.pupil)
-    intensity = _compiled_paths_selected!(propagation, product)
+    intensity = merge === nothing ? _compiled_paths_selected!(propagation, product) :
+        _compiled_paths_merged!(propagation, product, merge)
     Backends.copyto_backend_async!(getproperty(owner.outputs, P), intensity)
     return nothing
 end

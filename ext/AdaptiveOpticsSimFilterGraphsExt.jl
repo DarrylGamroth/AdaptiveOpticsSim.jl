@@ -22,6 +22,7 @@ proper_extension() = Base.get_extension(AdaptiveOpticsSim, :AdaptiveOpticsSimPro
     @configuration OpticalObservationConfiguration begin
         observation::AOG.PreparedAlgorithmGraph => graph_rebuild
         single_scc_product::Bool => graph_rebuild
+        merge_scc_fields::Bool => graph_rebuild
     end
 
     ports(c) = (
@@ -33,7 +34,7 @@ proper_extension() = Base.get_extension(AdaptiveOpticsSim, :AdaptiveOpticsSimPro
             "org.adaptiveopticssim.optical-intensity/1"; metadata_from=:pupil_opd),
     )
 
-    prepare(c) = (; c.observation, c.single_scc_product)
+    prepare(c) = (; c.observation, c.single_scc_product, c.merge_scc_fields)
     process!(plan) = propagate!(plan.observation, intensity, pupil_opd, pupil_amplitude)
 end
 
@@ -91,20 +92,23 @@ function FGA.prepare_capture(::FGA.CompleteTransition, device,
     select = prepared.plan.single_scc_product && length(observation.nodes) == 1 &&
         keys(observation.outputs) == (:intensity,)
     propagate! = map(values(observation.nodes)) do child
-        capture_observation(child.owner, product, proper, select)
+        capture_observation(child.owner, product, proper, select, prepared.plan.merge_scc_fields)
     end
     return CapturedObservation(observation, inputs, only(outputs), status, check!, validation,
         propagate!, invalid)
 end
 
-function capture_observation(owner, product, proper, select)
+function capture_observation(owner, product, proper, select, merge_fields)
     if select && owner isa proper.CompiledPathsOwner &&
             owner.propagation.workspace.pixel_mtf === nothing &&
             B.compute_device(product) isa B.AcceleratorComputeDevice{B.CUDABackend}
-        if product === owner.outputs.fringed
-            return Base.Fix2(proper._enqueue_captured_scc_product!, Val(:fringed))
-        elseif product === owner.outputs.unfringed
-            return Base.Fix2(proper._enqueue_captured_scc_product!, Val(:unfringed))
+        if product === owner.outputs.fringed || product === owner.outputs.unfringed
+            role = product === owner.outputs.fringed ? Val(:fringed) : Val(:unfringed)
+            if merge_fields
+                merge = proper._prepare_scc_field_merge(owner.propagation)
+                merge === nothing || return Base.Fix2(proper._enqueue_captured_scc_product!, (role, merge))
+            end
+            return Base.Fix2(proper._enqueue_captured_scc_product!, role)
         end
     end
     return AOG.enqueue_captured_graph_node!
@@ -136,13 +140,14 @@ end
 # The pilot borrows exact prepared AOS buffers so DM and detector bindings stay
 # in place. The owned-description API copies its configuration, so use the
 # spec compiler with explicit bindings in this extension.
-function prepare_observations(observations, target, single_scc_product)
+function prepare_observations(observations, target, single_scc_product, merge_scc_fields)
     specs = FG.NodeSpec[]
     inputs = FG.Endpoint[]
     outputs = FG.Endpoint[]
     for (name, observation) in pairs(observations)
         config = Dict{String,Union{AOG.PreparedAlgorithmGraph,Bool}}(
-            "observation" => observation, "single_scc_product" => single_scc_product)
+            "observation" => observation, "single_scc_product" => single_scc_product,
+            "merge_scc_fields" => merge_scc_fields)
         push!(specs, FG.NodeSpec(name, FGA.algorithm_label(OpticalObservationF32),
             config, Dict{String,Nothing}()))
         push!(inputs, FG.Endpoint(name, :pupil_opd, Symbol(name, :_opd)),
@@ -176,7 +181,8 @@ mutable struct FilterGraphsPropagation{F,U,C,E}
 end
 
 function O.prepare_filtergraphs_external_pupil(prepared::AOG.PreparedExternalPupil;
-        single_scc_product::Bool=false)
+        single_scc_product::Bool=false, merge_scc_fields::Bool=false)
+    merge_scc_fields && !single_scc_product && throw(ArgumentError("SCC field merging requires single_scc_product"))
     keys(prepared.graphs) == (:llowfs, :scc) ||
         throw(ArgumentError("FilterGraphs pilot requires SCC and LLOWFS observations"))
     prepared.state.sequence == 0 && prepared.propagation === nothing ||
@@ -198,9 +204,9 @@ function O.prepare_filtergraphs_external_pupil(prepared::AOG.PreparedExternalPup
     end
     target = B.compute_device(scc)
     propagation = FilterGraphsPropagation(
-        prepare_observations((; llowfs, scc), target, single_scc_product),
-        prepare_observations((; llowfs, scc=unfringed), target, single_scc_product),
-        prepare_observations((; llowfs, scc, scc_unfringed=unfringed), target, single_scc_product),
+        prepare_observations((; llowfs, scc), target, single_scc_product, merge_scc_fields),
+        prepare_observations((; llowfs, scc=unfringed), target, single_scc_product, merge_scc_fields),
+        prepare_observations((; llowfs, scc, scc_unfringed=unfringed), target, single_scc_product, merge_scc_fields),
         scc.context, false,
     )
     return AOG.PreparedExternalPupil(prepared.graphs, prepared.exposures, prepared.pupil_opd,

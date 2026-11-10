@@ -426,7 +426,7 @@ function _compiled_paths_stage_branch_image!(::Nothing, owner, op, work, index, 
 end
 
 function _compiled_paths_stage_branch_image!(resampling::PathBranchResampling{O,A},
-        owner, op, work, index, number, output) where {O,A}
+        owner, op, work, index, number, output, image_resample=owner.workspace.image_resample) where {O,A}
     w = owner.workspace
     kernel, post = resampling.operators[index]::Tuple{A,A}
     frequency = w.physical_fft.scratch
@@ -436,7 +436,7 @@ function _compiled_paths_stage_branch_image!(resampling::PathBranchResampling{O,
     # sides of the Fourier re-evaluation. Keep the full frequency axes.
     Backends._enqueue_mul!(resampling.temporary, kernel, frequency, coefficients)
     Backends._enqueue_mul!(w.crop, resampling.temporary, transpose(kernel), coefficients)
-    _compiled_paths_stage_image!(w.image_resample, owner, number, output, true,
+    _compiled_paths_stage_image!(image_resample, owner, number, output, true,
         (owner.plan.grid^2, post), w.crop, 0)
     return nothing
 end
@@ -684,15 +684,19 @@ function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bo
     return products
 end
 
-function _compiled_paths_selected!(owner, ::Val{:unfringed})
-    w = owner.workspace
+function _compiled_paths_selected!(owner, product::Val{:unfringed})
     _compiled_paths_slow!(owner)
+    return _compiled_paths_selected_intensity!(owner, product)
+end
+
+function _compiled_paths_selected_intensity!(owner, ::Val{:unfringed})
+    w = owner.workspace
     _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true)
     AdaptiveOpticsSim.Optics.synthesize_spectrum!(owner.synthesis[1])
     return owner.products.unfringed
 end
 
-function _compiled_paths_selected!(owner, ::Val{:fringed})
+function _compiled_paths_selected!(owner, product::Val{:fringed})
     plan, w = owner.plan, owner.workspace
     _compiled_paths_slow!(owner)
     # Each subsequent shift, defocus and phase operation is linear and uses
@@ -703,10 +707,17 @@ function _compiled_paths_selected!(owner, ::Val{:fringed})
         only = w.only_sources[slot]
         @. closed = closed + gain * only
     end
+    return _compiled_paths_selected_intensity!(owner, product)
+end
+
+function _compiled_paths_selected_intensity!(owner, ::Val{:fringed})
+    w = owner.workspace
     _compiled_paths_fast!(w.open_envelopes, w.closed_sources, owner, true)
     AdaptiveOpticsSim.Optics.synthesize_spectrum!(owner.synthesis[2])
     return owner.products.fringed
 end
+
+include("compiled_paths/field_merge.jl")
 
 """Update the prepared canonical `(y,x)` fringed, unfringed and reference images."""
 function AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(owner::PreparedCompiledPaths)
