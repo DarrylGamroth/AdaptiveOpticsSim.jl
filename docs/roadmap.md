@@ -77,10 +77,11 @@ executor runs the graph for an admitted sample. Sample metadata carries its
 AOS timestamp and exposure duration. Accelerator execution requires native
 capture.
 
-1. Compose the Float32 Shack–Hartmann optical-rate and CMOS acquisition
-   adapters with the existing detector layout. Compare seeded frames,
-   exposure metadata, reset replay, and native CUDA capture with the AOS
-   camera.
+1. The Float32 Shack–Hartmann optical-rate, CMOS acquisition, and UInt16
+   frame-layout camera is available as a standalone FilterGraphs recipe
+   and an AOS-bound composition. Maintain seeded replay, exposure metadata,
+   rotating CPU loans, and whole-camera native CUDA qualification as the
+   baseline for the remaining camera ports.
 2. Port the fitted GPI2 source, atmosphere, mirror, and pupil OPD composition
    in dependency order. Compare detector and mirror outputs and the
    one-frame command hold in a full-plant capture.

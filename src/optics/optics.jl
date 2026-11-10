@@ -81,6 +81,27 @@ configured exposure and seeded noise model.
 function cmos_filter_graph end
 
 """
+    shack_hartmann_camera_filter_graph(definition; frame_output=:frame)
+
+Build the Float32 Shack–Hartmann photon-rate, CMOS acquisition and UInt16
+frame-layout camera that produces the selected AOS output. The standalone
+FilterGraphs recipe accepts pupil OPD and publishes a complete raw frame.
+The CMOS uses its configured exposure. Supply the corresponding timestamp
+and exposure in input sample metadata.
+"""
+function shack_hartmann_camera_filter_graph end
+
+"""
+    with_filtergraphs_shack_hartmann_camera(definition; frame_output=:frame)
+
+Replace the selected Shack–Hartmann camera with FilterGraphAlgorithms
+nodes at their original AOS graph positions. Retain surrounding model-time
+execution, input and diagnostic routes, and DM command timing. Prepare
+with native capture on GPU.
+"""
+function with_filtergraphs_shack_hartmann_camera end
+
+"""
     with_filtergraphs_pwfs(definition; node=:pyramid)
 
 Replace the named Float32 OPD-input Pyramid node with the FilterGraphAlgorithms

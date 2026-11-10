@@ -484,3 +484,28 @@ exposure and random state stay with the AOS model. Select a supported
 device and use native capture for the accelerator path. The focused
 selectors are `test/filtergraphs_shack_hartmann.jl` and
 `test/filtergraphs_cmos.jl`.
+
+For a complete Shack–Hartmann camera with global-shutter CMOS acquisition
+and a UInt16 frame layout, select the authored raw-frame output.
+
+~~~julia
+recipe = O.shack_hartmann_camera_filter_graph(aos_definition; frame_output=:wfs_frame)
+camera = FilterGraphs.prepare_graph(recipe.document; algorithms=recipe.algorithms)
+metadata = (; opd=sample_metadata)
+result = FilterGraphs.process!((; frame), camera, (; opd), metadata)
+
+bound_definition = O.with_filtergraphs_shack_hartmann_camera(
+    aos_definition; frame_output=:wfs_frame)
+~~~
+
+The recipe exposes pupil OPD and the completed raw frame. The AOS-bound
+definition keeps the original inputs, links, outputs and diagnostic arrays.
+AOS retains model-time stepping and upstream DM behavior. The CMOS integrates
+for its configured exposure duration and propagates the supplied sample
+metadata. Match that duration when describing the sample. Prepare one native
+captured graph for GPU execution.
+
+CPU loan pools can bind the monochromatic Shack–Hartmann input slots directly
+and share the prepared optical scratch. The internal CMOS node retains one
+seeded random stream across the slots. Reset restores that stream for replay.
+Keep the owner single-writer while selecting input and raw-frame output slots.

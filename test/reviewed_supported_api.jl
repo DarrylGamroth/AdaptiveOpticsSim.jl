@@ -112,6 +112,7 @@ const REVIEWED_SUPPORTED_API = (
             :fitted_scc_filter_graph, :llowfs_filter_graph, :prepare_filtergraphs_external_pupil,
             :pwfs_filter_graph, :with_filtergraphs_pwfs,
             :shack_hartmann_rate_filter_graph, :cmos_filter_graph,
+            :shack_hartmann_camera_filter_graph, :with_filtergraphs_shack_hartmann_camera,
             :pwfs_camera_filter_graph, :with_filtergraphs_pwfs_camera, :prepare_filtergraphs_pwfs_hil,
             :prepare_telescope, :propagation_input_metadata, :propagation_output_metadata,
             :propagation_plan, :spatial_filter_output, :spatial_filter_plan,
