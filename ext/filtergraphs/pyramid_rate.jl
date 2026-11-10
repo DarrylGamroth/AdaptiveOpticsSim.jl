@@ -31,14 +31,18 @@ FGA.reset!(workspace::PyramidRateWorkspace) = AOG.reset_graph_node!(workspace.ow
 function prepare_host_pyramid(definition)
     opd = zeros(Float32, pyramid_rate_format(definition, :opd).shape)
     photon_rate = zeros(Float32, pyramid_rate_format(definition, :photon_rate).shape)
+    return prepare_host_pyramid(definition, opd, photon_rate)
+end
+
+function prepare_host_pyramid(definition, opd, photon_rate)
     owner = prepare_pyramid_rate(definition, opd, photon_rate)
     return (; plan=definition, workspace=PyramidRateWorkspace(owner, opd, photon_rate))
 end
 
 function process_pyramid_rate!(photon_rate, workspace::PyramidRateWorkspace, opd)
-    copyto!(workspace.opd, opd)
+    opd === workspace.opd || copyto!(workspace.opd, opd)
     AOG.step_graph_node!(workspace.owner)
-    copyto!(photon_rate, workspace.photon_rate)
+    photon_rate === workspace.photon_rate || copyto!(photon_rate, workspace.photon_rate)
     return nothing
 end
 

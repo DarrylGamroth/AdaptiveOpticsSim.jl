@@ -437,4 +437,7 @@ Native FilterGraphs capture records all three camera nodes in one replay.
 The EMCCD advances its seeded random stream when its acquisition succeeds
 and restores the initial stream on reset. The AOS pilot binds the same
 camera Algorithms inside the enclosing AOS capture and keeps the source,
-model-time exposure, and DM command sequence under AOS ownership.
+model-time exposure, and DM command sequence under AOS ownership. The
+AOS CPU path binds the Pyramid and EMCCD to the graph's buffers during
+preparation. Standalone CPU execution accepts caller arrays per frame and
+uses the Algorithms' preallocated staging.

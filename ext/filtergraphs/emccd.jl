@@ -30,14 +30,18 @@ FGA.reset!(workspace::EMCCDWorkspace) = AOG.reset_graph_node!(workspace.owner)
 function prepare_host_emccd(definition)
     photon_rate = zeros(Float32, emccd_format(definition, :photon_rate).shape)
     frame = zeros(Float32, emccd_format(definition, :frame).shape)
+    return prepare_host_emccd(definition, photon_rate, frame)
+end
+
+function prepare_host_emccd(definition, photon_rate, frame)
     owner = prepare_emccd(definition, photon_rate, frame)
     return (; plan=definition, workspace=EMCCDWorkspace(owner, photon_rate, frame))
 end
 
 function process_emccd!(frame, workspace::EMCCDWorkspace, photon_rate)
-    copyto!(workspace.photon_rate, photon_rate)
+    photon_rate === workspace.photon_rate || copyto!(workspace.photon_rate, photon_rate)
     AOG.step_graph_node!(workspace.owner)
-    copyto!(frame, workspace.frame)
+    frame === workspace.frame || copyto!(frame, workspace.frame)
     return nothing
 end
 

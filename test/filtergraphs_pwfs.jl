@@ -104,6 +104,14 @@ end
         outputs=(graph_output(:frame, :layout=>:frame),))
     baseline = prepare_algorithm_graph(definition; target, execution=policy)
     bridged = prepare_algorithm_graph(O.with_filtergraphs_pwfs_camera(definition); target, execution=policy)
+    if selection == "cpu"
+        optics = A.prepared_graph_node(bridged, :optics)
+        camera = A.prepared_graph_node(bridged, :camera)
+        @test optics.algorithm.workspace.opd === graph_input(bridged, :opd)
+        @test optics.algorithm.workspace.photon_rate === optics.output === camera.input
+        @test camera.algorithm.workspace.photon_rate === camera.input
+        @test camera.algorithm.workspace.frame === camera.output
+    end
     recipe = O.pwfs_camera_filter_graph(definition)
     checked = FilterGraphs.prepare_graph(recipe.document; algorithms=recipe.algorithms)
     direct = if selection == "cuda"

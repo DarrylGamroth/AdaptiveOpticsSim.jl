@@ -35,17 +35,38 @@ struct BoundCameraAlgorithm{P,I,O}
     output::O
 end
 
-camera_algorithm(::Type{AOG.PyramidRateNode{Float32}}) = (PyramidRateF32, PyramidRateConfiguration)
-camera_algorithm(::Type{AOG.EMCCDDetectorAcquisitionNode{Float32}}) = (EMCCDF32, EMCCDConfiguration)
-camera_algorithm(::Type{AOG.DetectorFrameLayoutNode}) = (DetectorFrameLayoutF32, DetectorFrameLayoutConfiguration)
-
 function AOG.prepare_graph_node(::Type{FilterGraphsCameraNode{N}}, definition::AOG.AlgorithmNodeDefinition,
         ::NamedTuple{()}, inputs::NamedTuple, outputs::NamedTuple,
         ::NamedTuple{()}, ::B.HostComputeDevice) where {N}
-    declaration, configuration = camera_algorithm(N)
-    algorithm = FGA.prepare_algorithm(declaration, configuration(definition))
-    return BoundCameraAlgorithm(algorithm, only(inputs), only(outputs))
+    input, output = only(inputs), only(outputs)
+    algorithm = prepare_cpu_camera_algorithm(N, definition, input, output)
+    return BoundCameraAlgorithm(algorithm, input, output)
 end
+
+# AOS admits the routes and allocates their arrays before preparing the nodes.
+# The ordinary FilterGraphs CPU API can receive different arrays on each call.
+function prepare_cpu_camera_algorithm(::Type{AOG.PyramidRateNode{Float32}}, definition, input, output)
+    return prepare_bound_camera_algorithm(PyramidRateF32, definition,
+        prepare_host_pyramid(definition, input, output))
+end
+
+function prepare_cpu_camera_algorithm(::Type{AOG.EMCCDDetectorAcquisitionNode{Float32}}, definition, input, output)
+    return prepare_bound_camera_algorithm(EMCCDF32, definition,
+        prepare_host_emccd(definition, input, output))
+end
+
+function prepare_cpu_camera_algorithm(::Type{AOG.DetectorFrameLayoutNode}, definition, input, output)
+    return FGA.prepare_algorithm(DetectorFrameLayoutF32, DetectorFrameLayoutConfiguration(definition))
+end
+
+function prepare_bound_camera_algorithm(declaration, definition, prepared)
+    ports = AOG.graph_node_ports(AOG._node_type(definition), definition.config)
+    formats = map(port -> camera_algorithm_format(port.format), ports)
+    return FGA.PreparedAlgorithm(declaration, prepared.plan, prepared.workspace, formats)
+end
+
+camera_algorithm_format(format::AOG._GraphPortFormat{T}) where {T} =
+    FGA.AlgorithmFormat(T, format.shape, format.schema)
 
 captured_camera_algorithm(::Type{AOG.PyramidRateNode{Float32}}) = prepare_captured_pyramid
 captured_camera_algorithm(::Type{AOG.EMCCDDetectorAcquisitionNode{Float32}}) = prepare_captured_emccd
