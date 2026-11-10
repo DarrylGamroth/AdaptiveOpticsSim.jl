@@ -172,4 +172,32 @@ end
         @test FilterGraphs.process_cpu_loan!(loans, 2, 2) === (; frame=true)
         @test outputs[2].frame == original_frames[1]
     end
+
+    if selection == "cpu" && isdefined(FilterGraphs, :_prepare_cpu_loans)
+        slots = ntuple(_ -> fill(typemax(UInt16), size(frame)), 3)
+        owner = O.prepare_filtergraphs_pwfs_hil(definition; command_input=:opd, frame_slots=slots)
+        driver = A.FixedStepModelTimeDriver(A.PeriodicSchedule(; period_ns=500_000))
+        @test length(owner.boundary.graph.nodes) == 1
+        @test_throws BoundsError A.step_hil_frame_at!(owner, driver, 0)
+        @test A.model_time_sequence(driver) == 0
+        first_frame = A.step_hil_frame_at!(owner, driver, 3)
+        @test first_frame.sequence == 1
+        @test A.model_nanoseconds(first_frame.timestamp) == 0
+        metadata = FilterGraphAlgorithms.SampleMetadata(1; timestamp_nanoseconds=0,
+            exposure_duration_nanoseconds=500_000, terminal=true)
+        @test FilterGraphs.output_metadata(owner.camera.camera).frame == metadata
+        @test A.hil_frame_buffer(owner) === A.graph_output(owner, :frame) === slots[3]
+        @test slots[3] == original_frames[1]
+        @test all(==(typemax(UInt16)), slots[1])
+        @test_throws A.AlgorithmGraphError A.step_hil_frame_at!(owner, driver, 2)
+        @test A.adopt_hil_command!(owner, first_frame.sequence) == 1
+        second_frame = A.step_hil_frame_at!(owner, driver, 2)
+        @test A.model_nanoseconds(second_frame.timestamp) == 500_000
+        @test slots[2] == original_frames[2]
+        @test slots[3] == original_frames[1]
+        A.reset_hil_boundary!(owner, driver)
+        @test A.step_hil_frame_at!(owner, driver, 1) == first_frame
+        @test slots[1] == original_frames[1]
+        @test slots[2] == original_frames[2]
+    end
 end

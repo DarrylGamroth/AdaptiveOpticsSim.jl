@@ -95,6 +95,18 @@ boundaries.
 function with_filtergraphs_pwfs_camera end
 
 """
+    prepare_filtergraphs_pwfs_hil(definition; command_input, frame_slots)
+
+Prepare the authored CPU simulator with its PWFS camera executed by
+FilterGraphs. Supply a tuple of caller-owned raw frame arrays. Step with
+`step_hil_frame_at!(owner, driver, slot)`, selecting an idle slot, and use
+`hil_frame_buffer(owner)` after a successful step. The command buffer and
+sequence adoption follow the AOS lockstep HIL contract. AOS retains the
+source and model clock. Use a FilterGraphs build with CPU loan pools.
+"""
+function prepare_filtergraphs_pwfs_hil end
+
+"""
     prepare_filtergraphs_external_pupil(prepared; single_scc_product=false,
         merge_scc_fields=false, llowfs_definition=nothing)
 

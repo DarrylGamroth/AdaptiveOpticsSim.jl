@@ -111,7 +111,7 @@ const REVIEWED_SUPPORTED_API = (
             :prepare_compiled_optical_paths, :propagate_compiled_optical_paths!,
             :fitted_scc_filter_graph, :llowfs_filter_graph, :prepare_filtergraphs_external_pupil,
             :pwfs_filter_graph, :with_filtergraphs_pwfs,
-            :pwfs_camera_filter_graph, :with_filtergraphs_pwfs_camera,
+            :pwfs_camera_filter_graph, :with_filtergraphs_pwfs_camera, :prepare_filtergraphs_pwfs_hil,
             :prepare_telescope, :propagation_input_metadata, :propagation_output_metadata,
             :propagation_plan, :spatial_filter_output, :spatial_filter_plan,
             :resample_measured_influences, :validate_direct_imaging_batch,

@@ -457,3 +457,20 @@ one noise stream on fixed internal buffers. Frame layout writes to the
 selected output slot. The caller supplies an idle output slot and publishes
 it only when the result reports a completed frame. Keep the arrays alive
 and retain their shapes and storage while the camera is prepared.
+
+For a full fitted CPU simulator with a lockstep HIL boundary, prepare
+the camera inside the AOS graph with caller-owned raw-frame slots.
+
+~~~julia
+owner = O.prepare_filtergraphs_pwfs_hil(aos_definition; command_input, frame_slots)
+sample = AdaptiveOpticsSim.AlgorithmGraphs.step_hil_frame_at!(owner, driver, slot)
+frame = AdaptiveOpticsSim.AlgorithmGraphs.hil_frame_buffer(owner)
+~~~
+
+The simulator's existing pupil OPD is the fixed input loan. The camera's
+photon rate and detector output write directly into the corresponding AOS
+diagnostic arrays. The caller chooses an idle output slot and uses its
+frame after a successful step. A failed step can leave scratch data in
+the selected slot. Adopt the matching command sequence through the normal
+HIL interface before advancing again. The prepared owner and its driver
+remain single-writer. Reset does not overwrite caller-owned frame slots.

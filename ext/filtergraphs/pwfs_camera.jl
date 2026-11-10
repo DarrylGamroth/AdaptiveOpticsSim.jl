@@ -30,7 +30,10 @@ function pwfs_camera_nodes(definition)
 end
 
 function O.pwfs_camera_filter_graph(definition::AOG.AlgorithmGraphDefinition)
-    nodes = pwfs_camera_nodes(definition)
+    return pwfs_camera_description(pwfs_camera_nodes(definition))
+end
+
+function pwfs_camera_description(nodes)
     names = map(AOG._node_name, nodes)
     pyramid, detector, layout = names
     algorithms = (PyramidRateF32, EMCCDF32, DetectorFrameLayoutF32)

@@ -283,6 +283,10 @@ function _stage_completed_hil_frame!(boundary::PreparedGraphHILBoundary)
         boundary.frame_buffer,
         boundary.frame_output,
     )
+    return _publish_completed_hil_frame!(boundary)
+end
+
+function _publish_completed_hil_frame!(boundary::PreparedGraphHILBoundary)
     state = boundary.state
     state.frame_sequence = graph_step_sequence(boundary.graph)
     state.command_response_required = true
