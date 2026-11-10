@@ -420,3 +420,21 @@ Prepare the pilot definition using the existing AOS graph API. On GPU it
 records the same Algorithm into the enclosing AOS capture using the exact
 device arrays already routed to and from the node. AOS retains the source,
 DM inputs, model clock, detector exposure, and frame publication.
+
+To run the fitted camera through its raw UInt16 frame, use the full camera
+recipe. It follows the authored links from the Pyramid through EMCCD and
+frame layout. Supply sample metadata consistent with the configured exposure
+duration.
+
+~~~julia
+description = O.pwfs_camera_filter_graph(aos_definition)
+camera = FilterGraphs.prepare_graph(description.document; algorithms=description.algorithms)
+
+pilot_definition = O.with_filtergraphs_pwfs_camera(aos_definition)
+~~~
+
+Native FilterGraphs capture records all three camera nodes in one replay.
+The EMCCD advances its seeded random stream when its acquisition succeeds
+and restores the initial stream on reset. The AOS pilot binds the same
+camera Algorithms inside the enclosing AOS capture and keeps the source,
+model-time exposure, and DM command sequence under AOS ownership.

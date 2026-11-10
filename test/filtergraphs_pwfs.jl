@@ -79,3 +79,65 @@ policy = selection == "cpu" ? StreamGraphExecution() : CapturedGraphExecution()
     @test FilterGraphs.process!((; photon_rate), direct, (; opd=first(cases))) === (; photon_rate=true)
     @test photon_rate == first(rates)
 end
+
+@testset "FilterGraphs PWFS camera exposure and detector noise" begin
+    rate_schema = "test.photon-rate/1"
+    detector_schema = "test.detector-electrons/1"
+    pyramid = pyramid_rate_node(:optics; T=Float32, resolution=8, telescope_diameter_m=1.22,
+        pupil_samples=4, modulation=2, modulation_points=4, n_pix_separation=2, n_pix_edge=1,
+        source_wavelength_m=0.55e-6, source_photon_irradiance_m2_s=1e6,
+        opd_schema="test.pupil-opd/1", photon_rate_schema=rate_schema)
+    detector = A.emccd_detector_acquisition_node(:camera; rows=12, columns=12,
+        normalized_pupil_sampling=0.25, wavelength_m=0.55e-6, exposure_duration_s=0.0005,
+        quantum_efficiency=0.9, rng_seed=2, gain=5, readout_noise=true, readout_noise_e=2,
+        excess_noise_factor=sqrt(2), clock_induced_charge_e_per_pixel_frame=0.01,
+        photon_rate_schema=rate_schema, frame_schema=detector_schema)
+    layout = A.builtin_graph_node_types().detector_frame_layout_f32(:layout,
+        (; input_size=(12,12), output_size=(14,12), origin=(0,0), scale=1, bias=0, output_element_type="uint16",
+            input_schema=detector_schema, output_schema="test.raw-frame/1",
+            range=(0,16383), rounding="nearest_even"), (;))
+    opd = fill!(B.allocate_device_array(target, Float32, 8, 8), 0)
+    definition = algorithm_graph((pyramid, detector, layout);
+        inputs=(graph_input(:opd, :optics=>:opd, opd),),
+        links=(link(:optics=>:photon_rate, :camera=>:photon_rate),
+            link(:camera=>:frame, :layout=>:detector_frame)),
+        outputs=(graph_output(:frame, :layout=>:frame),))
+    baseline = prepare_algorithm_graph(definition; target, execution=policy)
+    bridged = prepare_algorithm_graph(O.with_filtergraphs_pwfs_camera(definition); target, execution=policy)
+    recipe = O.pwfs_camera_filter_graph(definition)
+    checked = FilterGraphs.prepare_graph(recipe.document; algorithms=recipe.algorithms)
+    direct = if selection == "cuda"
+        graph = FilterGraphs.prepare_captured_graph(checked, CUDA.device())
+        @test graph.executable.executable isa CUDA.CuGraphExec
+        graph
+    elseif selection == "amdgpu"
+        FilterGraphs.prepare_captured_graph(checked, AMDGPU.device())
+    else
+        checked
+    end
+    @test length(direct.nodes) == 3
+    if selection != "cpu"
+        @test direct isa FilterGraphs.PreparedCapturedGraph
+        @test captured_graph_node_count(bridged) == 3
+    end
+    frame = zeros(UInt16, 14, 12)
+    host_opd = Float32[(i + 2j)*1e-8 for i in 1:8, j in 1:8]
+    original_frames = map(1:3) do sequence
+        A.copyto_graph_input!(baseline, :opd, host_opd)
+        step_graph!(baseline)
+        A.copyto_graph_input!(bridged, :opd, host_opd)
+        step_graph!(bridged)
+        sample = FilterGraphAlgorithms.SampleMetadata(sequence;
+            timestamp_nanoseconds=(sequence-1)*500_000, exposure_duration_nanoseconds=500_000,
+            terminal=true)
+        @test FilterGraphs.process!((; frame), direct, (; opd=host_opd), (; opd=sample)) === (; frame=true)
+        @test FilterGraphs.output_metadata(direct).frame == sample
+        @test all(iszero, @view frame[13:14, :])
+        @test Array(graph_output(bridged, :frame)) == Array(graph_output(baseline, :frame)) == frame
+        copy(frame)
+    end
+    @test original_frames[1] != original_frames[2]
+    FilterGraphs.reset!(direct)
+    @test FilterGraphs.process!((; frame), direct, (; opd=host_opd)) === (; frame=true)
+    @test frame == first(original_frames)
+end

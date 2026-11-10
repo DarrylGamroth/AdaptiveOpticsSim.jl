@@ -75,6 +75,26 @@ enclosing native capture.
 function with_filtergraphs_pwfs end
 
 """
+    pwfs_camera_filter_graph(definition)
+
+Build a FilterGraphs description for the real Float32 OPD-input Pyramid,
+EMCCD and UInt16 frame layout that produce the AOS `:frame` output.
+The EMCCD integrates for the exposure duration in its AOS configuration.
+The graph propagates sample metadata supplied by the caller.
+"""
+function pwfs_camera_filter_graph end
+
+"""
+    with_filtergraphs_pwfs_camera(definition)
+
+Bind the FilterGraphAlgorithms camera nodes at their original positions in
+the AOS graph. Prepare with the existing AOS API and select native capture
+on GPU. AOS retains the source, model clock, exposure and DM command
+boundaries.
+"""
+function with_filtergraphs_pwfs_camera end
+
+"""
     prepare_filtergraphs_external_pupil(prepared; single_scc_product=false,
         merge_scc_fields=false, llowfs_definition=nothing)
 

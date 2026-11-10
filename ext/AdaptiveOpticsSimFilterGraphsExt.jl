@@ -178,7 +178,10 @@ include("filtergraphs/optical_train.jl")
 include("filtergraphs/pixel_integration.jl")
 include("filtergraphs/llowfs.jl")
 include("filtergraphs/pyramid_rate.jl")
+include("filtergraphs/emccd.jl")
+include("filtergraphs/detector_frame_layout.jl")
 include("filtergraphs/pwfs.jl")
+include("filtergraphs/pwfs_camera.jl")
 
 mutable struct FilterGraphsPropagation{F,U,C,E,L}
     fringed::F
