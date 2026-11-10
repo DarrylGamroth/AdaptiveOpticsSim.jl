@@ -87,6 +87,7 @@ public SpectralSynthesisPlan, SpectralSynthesisWorkspace, SpectralSynthesisProdu
 public PreparedSpectralSynthesis, prepare_spectral_synthesis, synthesize_spectrum!
 public prepare_compiled_optical_paths, propagate_compiled_optical_paths!
 public fitted_scc_filter_graph, llowfs_filter_graph, prepare_filtergraphs_external_pupil
+public pwfs_filter_graph, with_filtergraphs_pwfs
 public AbstractTelescopeDefinition, TelescopeDefinition, prepare_telescope
 public validate_telescope_target
 public AbstractPropagationModel, AbstractPropagationPlan

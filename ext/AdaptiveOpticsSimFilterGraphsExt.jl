@@ -177,6 +177,8 @@ prepare_execution(graph, target) = throw(ArgumentError("native FilterGraphs capt
 include("filtergraphs/optical_train.jl")
 include("filtergraphs/pixel_integration.jl")
 include("filtergraphs/llowfs.jl")
+include("filtergraphs/pyramid_rate.jl")
+include("filtergraphs/pwfs.jl")
 
 mutable struct FilterGraphsPropagation{F,U,C,E,L}
     fringed::F

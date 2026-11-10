@@ -397,3 +397,26 @@ To prepare just the LLOWFS computation, use
 `description = O.llowfs_filter_graph(llowfs_definition)` and pass its
 `document` and `algorithms` to `FilterGraphs.prepare_graph`. AOS still owns
 the exposure clocks, detector responses, and when a DM command takes effect.
+
+## GPI2 Pyramid photon rate on FilterGraphs
+
+The fitted GPI2 simulator's OPD-input Pyramid can use a direct
+FilterGraphAlgorithms declaration. Its real Float32 ports carry pupil OPD
+and photon rate. Complex fields, diffraction plans and the modulation
+workspace stay inside the Algorithm.
+
+~~~julia
+using AdaptiveOpticsSim, Proper, FilterGraphAlgorithms, FilterGraphs
+
+O = AdaptiveOpticsSim.Optics
+description = O.pwfs_filter_graph(pyramid_node)
+graph = FilterGraphs.prepare_graph(description.document; algorithms=description.algorithms)
+
+pilot_definition = O.with_filtergraphs_pwfs(aos_definition; node=:pyramid)
+~~~
+
+Prepare the standalone graph for native capture before GPU execution.
+Prepare the pilot definition using the existing AOS graph API. On GPU it
+records the same Algorithm into the enclosing AOS capture using the exact
+device arrays already routed to and from the node. AOS retains the source,
+DM inputs, model clock, detector exposure, and frame publication.

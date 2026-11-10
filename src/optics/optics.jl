@@ -54,6 +54,27 @@ intensity. Load Proper, FilterGraphs and FilterGraphAlgorithms before calling.
 function llowfs_filter_graph end
 
 """
+    pwfs_filter_graph(definition)
+
+Build a FilterGraphs description and Algorithm declarations for a Float32
+Pyramid photon-rate node with real pupil OPD input. The prepared Algorithm owns
+its diffraction and modulation workspaces. Load Proper, FilterGraphs and
+FilterGraphAlgorithms before calling.
+"""
+function pwfs_filter_graph end
+
+"""
+    with_filtergraphs_pwfs(definition; node=:pyramid)
+
+Replace the named Float32 OPD-input Pyramid node with the FilterGraphAlgorithms
+declaration, retaining the graph's links and boundaries. Prepare and step the
+result with AOS to retain source, exposure, detector, and DM timing. On GPU the
+node is prepared against the AOS graph's device buffers and records into the
+enclosing native capture.
+"""
+function with_filtergraphs_pwfs end
+
+"""
     prepare_filtergraphs_external_pupil(prepared; single_scc_product=false,
         merge_scc_fields=false, llowfs_definition=nothing)
 
