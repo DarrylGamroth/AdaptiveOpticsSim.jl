@@ -82,9 +82,10 @@ capture.
    and an AOS-bound composition. Maintain seeded replay, exposure metadata,
    rotating CPU loans, and whole-camera native CUDA qualification as the
    baseline for the remaining camera ports.
-2. Port the fitted GPI2 source, atmosphere, mirror, and pupil OPD composition
-   in dependency order. Compare detector and mirror outputs and the
-   one-frame command hold in a full-plant capture.
+2. The fitted GPI2 plant composes its science relay, atmosphere, mirror
+   surfaces, tip/tilt response, pupil OPD and camera on FilterGraphs. AOS owns
+   model time and lockstep command adoption. Qualify the complete plant
+   against the AOS detector and mirror outputs on CPU and native CUDA.
 3. Port independent SCC and LLOWFS paths while AOS continues to select
    completed exposures and the shared DM command. Compare each camera's
    sequence and timing separately before switching the application.

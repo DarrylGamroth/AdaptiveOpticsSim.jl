@@ -416,12 +416,7 @@ function adopt_hil_command!(
     state = boundary.state
     (state.failed || graph_failed(boundary.graph)) &&
         _throw_hil_boundary_failed()
-    state.command_response_required || throw(AlgorithmGraphError(
-        "no completed HIL frame is awaiting a command response",
-    ))
-    sequence == state.frame_sequence || throw(AlgorithmGraphError(
-        "expected command sequence $(state.frame_sequence), received $sequence",
-    ))
+    _require_hil_command_sequence(state, sequence)
     graph_step_pending(boundary.graph) && throw(AlgorithmGraphError(
         "a graph with a pending frame cannot adopt a HIL command",
     ))
@@ -440,6 +435,20 @@ function adopt_hil_command!(
         state.failed = true
         rethrow()
     end
+    return _commit_hil_command!(state, sequence)
+end
+
+function _require_hil_command_sequence(state::GraphHILBoundaryState, sequence::UInt64)
+    state.command_response_required || throw(AlgorithmGraphError(
+        "no completed HIL frame is awaiting a command response",
+    ))
+    sequence == state.frame_sequence || throw(AlgorithmGraphError(
+        "expected command sequence $(state.frame_sequence), received $sequence",
+    ))
+    return nothing
+end
+
+@inline function _commit_hil_command!(state::GraphHILBoundaryState, sequence::UInt64)
     state.active_command_sequence = sequence
     state.command_response_required = false
     return sequence

@@ -114,6 +114,7 @@ const REVIEWED_SUPPORTED_API = (
             :shack_hartmann_rate_filter_graph, :cmos_filter_graph,
             :shack_hartmann_camera_filter_graph, :with_filtergraphs_shack_hartmann_camera,
             :pwfs_camera_filter_graph, :with_filtergraphs_pwfs_camera, :prepare_filtergraphs_pwfs_hil,
+            :gpi2_plant_filter_graph, :prepare_filtergraphs_gpi2_hil,
             :prepare_telescope, :propagation_input_metadata, :propagation_output_metadata,
             :propagation_plan, :spatial_filter_output, :spatial_filter_plan,
             :resample_measured_influences, :validate_direct_imaging_batch,

@@ -509,3 +509,22 @@ CPU loan pools can bind the monochromatic Shack–Hartmann input slots directly
 and share the prepared optical scratch. The internal CMOS node retains one
 seeded random stream across the slots. Reset restores that stream for replay.
 Keep the owner single-writer while selecting input and raw-frame output slots.
+
+For the fitted GPI2 plant, `Optics.gpi2_plant_filter_graph(definition)`
+composes the science relay, atmosphere, mirror surfaces, tip/tilt response,
+pupil composition and the complete Pyramid camera. The recipe retains
+the authored direct routes. The calibrated actuator indices, modal basis
+and pupil support are bound during preparation.
+
+~~~julia
+owner = O.prepare_filtergraphs_gpi2_hil(definition; command_input, target)
+sample = AdaptiveOpticsSim.AlgorithmGraphs.step_hil_frame_at!(owner, driver)
+~~~
+
+Write the next correction into `hil_command_buffer(owner)` and adopt it
+with the completed sample sequence before stepping again. AOS owns the
+model-time driver and exposure. The host frame is available through
+`hil_frame_buffer`. Other outputs remain in the executor's storage and
+are available through `graph_output` between completed frames. Use the
+diagnostics and active inputs as read-only borrows. Keep their storage
+valid through any use and serialize stepping, adoption and reset.

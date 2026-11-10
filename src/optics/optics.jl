@@ -133,6 +133,27 @@ boundaries.
 function with_filtergraphs_pwfs_camera end
 
 """
+    gpi2_plant_filter_graph(definition)
+
+Build a FilterGraphs recipe from a fitted GPI2 plant. The recipe retains
+the authored direct routes and diagnostic outputs. The science relay,
+atmosphere, mirror surfaces, pupil composition, and PWFS camera use the
+AOS physical models. Sparse calibration arrays are captured at preparation.
+"""
+function gpi2_plant_filter_graph end
+
+"""
+    prepare_filtergraphs_gpi2_hil(definition; command_input, target, exposure_ns)
+
+Prepare the GPI2 plant on FilterGraphs with the AOS lockstep HIL interface.
+The caller owns the model-time driver and stages commands through
+`hil_command_buffer`. A completed sample requires the matching command
+response before the next frame. The optional `exposure_ns` must match the
+authored detector exposure. Accelerator targets require native capture.
+"""
+function prepare_filtergraphs_gpi2_hil end
+
+"""
     prepare_filtergraphs_pwfs_hil(definition; command_input, frame_slots)
 
 Prepare the authored CPU simulator with its PWFS camera executed by
