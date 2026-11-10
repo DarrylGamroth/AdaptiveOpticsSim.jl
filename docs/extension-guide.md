@@ -354,3 +354,26 @@ On the CPU, call `FilterGraphAlgorithms.process!` with caller-owned outputs.
 On GPU, call `FilterGraphs.prepare_captured_graph(graph, device)` and then
 `FilterGraphs.process_device!` to consume completed device products.
 GPU preparation requires native capture for the complete chain.
+
+## Dual SCC and LLOWFS on FilterGraphs
+
+For the fitted SPIDERS model, prepare the external pupil from its authored
+optical and detector graphs. Select the pilot before advancing the model.
+
+~~~julia
+using AdaptiveOpticsSim, Proper, FilterGraphAlgorithms, FilterGraphs
+
+pilot = AdaptiveOpticsSim.Optics.prepare_filtergraphs_external_pupil(prepared)
+~~~
+
+The pilot takes ownership of the prepared pupil and its exact optical, DM, and
+detector buffers. Step and reset only the returned owner through the existing
+external pupil API. If the pupil is part of a clocked source, replace its
+`plant` with the returned owner before stepping the source.
+
+FilterGraphs schedules the optical observations. GPU preparation requires native
+capture of the two SCC phases and the case where one pupil sample crosses their
+boundary. The SCC and LLOWFS exposure accumulators still publish on their own
+model-time windows, and the detector responses still run after their exposures.
+Apply controller commands at the same model sample boundary as with the original
+owner. Preparing an external pupil without the opt-in call uses AOS execution.

@@ -43,6 +43,21 @@ the returned dictionary with FilterGraphs and select native capture on GPU.
 """
 function fitted_scc_filter_graph end
 
+"""
+    prepare_filtergraphs_external_pupil(prepared)
+
+Select the experimental FilterGraphs optical executor for an unused, fitted
+SPIDERS SCC/LLOWFS external pupil. The returned owner takes over the original
+optical buffers, exposure history and detector response. Retain and step only
+the returned owner. Keep using the existing external pupil and DM input API.
+
+Load FilterGraphs, FilterGraphAlgorithms and Proper to enable this method.
+CPU uses a prepared FilterGraphs graph. Supported accelerators require native
+capture of each SCC chopping selection. Exposure and feedback clocks are still
+owned by the caller and the external pupil.
+"""
+function prepare_filtergraphs_external_pupil end
+
 # Backend policy hooks for cold preparation; other backends retain the ordinary
 # multiplier storage and BLAS arithmetic.
 _prepared_optical_train_enabled(target, field) = false

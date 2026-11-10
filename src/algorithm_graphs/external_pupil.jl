@@ -399,9 +399,12 @@ function optical_execution_graph(prepared::PreparedExternalPupil, name::Symbol;
         haskey(observation, :chopping) || throw(ArgumentError("observation has no unfringed graph"))
         graph = observation.chopping.unfringed
     end
-    propagation = prepared.propagation
-    return propagation === nothing || !propagation.state.shared ? graph : propagation.graph
+    return _external_pupil_execution_graph(prepared.propagation, graph, name, unfringed)
 end
+
+_external_pupil_execution_graph(::Nothing, graph, name, unfringed) = graph
+_external_pupil_execution_graph(propagation, graph, name, unfringed) =
+    propagation.state.shared ? propagation.graph : graph
 
 _observation_response(observation) = get(observation, :response, nothing)
 
@@ -657,11 +660,15 @@ function prepare_external_pupil(graphs::NamedTuple;exposure_durations::NamedTupl
         _ExternalPupilState(-1,0,0,nothing,0,0,0))
 end
 
+_reset_external_pupil_propagation!(::Nothing) = nothing
+function _reset_external_pupil_propagation!(propagation)
+    reset_graph!(propagation.graph)
+    propagation.state.shared = true
+    return nothing
+end
+
 function _reset_observation_graphs!(prepared)
-    if prepared.propagation !== nothing
-        reset_graph!(prepared.propagation.graph)
-        prepared.propagation.state.shared = true
-    end
+    _reset_external_pupil_propagation!(prepared.propagation)
     for (name, graph) in pairs(prepared.graphs),
             variant in _observation_graphs(graph, getproperty(prepared.observations, name))
         reset_graph!(variant)
@@ -669,8 +676,9 @@ function _reset_observation_graphs!(prepared)
     return nothing
 end
 
-function _propagate_external_pupil!(prepared)
-    propagation = prepared.propagation
+_propagate_external_pupil!(::Nothing, prepared, start, finish) = false
+
+function _propagate_external_pupil!(propagation, prepared, start, finish)
     # A sample may use either execution mode. Neither mode may bypass a
     # failure or an outstanding standalone step in the other retained owner.
     _require_external_pupil_graph_ready(propagation.graph)
@@ -840,7 +848,7 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
         prepared.pupil_amplitude[index]=a
         prepared.pupil_opd[index]=a==0 ? 0 : opd[index]
     end
-    shared = prepared.propagation !== nothing && _propagate_external_pupil!(prepared)
+    shared = _propagate_external_pupil!(prepared.propagation, prepared, start, finish)
     for (name,base_graph) in pairs(prepared.graphs), graph in _active_observation_graphs(
             base_graph,getproperty(prepared.observations,name),start,finish,
             getproperty(prepared.exposures,name).duration_ns)
