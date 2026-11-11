@@ -598,11 +598,8 @@ function _compiled_paths_fast_scalar!(envelopes, sources, owner, free_ghost)
     return nothing
 end
 
-function _compiled_paths_fast!(envelopes, sources, owner, free_ghost)
-    plan, w = owner.plan, owner.workspace
-    fast = w.fast
-    # All bindings and batch slots are frozen at preparation. Closed and only
-    # branches reuse the same scratch in stream order, including capture replay.
+function _compiled_paths_defocus!(sources, owner, ::Nothing)
+    plan, fast = owner.plan, owner.workspace.fast
     for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
         slot = _compiled_paths_slot(k, a, plan.n_anchor)
         defocus_slot = fast.defocus_slots[slot]
@@ -612,6 +609,12 @@ function _compiled_paths_fast!(envelopes, sources, owner, free_ghost)
         end
     end
     _compiled_paths_filter_batch!(fast.defocus)
+    return nothing
+end
+
+function _compiled_paths_fast!(envelopes, sources, owner, free_ghost, defocus=nothing)
+    plan, fast = owner.plan, owner.workspace.fast
+    _compiled_paths_defocus!(sources, owner, defocus)
     for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
         slot = _compiled_paths_slot(k, a, plan.n_anchor)
         defocus_slot = fast.defocus_slots[slot]
@@ -707,9 +710,9 @@ function _compiled_paths_selected!(owner, product::Val{:unfringed})
     return _compiled_paths_selected_intensity!(owner, product)
 end
 
-function _compiled_paths_selected_intensity!(owner, ::Val{:unfringed})
+function _compiled_paths_selected_intensity!(owner, ::Val{:unfringed}, defocus=nothing)
     w = owner.workspace
-    _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true)
+    _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true, defocus)
     AdaptiveOpticsSim.Optics.synthesize_spectrum!(owner.synthesis[1])
     return owner.products.unfringed
 end
@@ -728,9 +731,9 @@ function _compiled_paths_selected!(owner, product::Val{:fringed})
     return _compiled_paths_selected_intensity!(owner, product)
 end
 
-function _compiled_paths_selected_intensity!(owner, ::Val{:fringed})
+function _compiled_paths_selected_intensity!(owner, ::Val{:fringed}, defocus=nothing)
     w = owner.workspace
-    _compiled_paths_fast!(w.open_envelopes, w.closed_sources, owner, true)
+    _compiled_paths_fast!(w.open_envelopes, w.closed_sources, owner, true, defocus)
     AdaptiveOpticsSim.Optics.synthesize_spectrum!(owner.synthesis[2])
     return owner.products.fringed
 end

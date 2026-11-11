@@ -28,6 +28,28 @@ include("compiled_paths_schedule.jl")
     end
 end
 
+@testset "Shared defocus FFT retains distinct transfer functions" begin
+    fixture = compiled_paths_filtered_fixture(; image_size=5, phantom_pad=2)
+    fixture.metadata["fast_paths"][3]["source_index"] = 0
+    owner = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
+        fixture.metadata, ref -> fixture.arrays[ref]; T=Float32)
+    sources = owner.workspace.closed_sources
+    for (index, source) in enumerate(sources)
+        source .= ComplexF32[complex(index + x, y - x) for y in 1:5, x in 1:5]
+    end
+    shared = CP._prepare_shared_scc_defocus(owner)
+    @test collect(shared.source_slots) == [1, 2]
+    @test shared.group_slots == Int32[1, 2, 1, 2]
+    envelopes = owner.workspace.closed_envelopes
+    CP._compiled_paths_fast!(envelopes, sources, owner, true)
+    expected = map(copy, envelopes)
+    fill!(owner.workspace.fast.defocus.field, ComplexF32(NaN))
+    CP._compiled_paths_fast!(envelopes, sources, owner, true, shared)
+    for (actual, reference) in zip(envelopes, expected)
+        @test actual ≈ reference rtol=3e-6 atol=3e-7
+    end
+end
+
 @testset "Compiled fast filter batches" begin
     for T in (Float32, Float64), image_size in (5, 6), phantom_pad in (0, 2)
         fixture = compiled_paths_filtered_fixture(; image_size, phantom_pad)

@@ -142,7 +142,7 @@ end
 
 function _native_scc_selection(owner, product, ::AOG.CapturedGraphExecution,
         ::Backends.AcceleratorComputeDevice{Backends.CUDABackend})
-    return (product, _prepare_scc_field_merge(owner.propagation))
+    return (product, _prepare_scc_field_merge(owner.propagation; share_defocus=true))
 end
 
 function AOG._prepare_output_nodes(nodes::Tuple{<:AOG.PreparedGraphNode{Name,<:CompiledPathsOwner}},

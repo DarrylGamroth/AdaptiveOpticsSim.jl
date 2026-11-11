@@ -2,14 +2,15 @@
 # The admitted suffix is common and linear, so it can propagate one combined
 # field. Build a prefix-only checkpoint schedule so no selected traversal
 # consumes a checkpoint from an omitted closed or pinhole-only suffix.
-struct SCCFieldMerge{S,P,R,I}
+struct SCCFieldMerge{S,P,R,I,D}
     steps::S
     prefixes::P
     resampling::R
     image_resample::I
+    defocus::D
 end
 
-function _prepare_scc_field_merge(owner)
+function _prepare_scc_field_merge(owner; share_defocus=false)
     plan, w = owner.plan, owner.workspace
     w.branch_batch === nothing && return nothing
     w.image_resample === nothing && return nothing
@@ -62,7 +63,61 @@ function _prepare_scc_field_merge(owner)
     resample = PathResampleBatch(batch.batch_size, batch.field, batch.temporary,
         batch.kernel, batch.forward, _compiled_paths_seal(outputs), batch.coefficients)
     crop = _compiled_paths_prepare_branch_resampling(plan, w.field, plan.paths, resample)
-    return SCCFieldMerge(_compiled_paths_seal(steps), _compiled_paths_seal(prefixes), crop, resample)
+    defocus = share_defocus ? _prepare_shared_scc_defocus(owner) : nothing
+    return SCCFieldMerge(_compiled_paths_seal(steps), _compiled_paths_seal(prefixes),
+        crop, resample, defocus)
+end
+
+struct SharedSCCDefocus{A,F,S,G}
+    field::A
+    forward::F
+    source_slots::S
+    group_slots::G
+end
+
+function _prepare_shared_scc_defocus(owner)
+    plan, fast = owner.plan, owner.workspace.fast
+    batch = fast.defocus
+    batch === nothing && return nothing
+    source_slots = Int[]
+    group_slots = zeros(Int32, size(batch.field, 3))
+    for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
+        plane = fast.defocus_slots[_compiled_paths_slot(k, a, plan.n_anchor)]
+        iszero(plane) && continue
+        source = _compiled_paths_slot(path.source_index, a, plan.n_anchor)
+        group = findfirst(==(source), source_slots)
+        if group === nothing
+            push!(source_slots, source)
+            group = length(source_slots)
+        end
+        group_slots[plane] = group
+    end
+    length(source_slots) < length(group_slots) || return nothing
+    field = similar(batch.field, size(batch.field, 1), size(batch.field, 2), length(source_slots))
+    fill!(field, zero(eltype(field)))
+    groups = _compiled_paths_resident(plan.target, group_slots, Int32)
+    return SharedSCCDefocus(field, Backends.plan_fft_backend!(field, (1, 2)),
+        _compiled_paths_seal(source_slots), groups)
+end
+
+KernelAbstractions.@kernel function _apply_shared_scc_defocus!(out, input, transfer, groups)
+    y, x, plane = @index(Global, NTuple)
+    if y <= size(out, 1) && x <= size(out, 2) && plane <= size(out, 3)
+        @inbounds out[y, x, plane] = input[y, x, groups[plane]] * transfer[y, x, plane]
+    end
+end
+
+function _compiled_paths_defocus!(sources, owner, shared::SharedSCCDefocus)
+    plan, batch = owner.plan, owner.workspace.fast.defocus
+    for (group, source) in enumerate(shared.source_slots)
+        _compiled_paths_pack_filter!(shared.field, sources[source], group, plan.phantom_pad)
+    end
+    Backends.enqueue_fft_plan!(shared.field, shared.forward)
+    backend = KernelAbstractions.get_backend(batch.field)
+    _apply_shared_scc_defocus!(backend, (16, 16, 1))(
+        batch.field, shared.field, batch.transfer, shared.group_slots; ndrange=size(batch.field))
+    Backends.enqueue_fft_plan!(batch.field, batch.inverse)
+    return nothing
 end
 
 KernelAbstractions.@kernel function _merge_scc_fields!(out, fields, after, scale, gain, closed_mask, pinhole_mask,
@@ -171,5 +226,5 @@ function _compiled_paths_merged!(owner, product, merge::SCCFieldMerge)
     for a in 1:plan.n_anchor
         w.closed_sources[a] .*= plan.main_phase
     end
-    return _compiled_paths_selected_intensity!(owner, product)
+    return _compiled_paths_selected_intensity!(owner, product, merge.defocus)
 end
