@@ -199,5 +199,26 @@ end
         @test A.step_hil_frame_at!(owner, driver, 1) == first_frame
         @test slots[1] == original_frames[1]
         @test slots[2] == original_frames[2]
+
+        borrowed = O.prepare_filtergraphs_pwfs_hil(definition; command_input=:opd)
+        borrowed_driver = A.FixedStepModelTimeDriver(A.PeriodicSchedule(; period_ns=500_000))
+        @test size(A.hil_frame_buffer(borrowed)) == (14, 12)
+        @test A.hil_frame_exposure_nanoseconds(borrowed) == 500_000
+        @test_throws ArgumentError A.graph_output(borrowed, :frame)
+        @test_throws DimensionMismatch A.step_hil_frame_at!(borrowed, borrowed_driver, similar(frame))
+        @test A.model_time_sequence(borrowed_driver) == 0
+        for (index, expected) in enumerate(original_frames)
+            destination = fill(typemax(UInt16), 12, 14)
+            sample = A.step_hil_frame_at!(borrowed, borrowed_driver, destination)
+            @test sample.sequence == index
+            @test A.model_nanoseconds(sample.timestamp) == (index-1)*500_000
+            @test destination == permutedims(expected)
+            @test borrowed.camera.state.destination === nothing
+            @test A.adopt_hil_command!(borrowed, sample.sequence) == sample.sequence
+        end
+        A.reset_hil_boundary!(borrowed, borrowed_driver)
+        destination = Matrix{UInt16}(undef, 12, 14)
+        @test A.step_hil_frame_at!(borrowed, borrowed_driver, destination) == first_frame
+        @test destination == permutedims(first(original_frames))
     end
 end

@@ -154,7 +154,7 @@ authored detector exposure. Accelerator targets require native capture.
 function prepare_filtergraphs_gpi2_hil end
 
 """
-    prepare_filtergraphs_pwfs_hil(definition; command_input, frame_slots)
+    prepare_filtergraphs_pwfs_hil(definition; command_input, frame_slots=nothing)
 
 Prepare the authored CPU simulator with its PWFS camera executed by
 FilterGraphs. Supply a tuple of caller-owned raw frame arrays. Step with
@@ -162,6 +162,13 @@ FilterGraphs. Supply a tuple of caller-owned raw frame arrays. Step with
 `hil_frame_buffer(owner)` after a successful step. The command buffer and
 sequence adoption follow the AOS lockstep HIL contract. AOS retains the
 source and model clock. Use a FilterGraphs build with CPU loan pools.
+
+Omit `frame_slots` when the caller obtains a new output loan each step. Pass
+the idle loan to `step_hil_frame_at!` as a `Matrix{UInt16}` with the reversed
+logical shape. The camera writes the logical frame in row-major wire order.
+The destination must be independent of all simulator storage and remain valid
+for the call. In this mode `hil_frame_buffer(owner)` describes the frame
+format only.
 """
 function prepare_filtergraphs_pwfs_hil end
 

@@ -475,6 +475,12 @@ the selected slot. Adopt the matching command sequence through the normal
 HIL interface before advancing again. The prepared owner and its driver
 remain single-writer. Reset does not overwrite caller-owned frame slots.
 
+Omit `frame_slots` when the HIL transport lends a frame after preparation.
+The caller passes a `Matrix{UInt16}` with reversed dimensions to
+`step_hil_frame_at!`. The camera writes row-major wire order through a
+logical view of that memory. Keep the loan valid and exclusive until the
+step returns. The simulator retains no reference to the borrowed storage.
+
 The standalone `Optics.shack_hartmann_rate_filter_graph(definition)` and
 `Optics.cmos_filter_graph(definition)` recipes expose the prepared AOS
 Float32 Shack–Hartmann optical-rate and global-shutter CMOS acquisition
