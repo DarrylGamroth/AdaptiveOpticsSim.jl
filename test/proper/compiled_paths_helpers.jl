@@ -275,7 +275,7 @@ end
 function compiled_paths_test_graph(model;mode="log_attenuation",reference=nothing,
         dm=zeros(8,8),opd=zeros(8,8),amplitude=zeros(8,8),grid=nothing,
         target=AdaptiveOpticsSim.Backends.compute_device(dm),execution=StreamGraphExecution(),
-        output_sampling_calibration=nothing)
+        output_sampling_calibration=nothing, products=(:fringed,:unfringed,:reference))
     if grid===nothing
         grid=(size=(8,8),axes=(1,2),sampling_m=(model.fixture.dx,model.fixture.dx),center_pixel=(5.0,5.0))
     end
@@ -293,7 +293,6 @@ function compiled_paths_test_graph(model;mode="log_attenuation",reference=nothin
     definition=algorithm_graph((node,);name=:compiled_paths,
         inputs=(graph_input(:dm,:optics=>:dm_opd,dm),graph_input(:opd,:optics=>:pupil_opd,opd),
             graph_input(:amplitude,:optics=>:pupil_amplitude,amplitude)),
-        outputs=(graph_output(:fringed,:optics=>:fringed),graph_output(:unfringed,:optics=>:unfringed),
-            graph_output(:reference,:optics=>:reference)))
+        outputs=map(product -> graph_output(product,:optics=>product),products))
     return prepare_algorithm_graph(definition;target,execution)
 end

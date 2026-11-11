@@ -59,7 +59,7 @@ struct CompiledPathsInputWorkspace{A,V}
     reference::A
     validation::V
 end
-struct CompiledPathsOwner{P,I,O,M,W,R,T,C}
+struct CompiledPathsOwner{P,I,O,M,W,R,T,C,S}
     propagation::P
     inputs::I
     outputs::O
@@ -68,6 +68,7 @@ struct CompiledPathsOwner{P,I,O,M,W,R,T,C}
     reference::R
     sampling_m::T
     output_sampling_calibration::C
+    selection::S
 end
 function _compiled_paths_ratio!(attenuation,amplitude,reference)
     for i in eachindex(attenuation,amplitude,reference)
@@ -119,7 +120,7 @@ function AOG.prepare_graph_node(::Type{CompiledPathsNode{T}},c::CompiledPathsCon
     end
     owner=CompiledPathsOwner(propagation,inputs,outputs,(dm=dm_mapping,pupil=pupil_mapping),
         CompiledPathsInputWorkspace(native_amplitude,native_reference,
-            _compiled_paths_input_validation(target)),reference,c.sampling_m,c.output_sampling_calibration)
+            _compiled_paths_input_validation(target)),reference,c.sampling_m,c.output_sampling_calibration,nothing)
     return owner
 end
 _compiled_paths_input_reference(::Nothing,target,T)=nothing
@@ -135,7 +136,43 @@ function _compiled_paths_input_validation(target)
     return CompiledPathsInputValidation(device,host)
 end
 
-function _enqueue_compiled_paths_node!(owner)
+function _native_scc_selection(owner, product, execution, target)
+    return nothing
+end
+
+_native_scc_selection(owner, product, ::AOG.StreamGraphExecution, ::Backends.HostComputeDevice) =
+    (product, nothing)
+
+function _native_scc_selection(owner, product, ::AOG.CapturedGraphExecution,
+        ::Backends.AcceleratorComputeDevice{Backends.CUDABackend})
+    return (product, _prepare_scc_field_merge(owner.propagation))
+end
+
+function AOG._prepare_output_nodes(nodes::Tuple{<:AOG.PreparedGraphNode{Name,<:CompiledPathsOwner}},
+        definition, execution) where {Name}
+    length(definition.outputs) == 1 && isempty(definition.links) &&
+        isempty(definition.delayed_links) || return nodes
+    source = only(definition.outputs).source
+    AOG._node_name(source) === Name || return nodes
+    port = AOG._port_name(source)
+    port in (:fringed, :unfringed) || return nodes
+    node = only(nodes)
+    owner = node.owner
+    owner.propagation.workspace.pixel_mtf === nothing || return nodes
+    eltype(owner.inputs.dm_opd) === Float32 || return nodes
+    selection = _native_scc_selection(owner, Val(port), execution,
+        Backends.compute_device(owner.inputs.dm_opd))
+    selection === nothing && return nodes
+    selected = CompiledPathsOwner(owner.propagation, owner.inputs, owner.outputs,
+        owner.mapping, owner.workspace, owner.reference, owner.sampling_m,
+        owner.output_sampling_calibration, selection)
+    return (AOG.PreparedGraphNode{Name,typeof(selected),typeof(node.inputs),
+        typeof(node.outputs),typeof(node.parameters)}(selected, node.inputs, node.outputs, node.parameters),)
+end
+
+_enqueue_compiled_paths_node!(owner) = _enqueue_compiled_paths_node!(owner, owner.selection)
+
+function _enqueue_compiled_paths_node!(owner, ::Nothing)
     p=owner.propagation
     _interpolate_grid!(p.inputs.dm_opd,owner.inputs.dm_opd,owner.mapping.dm)
     _compiled_paths_entrance!(owner,owner.mapping.pupil)
@@ -145,6 +182,18 @@ function _enqueue_compiled_paths_node!(owner)
     end
     return nothing
 end
+
+function _enqueue_compiled_paths_node!(owner, selection::Tuple{Val{P},M}) where {P,M}
+    product, merge = selection
+    propagation = owner.propagation
+    _interpolate_grid!(propagation.inputs.dm_opd, owner.inputs.dm_opd, owner.mapping.dm)
+    _compiled_paths_entrance!(owner, owner.mapping.pupil)
+    intensity = merge === nothing ? _compiled_paths_selected_exact!(propagation, product) :
+        _compiled_paths_merged!(propagation, product, merge)
+    Backends.copyto_backend_async!(getproperty(owner.outputs, P), intensity)
+    return nothing
+end
+
 function _step_compiled_paths_node!(::Backends.ScalarCPUStyle,owner)
     _compiled_paths_validate_inputs!(owner,owner.reference)
     return _enqueue_compiled_paths_node!(owner)

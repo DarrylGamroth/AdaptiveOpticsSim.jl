@@ -269,6 +269,30 @@ end
         ref->overflow_arrays[ref]; T=Float32)
 end
 
+@testset "Native graph selects an exclusively routed SCC product" begin
+    mktempdir() do directory
+        model = compiled_paths_yaml_fixture(directory)
+        dm = Float32[1e-8 * sin(x + y) for y in 1:8, x in 1:8]
+        opd, amplitude = zeros(Float32, 8, 8), zeros(Float32, 8, 8)
+        full = compiled_paths_test_graph(model; dm, opd, amplitude)
+        step_graph!(full)
+        @test AlgorithmGraphs.prepared_graph_node(full, :optics).selection === nothing
+        for product in (:fringed, :unfringed)
+            selected = compiled_paths_test_graph(model; dm, opd, amplitude, products=(product,))
+            @test AlgorithmGraphs.prepared_graph_node(selected, :optics).selection === (Val(product), nothing)
+            step_graph!(selected)
+            @test graph_output(selected, product) == graph_output(full, product)
+            reset_graph!(selected)
+            step_graph!(selected)
+            @test graph_output(selected, product) == graph_output(full, product)
+        end
+        reference = compiled_paths_test_graph(model; dm, opd, amplitude, products=(:reference,))
+        @test AlgorithmGraphs.prepared_graph_node(reference, :optics).selection === nothing
+        step_graph!(reference)
+        @test graph_output(reference, :reference) == graph_output(full, :reference)
+    end
+end
+
 @testset "Compiled optical path artifact and live grids" begin
     mktempdir() do directory
         model=compiled_paths_yaml_fixture(directory)

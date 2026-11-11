@@ -1036,6 +1036,10 @@ end
     )
 end
 
+# Numerical extensions can select work from the complete graph output contract
+# before the native execution schedule or capture is prepared.
+_prepare_output_nodes(nodes, definition, execution) = nodes
+
 function _prepare_graph_outputs(
     definitions::Tuple,
     nodes::NamedTuple,
@@ -1159,7 +1163,9 @@ function _prepare_algorithm_graph(
             target,
             execution_preparation.node_contexts,
         )
-        nodes = NamedTuple{keys(ordered_nodes)}(node_values)
+        nodes = NamedTuple{keys(ordered_nodes)}(
+            _prepare_output_nodes(node_values, definition, execution),
+        )
         outputs = _prepare_graph_outputs(
             definition.outputs,
             admitted_nodes,

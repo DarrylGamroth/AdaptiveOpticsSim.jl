@@ -669,6 +669,15 @@ function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bo
         _compiled_paths_fast_scalar!(w.closed_envelopes, w.closed_sources, owner, true)
         _compiled_paths_fast_scalar!(w.only_envelopes, w.only_sources, owner, false)
     end
+    _compiled_paths_open_envelopes!(plan, w)
+    for synthesis in owner.synthesis
+        AdaptiveOpticsSim.Optics.synthesize_spectrum!(synthesis)
+    end
+    _compiled_paths_apply_pixel_mtf!(w.pixel_mtf)
+    return products
+end
+
+function _compiled_paths_open_envelopes!(plan, w)
     for k in 1:length(plan.fast_paths), a in 1:plan.n_anchor
         slot = _compiled_paths_slot(k, a, plan.n_anchor)
         gain = plan.pinhole_gain[a]
@@ -677,11 +686,20 @@ function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bo
         only = w.only_envelopes[slot]
         @. open = closed + gain * only
     end
-    for synthesis in owner.synthesis
-        AdaptiveOpticsSim.Optics.synthesize_spectrum!(synthesis)
-    end
-    _compiled_paths_apply_pixel_mtf!(w.pixel_mtf)
-    return products
+    return nothing
+end
+
+_compiled_paths_selected_exact!(owner, product::Val{:unfringed}) =
+    _compiled_paths_selected!(owner, product)
+
+function _compiled_paths_selected_exact!(owner, ::Val{:fringed})
+    plan, w = owner.plan, owner.workspace
+    _compiled_paths_slow!(owner)
+    _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true)
+    _compiled_paths_fast!(w.only_envelopes, w.only_sources, owner, false)
+    _compiled_paths_open_envelopes!(plan, w)
+    AdaptiveOpticsSim.Optics.synthesize_spectrum!(owner.synthesis[2])
+    return owner.products.fringed
 end
 
 function _compiled_paths_selected!(owner, product::Val{:unfringed})
