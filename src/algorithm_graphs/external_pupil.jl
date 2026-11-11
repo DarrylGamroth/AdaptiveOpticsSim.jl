@@ -222,9 +222,11 @@ function _validate_external_intensity!(execution::_ExternalExposureExecution, in
     _with_prepared_device_execution_context(execution.context) do
         _launch_prepared_device_graph!(execution.validate,execution.context,
             (intensity,execution.validation))
-        copyto!(parent(execution.host_validation),execution.validation)
+        Backends._copy_prepared_device_buffer!(
+            execution.context, parent(execution.host_validation), execution.validation)
+        Backends._synchronize_prepared_device_execution_context_blocking!(execution.context)
     end
-    # The host copy completes this graph's stream before admission or mutation.
+    # Validation is complete before admission or exposure mutation.
     all(flag -> iszero(flag & UInt8(1)),execution.host_validation) ||
         throw(AlgorithmGraphError("intensity must be real, finite, nonnegative and representable as Float64"))
     !check_scale || all(flag -> iszero(flag & UInt8(2)),execution.host_validation) ||
@@ -288,7 +290,7 @@ function integrate_intensity!(emit,exposure::IntensityExposure,intensity::Abstra
     end
 end
 
-function _integrate_intensity!(emit,exposure,intensity,timestamp,duration,execution=nothing)
+function _integrate_intensity!(emit::F,exposure,intensity,timestamp,duration,execution=nothing) where {F}
     _validate_external_intensity!(execution,intensity,nothing;check_scale=false)
     start=model_nanoseconds(timestamp);span=model_nanoseconds(duration)
     span>0 || throw(AlgorithmGraphError("input coverage must be positive"))
@@ -336,7 +338,7 @@ one intensity output and sampling node per graph; input names bind the two
 pupil quantities explicitly. Transport adapters retain ownership of packet
 formats and convert their metadata to model timestamps/durations.
 """
-struct PreparedExternalPupil{G,E,A,O,I,P,X}
+struct PreparedExternalPupil{G,E,A,O,I,P,X,S}
     graphs::G
     exposures::E
     pupil_opd::A
@@ -345,7 +347,16 @@ struct PreparedExternalPupil{G,E,A,O,I,P,X}
     input_names::I
     propagation::P
     exposure_execution::X
+    sampling_nodes::S
     state::_ExternalPupilState
+end
+
+function PreparedExternalPupil(graphs, exposures, pupil_opd, pupil_amplitude,
+        observations, input_names, propagation, exposure_execution, state)
+    # Graph topology is fixed, but sampling is read from the live node each exposure.
+    sampling_nodes = map(observation -> Val(observation.sampling_node), values(observations))
+    return PreparedExternalPupil(graphs, exposures, pupil_opd, pupil_amplitude,
+        observations, input_names, propagation, exposure_execution, sampling_nodes, state)
 end
 
 # Optional numerical extensions may prepare coordinated propagation for a
@@ -735,7 +746,11 @@ function _validate_observation!(prepared, graph, observation, execution, shared)
     end
     intensity = graph_output(graph, observation.output)
     response = _observation_response(observation)
-    _with_prepared_device_execution_context(graph.context) do
+    if execution === nothing
+        _with_prepared_device_execution_context(graph.context) do
+            _validate_external_intensity!(execution, intensity, response)
+        end
+    else
         _validate_external_intensity!(execution, intensity, response)
     end
     return nothing
@@ -764,9 +779,9 @@ function _validate_observation_variants!(
     return nothing
 end
 
-function _integrate_observation!(emit, name, graph, observation, exposure, execution,
-        timestamp, duration, generation, kind=nothing)
-    sampling = optical_sampling_m(prepared_graph_node(graph, observation.sampling_node))
+function _integrate_observation!(emit::F, name, graph, observation, exposure, execution,
+        sampling_node, timestamp, duration, generation, kind=nothing) where {F}
+    sampling = optical_sampling_m(prepared_graph_node(graph, sampling_node))
     intensity = graph_output(graph, observation.output)
     response = _observation_response(observation)
     receive = function (image,pts,exposure,output_sequence)
@@ -806,11 +821,11 @@ function _integrate_observation!(emit, name, graph, observation, exposure, execu
     return nothing
 end
 
-function _integrate_observation_variants!(emit, name, graph, observation, exposure,
-        executions, timestamp, duration, generation, start, finish)
+function _integrate_observation_variants!(emit::F, name, graph, observation, exposure,
+        executions, sampling_node, timestamp, duration, generation, start, finish) where {F}
     if !haskey(observation, :chopping)
         _integrate_observation!(emit, name, graph, observation, exposure, first(executions),
-            timestamp, duration, generation)
+            sampling_node, timestamp, duration, generation)
         return nothing
     end
     chopping = observation.chopping
@@ -823,10 +838,10 @@ function _integrate_observation_variants!(emit, name, graph, observation, exposu
         span = ModelDuration(stop - cursor)
         if kind === :fringed
             _integrate_observation!(emit, name, graph, observation, exposure, first(executions),
-                stamp, span, generation, kind)
+                sampling_node, stamp, span, generation, kind)
         else
             _integrate_observation!(emit, name, chopping.unfringed, observation, exposure,
-                last(executions), stamp, span, generation, kind)
+                last(executions), sampling_node, stamp, span, generation, kind)
         end
         cursor = stop
     end
@@ -870,9 +885,9 @@ image before retaining it. No transport or controller runs in this API.
 Chopped observations classify the actual model-time exposure, not receive or
 emission parity. A gap discards partial coverage without moving the phase origin.
 """
-function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::AbstractMatrix,
+function step_external_pupil!(emit::F,prepared::PreparedExternalPupil,opd::AbstractMatrix,
         amplitude::AbstractMatrix,timestamp::ModelTimestamp,duration::ModelDuration;
-        domain::NTuple{16,UInt8},generation::UInt64,sequence::UInt64,lost_samples::UInt64=UInt64(0))
+        domain::NTuple{16,UInt8},generation::UInt64,sequence::UInt64,lost_samples::UInt64=UInt64(0)) where {F}
     size(opd)==size(amplitude)==size(prepared.pupil_opd) || throw(DimensionMismatch("pupil sample shape"))
     Base.require_one_based_indexing(opd,amplitude)
     compute_device(opd)==compute_device(amplitude)==HostComputeDevice() ||
@@ -920,9 +935,9 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
             prepared, graph, observation, exposure, executions, start, finish, shared)
     end
     map(keys(prepared.graphs), values(prepared.graphs), values(prepared.observations),
-            values(prepared.exposures), values(prepared.exposure_execution)) do name, graph, observation, exposure, executions
+            values(prepared.exposures), values(prepared.exposure_execution), prepared.sampling_nodes) do name, graph, observation, exposure, executions, sampling_node
         _integrate_observation_variants!(emit, name, graph, observation, exposure, executions,
-            timestamp, duration, generation, start, finish)
+            sampling_node, timestamp, duration, generation, start, finish)
     end
     state.domain=domain;state.generation=generation;state.sequence=sequence
     state.last_end_ns=finish;state.lost_samples=lost_samples
