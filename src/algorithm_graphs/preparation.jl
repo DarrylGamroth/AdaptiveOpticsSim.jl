@@ -1074,7 +1074,9 @@ mutable struct AlgorithmGraphState{DelayedValues}
 end
 
 """Concrete prepared owner for one portable algorithm graph run."""
-struct PreparedAlgorithmGraph{
+# Give each prepared graph stable identity. Its bindings remain fixed; only
+# the already-owned state and workspaces change during execution.
+mutable struct PreparedAlgorithmGraph{
     Target<:AbstractComputeDevice,
     Context,
     Nodes<:NamedTuple,
@@ -1084,15 +1086,15 @@ struct PreparedAlgorithmGraph{
     Outputs<:NamedTuple,
     State<:AlgorithmGraphState,
 }
-    name::Symbol
-    target::Target
-    context::Context
-    nodes::Nodes
-    execution::Execution
-    delayed_links::DelayedLinks
-    inputs::Inputs
-    outputs::Outputs
-    state::State
+    const name::Symbol
+    const target::Target
+    const context::Context
+    const nodes::Nodes
+    const execution::Execution
+    const delayed_links::DelayedLinks
+    const inputs::Inputs
+    const outputs::Outputs
+    const state::State
 end
 
 """
