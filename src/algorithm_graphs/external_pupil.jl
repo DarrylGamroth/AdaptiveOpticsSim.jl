@@ -217,11 +217,6 @@ function _prepare_external_exposure_execution(::Type{T}, graph, exposure, intens
     end
 end
 
-function _external_exposure_execution(prepared, name, graph)
-    variants = getproperty(prepared.exposure_execution,name)
-    return graph === getproperty(prepared.graphs,name) ? first(variants) : last(variants)
-end
-
 function _validate_external_intensity!(execution::_ExternalExposureExecution, intensity, response;
         check_scale=true)
     _with_prepared_device_execution_context(execution.context) do
@@ -682,15 +677,13 @@ function _propagate_external_pupil!(propagation, prepared, start, finish)
     # A sample may use either execution mode. Neither mode may bypass a
     # failure or an outstanding standalone step in the other retained owner.
     _require_external_pupil_graph_ready(propagation.graph)
-    for (name, graph) in pairs(prepared.graphs),
-            variant in _observation_graphs(graph, getproperty(prepared.observations, name))
-        _require_external_pupil_graph_ready(variant)
+    # Tuple mapping keeps each heterogeneous graph and observation concrete.
+    map(values(prepared.graphs), values(prepared.observations)) do graph, observation
+        foreach(_require_external_pupil_graph_ready, _observation_graphs(graph, observation))
     end
-    for (name, base_graph) in pairs(prepared.graphs), graph in
-            _observation_graphs(base_graph, getproperty(prepared.observations, name))
-        _with_prepared_device_execution_context(graph.context) do
-            copyto!(graph_input(graph,prepared.input_names.opd),prepared.pupil_opd)
-            copyto!(graph_input(graph,prepared.input_names.amplitude),prepared.pupil_amplitude)
+    map(values(prepared.graphs), values(prepared.observations)) do base, observation
+        foreach(_observation_graphs(base, observation)) do graph
+            _stage_external_pupil!(graph, prepared)
         end
     end
     owner = prepared_graph_node(propagation.graph, :propagation)
@@ -724,10 +717,38 @@ function _require_external_pupil_graph_ready(graph)
     return nothing
 end
 
-function _integrate_observation!(emit, prepared, name, graph, observation,
+function _stage_external_pupil!(graph, prepared)
+    _with_prepared_device_execution_context(graph.context) do
+        copyto!(graph_input(graph, prepared.input_names.opd), prepared.pupil_opd)
+        copyto!(graph_input(graph, prepared.input_names.amplitude), prepared.pupil_amplitude)
+    end
+    return nothing
+end
+
+function _validate_observation!(prepared, graph, observation, execution, shared)
+    if !shared
+        _stage_external_pupil!(graph, prepared)
+        step_graph!(graph)
+    end
+    intensity = graph_output(graph, observation.output)
+    _with_prepared_device_execution_context(graph.context) do
+        _validate_external_intensity!(execution, intensity, _observation_response(observation))
+    end
+    return nothing
+end
+
+function _validate_observation_variants!(
+        prepared, graph, observation, exposure, executions, start, finish, shared)
+    foreach(_active_observation_graphs(graph, observation, start, finish, exposure.duration_ns)) do active
+        execution = active === graph ? first(executions) : last(executions)
+        _validate_observation!(prepared, active, observation, execution, shared)
+    end
+    return nothing
+end
+
+function _integrate_observation!(emit, name, graph, observation, exposure, execution,
         timestamp, duration, generation, kind=nothing)
     sampling = optical_sampling_m(prepared_graph_node(graph, observation.sampling_node))
-    execution = _external_exposure_execution(prepared,name,graph)
     receive = function (image,pts,exposure,output_sequence)
         metadata = (;pts=model_nanoseconds(pts),duration=UInt64(model_nanoseconds(exposure)),
             generation,sequence=output_sequence,sampling_m=sampling)
@@ -753,17 +774,39 @@ function _integrate_observation!(emit, prepared, name, graph, observation,
         end
     end
     if execution === nothing
-        integrate_intensity!(receive,getproperty(prepared.exposures,name),
+        integrate_intensity!(receive,exposure,
             graph_output(graph,observation.output),timestamp,duration)
     else
         _with_prepared_device_execution_context(execution.context) do
-            _integrate_intensity!(receive,getproperty(prepared.exposures,name),
+            _integrate_intensity!(receive,exposure,
                 graph_output(graph,observation.output),timestamp,duration,execution)
             # Both chopping variants share scientific accumulation storage but
             # retain separate streams; complete the final clear before handing
             # that storage to the next variant or the caller.
             _synchronize_prepared_device_execution_context!(execution.context)
         end
+    end
+    return nothing
+end
+
+function _integrate_observation_variants!(emit, name, graph, observation, exposure,
+        executions, timestamp, duration, generation, start, finish)
+    if !haskey(observation, :chopping)
+        _integrate_observation!(emit, name, graph, observation, exposure, first(executions),
+            timestamp, duration, generation)
+        return nothing
+    end
+    chopping = observation.chopping
+    cursor = start
+    while cursor < finish
+        boundary = Base.checked_add(exposure.start_ns, exposure.duration_ns)
+        stop = min(finish, boundary)
+        kind = _chopped_image_kind(chopping, cursor, exposure.duration_ns)
+        active = kind === :fringed ? graph : chopping.unfringed
+        execution = active === graph ? first(executions) : last(executions)
+        _integrate_observation!(emit, name, active, observation, exposure, execution,
+            ModelTimestamp(cursor), ModelDuration(stop - cursor), generation, kind)
+        cursor = stop
     end
     return nothing
 end
@@ -849,40 +892,15 @@ function step_external_pupil!(emit,prepared::PreparedExternalPupil,opd::Abstract
         prepared.pupil_opd[index]=a==0 ? 0 : opd[index]
     end
     shared = _propagate_external_pupil!(prepared.propagation, prepared, start, finish)
-    for (name,base_graph) in pairs(prepared.graphs), graph in _active_observation_graphs(
-            base_graph,getproperty(prepared.observations,name),start,finish,
-            getproperty(prepared.exposures,name).duration_ns)
-        if !shared
-            _with_prepared_device_execution_context(graph.context) do
-                copyto!(graph_input(graph,prepared.input_names.opd),prepared.pupil_opd)
-                copyto!(graph_input(graph,prepared.input_names.amplitude),prepared.pupil_amplitude)
-            end
-            step_graph!(graph)
-        end
-        intensity=graph_output(graph,getproperty(prepared.observations,name).output)
-        _with_prepared_device_execution_context(graph.context) do
-            response = _observation_response(getproperty(prepared.observations,name))
-            _validate_external_intensity!(_external_exposure_execution(prepared,name,graph),
-                intensity,response)
-        end
+    map(values(prepared.graphs), values(prepared.observations), values(prepared.exposures),
+            values(prepared.exposure_execution)) do graph, observation, exposure, executions
+        _validate_observation_variants!(
+            prepared, graph, observation, exposure, executions, start, finish, shared)
     end
-    for (name,graph) in pairs(prepared.graphs)
-        observation=getproperty(prepared.observations,name)
-        if !haskey(observation,:chopping)
-            _integrate_observation!(emit,prepared,name,graph,observation,timestamp,duration,generation)
-            continue
-        end
-        exposure=getproperty(prepared.exposures,name)
-        cursor=start
-        while cursor<finish
-            boundary=Base.checked_add(exposure.start_ns,exposure.duration_ns)
-            stop=min(finish,boundary)
-            kind=_chopped_image_kind(observation.chopping,cursor,exposure.duration_ns)
-            selected=kind===:fringed ? graph : observation.chopping.unfringed
-            _integrate_observation!(emit,prepared,name,selected,observation,
-                ModelTimestamp(cursor),ModelDuration(stop-cursor),generation,kind)
-            cursor=stop
-        end
+    map(keys(prepared.graphs), values(prepared.graphs), values(prepared.observations),
+            values(prepared.exposures), values(prepared.exposure_execution)) do name, graph, observation, exposure, executions
+        _integrate_observation_variants!(emit, name, graph, observation, exposure, executions,
+            timestamp, duration, generation, start, finish)
     end
     state.domain=domain;state.generation=generation;state.sequence=sequence
     state.last_end_ns=finish;state.lost_samples=lost_samples
