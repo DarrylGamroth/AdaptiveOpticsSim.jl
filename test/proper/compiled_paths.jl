@@ -634,3 +634,45 @@ check_compiled_branch_batch(Array,AdaptiveOpticsSim.Backends.HostComputeDevice()
 check_compiled_branch_rejections()
 
 check_compiled_input_groups(Array,AdaptiveOpticsSim.Backends.HostComputeDevice())
+
+@testset "Cooperative compiled propagation" begin
+    optics = AdaptiveOpticsSim.Optics
+    fixture = compiled_paths_synthetic_fixture()
+    owner = optics.prepare_compiled_optical_paths(fixture.metadata, ref -> fixture.arrays[ref])
+    expected = copy(optics.propagate_compiled_optical_paths!(owner).fringed)
+    checks = Ref(0)
+    checkpoint = () -> (checks[] += 1)
+    products = optics.with_propagation_checkpoint(checkpoint) do
+        optics.propagate_compiled_optical_paths!(owner)
+    end
+    @test checks[] > 1
+    @test products.fringed == expected
+
+    abort = () -> throw(InterruptException())
+    @test_throws InterruptException optics.with_propagation_checkpoint(abort) do
+        optics.propagate_compiled_optical_paths!(owner)
+    end
+    @test optics.propagate_compiled_optical_paths!(owner).fringed == expected
+    @test compiled_paths_allocated(owner) == 0
+
+    mktempdir() do directory
+        model = compiled_paths_yaml_fixture(directory; fixture)
+        graph = compiled_paths_test_graph(model)
+        step_graph!(graph)
+        expected_graph = copy(graph_output(graph, :fringed))
+        reset_graph!(graph)
+        checks[] = 0
+        abort_after_work = () -> begin
+            checks[] += 1
+            checks[] == 4 && throw(InterruptException())
+        end
+        @test_throws InterruptException optics.with_propagation_checkpoint(abort_after_work) do
+            step_graph!(graph)
+        end
+        @test graph_failed(graph)
+        @test !graph_step_pending(graph)
+        reset_graph!(graph)
+        step_graph!(graph)
+        @test graph_output(graph, :fringed) == expected_graph
+    end
+end
