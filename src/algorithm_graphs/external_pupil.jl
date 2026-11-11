@@ -718,9 +718,12 @@ function _require_external_pupil_graph_ready(graph)
 end
 
 function _stage_external_pupil!(graph, prepared)
+    opd = graph_input(graph, prepared.input_names.opd)
+    amplitude = graph_input(graph, prepared.input_names.amplitude)
+    pupil_opd, pupil_amplitude = prepared.pupil_opd, prepared.pupil_amplitude
     _with_prepared_device_execution_context(graph.context) do
-        copyto!(graph_input(graph, prepared.input_names.opd), prepared.pupil_opd)
-        copyto!(graph_input(graph, prepared.input_names.amplitude), prepared.pupil_amplitude)
+        copyto!(opd, pupil_opd)
+        copyto!(amplitude, pupil_amplitude)
     end
     return nothing
 end
@@ -731,17 +734,32 @@ function _validate_observation!(prepared, graph, observation, execution, shared)
         step_graph!(graph)
     end
     intensity = graph_output(graph, observation.output)
+    response = _observation_response(observation)
     _with_prepared_device_execution_context(graph.context) do
-        _validate_external_intensity!(execution, intensity, _observation_response(observation))
+        _validate_external_intensity!(execution, intensity, response)
     end
     return nothing
 end
 
 function _validate_observation_variants!(
         prepared, graph, observation, exposure, executions, start, finish, shared)
-    foreach(_active_observation_graphs(graph, observation, start, finish, exposure.duration_ns)) do active
-        execution = active === graph ? first(executions) : last(executions)
-        _validate_observation!(prepared, active, observation, execution, shared)
+    if !haskey(observation, :chopping)
+        return _validate_observation!(prepared, graph, observation, first(executions), shared)
+    end
+    chopping = observation.chopping
+    first_kind = _chopped_image_kind(chopping, start, exposure.duration_ns)
+    crosses_phase = first_kind !== _chopped_image_kind(chopping, finish - 1, exposure.duration_ns)
+    # Keep each phase's graph and execution concrete, in model-time order.
+    if first_kind === :fringed
+        _validate_observation!(prepared, graph, observation, first(executions), shared)
+        if crosses_phase
+            _validate_observation!(prepared, chopping.unfringed, observation, last(executions), shared)
+        end
+    else
+        _validate_observation!(prepared, chopping.unfringed, observation, last(executions), shared)
+        if crosses_phase
+            _validate_observation!(prepared, graph, observation, first(executions), shared)
+        end
     end
     return nothing
 end
@@ -749,11 +767,12 @@ end
 function _integrate_observation!(emit, name, graph, observation, exposure, execution,
         timestamp, duration, generation, kind=nothing)
     sampling = optical_sampling_m(prepared_graph_node(graph, observation.sampling_node))
+    intensity = graph_output(graph, observation.output)
+    response = _observation_response(observation)
     receive = function (image,pts,exposure,output_sequence)
         metadata = (;pts=model_nanoseconds(pts),duration=UInt64(model_nanoseconds(exposure)),
             generation,sequence=output_sequence,sampling_m=sampling)
         kind === nothing || (metadata = merge(metadata,(;chopped_image_kind=kind)))
-        response = _observation_response(observation)
         if response === nothing
             emit(name,image,metadata)
         else
@@ -774,12 +793,10 @@ function _integrate_observation!(emit, name, graph, observation, exposure, execu
         end
     end
     if execution === nothing
-        integrate_intensity!(receive,exposure,
-            graph_output(graph,observation.output),timestamp,duration)
+        integrate_intensity!(receive,exposure,intensity,timestamp,duration)
     else
         _with_prepared_device_execution_context(execution.context) do
-            _integrate_intensity!(receive,exposure,
-                graph_output(graph,observation.output),timestamp,duration,execution)
+            _integrate_intensity!(receive,exposure,intensity,timestamp,duration,execution)
             # Both chopping variants share scientific accumulation storage but
             # retain separate streams; complete the final clear before handing
             # that storage to the next variant or the caller.
@@ -802,10 +819,15 @@ function _integrate_observation_variants!(emit, name, graph, observation, exposu
         boundary = Base.checked_add(exposure.start_ns, exposure.duration_ns)
         stop = min(finish, boundary)
         kind = _chopped_image_kind(chopping, cursor, exposure.duration_ns)
-        active = kind === :fringed ? graph : chopping.unfringed
-        execution = active === graph ? first(executions) : last(executions)
-        _integrate_observation!(emit, name, active, observation, exposure, execution,
-            ModelTimestamp(cursor), ModelDuration(stop - cursor), generation, kind)
+        stamp = ModelTimestamp(cursor)
+        span = ModelDuration(stop - cursor)
+        if kind === :fringed
+            _integrate_observation!(emit, name, graph, observation, exposure, first(executions),
+                stamp, span, generation, kind)
+        else
+            _integrate_observation!(emit, name, chopping.unfringed, observation, exposure,
+                last(executions), stamp, span, generation, kind)
+        end
         cursor = stop
     end
     return nothing
