@@ -116,3 +116,5 @@ public direct_imaging_batch_capability
 public direct_imaging_batch_sources, direct_imaging_batch_inputs
 public direct_imaging_batch_products, direct_imaging_batch_count
 public validate_direct_imaging_batch
+
+public with_propagation_checkpoint

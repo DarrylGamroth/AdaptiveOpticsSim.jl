@@ -173,11 +173,19 @@ function _compiled_paths_interpolate!(work, kernel, source, coefficients)
     return work.opd
 end
 
+_check_propagation(::Nothing) = nothing
+_check_propagation(check::Function) = check()
+
+_compiled_paths_checkpoint(target) = nothing
+_compiled_paths_checkpoint(::Backends.HostComputeDevice) =
+    AdaptiveOpticsSim.Optics._propagation_checkpoint[]
+
 # Independent ordinary traversal: no schedule, grouping or prepared propagation.
 # Keep the original operation arithmetic as the numerical oracle.
-function _compiled_paths_execute_reference!(owner, sequence, offset, first, last)
+function _compiled_paths_execute_reference!(owner, sequence, offset, first, last, check=nothing)
     w = owner.workspace
     for index in first:last
+        _check_propagation(check)
         op = sequence[index]
         work = w.operations[offset + index]
         if op.kind == PathMultiply
@@ -206,22 +214,22 @@ end
 
 @inline _compiled_paths_slot(path, anchor, n_anchor) = (path - 1) * n_anchor + anchor
 
-function _compiled_paths_sequence!(owner,sequence,offset,sharing,share_prefix,prepared,stage)
+function _compiled_paths_sequence!(owner,sequence,offset,sharing,share_prefix,prepared,stage,check)
     if prepared
         schedule = share_prefix ? owner.execution.shared[stage] : owner.execution.unshared[stage]
-        _compiled_paths_execute_schedule!(owner,sequence,offset,schedule)
+        _compiled_paths_execute_schedule!(owner,sequence,offset,schedule,owner.execution.steps,check)
     elseif !share_prefix
-        _compiled_paths_execute_reference!(owner,sequence,offset,1,length(sequence))
+        _compiled_paths_execute_reference!(owner,sequence,offset,1,length(sequence),check)
     else
         first=sharing.count+1
         sharing.count>0 && Backends.copyto_backend_async!(owner.workspace.field,
             owner.workspace.shared_prefixes[sharing.cache_index])
         for checkpoint in sharing.checkpoints
-            _compiled_paths_execute_reference!(owner,sequence,offset,first,checkpoint.index)
+            _compiled_paths_execute_reference!(owner,sequence,offset,first,checkpoint.index,check)
             Backends.copyto_backend_async!(owner.workspace.shared_prefixes[checkpoint.cache_index],owner.workspace.field)
             first=checkpoint.index+1
         end
-        _compiled_paths_execute_reference!(owner,sequence,offset,first,length(sequence))
+        _compiled_paths_execute_reference!(owner,sequence,offset,first,length(sequence),check)
     end
     return offset + length(sequence)
 end
@@ -527,7 +535,9 @@ end
 function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true)
     plan,w=owner.plan,owner.workspace
     offset=0
+    check = _compiled_paths_checkpoint(plan.target)
     for (index,path) in enumerate(plan.paths)
+        _check_propagation(check)
         sharing=plan.shared_prefixes[index]
         # Each reused prefix is produced earlier in this invocation, including
         # during capture. Scratch offsets remain those of the original program;
@@ -535,7 +545,7 @@ function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true
         if !share_prefix || sharing.prefix.count==0
             Backends.copyto_backend_async!(w.field,path.entrance)
         end
-        offset=_compiled_paths_sequence!(owner,path.prefix,offset,sharing.prefix,share_prefix,prepared,3index-2)
+        offset=_compiled_paths_sequence!(owner,path.prefix,offset,sharing.prefix,share_prefix,prepared,3index-2,check)
         pair = prepared && share_prefix ? _compiled_paths_branch_pair(w.branch_batch,index) : nothing
         if pair !== nothing
             offset = _compiled_paths_branches!(owner,path,sharing,offset,index,pair)
@@ -544,13 +554,13 @@ function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true
         if !share_prefix || sharing.only.count==0
             Backends.copyto_backend_async!(w.prefix,w.field)
         end
-        offset=_compiled_paths_sequence!(owner,path.closed,offset,sharing.closed,share_prefix,prepared,3index-1)
+        offset=_compiled_paths_sequence!(owner,path.closed,offset,sharing.closed,share_prefix,prepared,3index-1,check)
         slot=_compiled_paths_slot(path.path_index,path.anchor_index,plan.n_anchor)
         _compiled_paths_stage_image!(w.image_resample,owner,2index-1,w.closed_sources[slot],prepared)
         if !share_prefix || sharing.only.count==0
             Backends.copyto_backend_async!(w.field,w.prefix)
         end
-        offset=_compiled_paths_sequence!(owner,path.only,offset,sharing.only,share_prefix,prepared,3index)
+        offset=_compiled_paths_sequence!(owner,path.only,offset,sharing.only,share_prefix,prepared,3index,check)
         _compiled_paths_stage_image!(w.image_resample,owner,2index,w.only_sources[slot],prepared)
     end
     for a in 1:plan.n_anchor
@@ -573,7 +583,9 @@ end
 
 function _compiled_paths_fast_scalar!(envelopes, sources, owner, free_ghost)
     plan, w = owner.plan, owner.workspace
+    check = _compiled_paths_checkpoint(plan.target)
     for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
+        _check_propagation(check)
         out = envelopes[_compiled_paths_slot(k, a, plan.n_anchor)]
         if path.source_index == 0
             if free_ghost
@@ -615,7 +627,9 @@ end
 function _compiled_paths_fast!(envelopes, sources, owner, free_ghost, defocus=nothing)
     plan, fast = owner.plan, owner.workspace.fast
     _compiled_paths_defocus!(sources, owner, defocus)
+    check = _compiled_paths_checkpoint(plan.target)
     for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
+        _check_propagation(check)
         slot = _compiled_paths_slot(k, a, plan.n_anchor)
         defocus_slot = fast.defocus_slots[slot]
         if defocus_slot != 0
@@ -673,7 +687,9 @@ function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bo
         _compiled_paths_fast_scalar!(w.only_envelopes, w.only_sources, owner, false)
     end
     _compiled_paths_open_envelopes!(plan, w)
+    check = _compiled_paths_checkpoint(plan.target)
     for synthesis in owner.synthesis
+        _check_propagation(check)
         AdaptiveOpticsSim.Optics.synthesize_spectrum!(synthesis)
     end
     _compiled_paths_apply_pixel_mtf!(w.pixel_mtf)
