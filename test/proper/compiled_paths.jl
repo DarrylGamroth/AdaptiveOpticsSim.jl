@@ -269,7 +269,7 @@ end
         ref->overflow_arrays[ref]; T=Float32)
 end
 
-@testset "Native graph selects an exclusively routed SCC product" begin
+@testset "Native CPU graphs retain the original SCC products" begin
     mktempdir() do directory
         model = compiled_paths_yaml_fixture(directory)
         dm = Float32[1e-8 * sin(x + y) for y in 1:8, x in 1:8]
@@ -279,9 +279,12 @@ end
         @test AlgorithmGraphs.prepared_graph_node(full, :optics).selection === nothing
         for product in (:fringed, :unfringed)
             selected = compiled_paths_test_graph(model; dm, opd, amplitude, products=(product,))
-            @test AlgorithmGraphs.prepared_graph_node(selected, :optics).selection === (Val(product), nothing)
+            owner = AlgorithmGraphs.prepared_graph_node(selected, :optics)
+            @test owner.selection === nothing
             step_graph!(selected)
             @test graph_output(selected, product) == graph_output(full, product)
+            @test CP._compiled_paths_selected_exact!(owner.propagation, Val(product)) ==
+                graph_output(full, product)
             reset_graph!(selected)
             step_graph!(selected)
             @test graph_output(selected, product) == graph_output(full, product)

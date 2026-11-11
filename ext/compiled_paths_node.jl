@@ -140,9 +140,6 @@ function _native_scc_selection(owner, product, execution, target)
     return nothing
 end
 
-_native_scc_selection(owner, product, ::AOG.StreamGraphExecution, ::Backends.HostComputeDevice) =
-    (product, nothing)
-
 function _native_scc_selection(owner, product, ::AOG.CapturedGraphExecution,
         ::Backends.AcceleratorComputeDevice{Backends.CUDABackend})
     return (product, _prepare_scc_field_merge(owner.propagation))
