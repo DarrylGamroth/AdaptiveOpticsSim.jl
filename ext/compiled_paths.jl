@@ -718,9 +718,13 @@ function _compiled_paths_interpolate!(work, kernel, source, coefficients)
     return work.opd
 end
 
-function _compiled_paths_execute!(owner, sequence, offset, first=1, last=length(sequence))
+_check_propagation(::Nothing) = nothing
+_check_propagation(check::Function) = check()
+
+function _compiled_paths_execute!(owner, sequence, offset, check, first=1, last=length(sequence))
     w = owner.workspace
     for index in first:last
+        _check_propagation(check)
         op = sequence[index]
         work = w.operations[offset + index]
         if op.kind == PathMultiply
@@ -760,16 +764,17 @@ end
 
 @inline _compiled_paths_slot(path, anchor, n_anchor) = (path - 1) * n_anchor + anchor
 
-function _compiled_paths_slow!(owner, share_prefix::Bool=true)
+function _compiled_paths_slow!(owner, share_prefix::Bool, check)
     plan, w = owner.plan, owner.workspace
     offset = 0
     for (index, path) in enumerate(plan.paths)
+        _check_propagation(check)
         shared = plan.shared_prefixes[index]
         if share_prefix && shared.count > 0
             cached = w.shared_prefixes[shared.cache_index]
             if index == shared.first_path
                 Backends.copyto_backend_async!(w.field, path.entrance)
-                _compiled_paths_execute!(owner, path.prefix, offset, 1, shared.count)
+                _compiled_paths_execute!(owner, path.prefix, offset, check, 1, shared.count)
                 Backends.copyto_backend_async!(cached, w.field)
             else
                 Backends.copyto_backend_async!(w.field, cached)
@@ -780,18 +785,18 @@ function _compiled_paths_slow!(owner, share_prefix::Bool=true)
             # PROPER operations rebind their wavelength, sampling, position
             # and reference surface in _compiled_paths_proper!; no trajectory
             # geometry or FFT scratch binding is restored from this field.
-            offset = _compiled_paths_execute!(owner, path.prefix, offset, shared.count + 1)
+            offset = _compiled_paths_execute!(owner, path.prefix, offset, check, shared.count + 1)
         else
             Backends.copyto_backend_async!(w.field, path.entrance)
-            offset = _compiled_paths_execute!(owner, path.prefix, offset)
+            offset = _compiled_paths_execute!(owner, path.prefix, offset, check)
         end
         Backends.copyto_backend_async!(w.prefix, w.field)
-        offset = _compiled_paths_execute!(owner, path.closed, offset)
+        offset = _compiled_paths_execute!(owner, path.closed, offset, check)
         slot = _compiled_paths_slot(path.path_index, path.anchor_index, plan.n_anchor)
         _compiled_paths_crop!(w.crop, w.field, plan.crop_start)
         _compiled_paths_resample_image!(w.closed_sources[slot], w.crop, owner)
         Backends.copyto_backend_async!(w.field, w.prefix)
-        offset = _compiled_paths_execute!(owner, path.only, offset)
+        offset = _compiled_paths_execute!(owner, path.only, offset, check)
         _compiled_paths_crop!(w.crop, w.field, plan.crop_start)
         _compiled_paths_resample_image!(w.only_sources[slot], w.crop, owner)
     end
@@ -813,9 +818,10 @@ function _compiled_paths_resample_image!(out, input, owner)
     return out
 end
 
-function _compiled_paths_fast!(envelopes, sources, owner, free_ghost)
+function _compiled_paths_fast!(envelopes, sources, owner, free_ghost, check)
     plan, w = owner.plan, owner.workspace
     for (k, path) in enumerate(plan.fast_paths), a in 1:plan.n_anchor
+        _check_propagation(check)
         out = envelopes[_compiled_paths_slot(k, a, plan.n_anchor)]
         if path.source_index == 0
             if free_ghost
@@ -868,9 +874,11 @@ end
 
 function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bool=true)
     plan, w, products = owner.plan, owner.workspace, owner.products
-    _compiled_paths_slow!(owner, share_prefix)
-    _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true)
-    _compiled_paths_fast!(w.only_envelopes, w.only_sources, owner, false)
+    check = plan.target == Backends.HostComputeDevice() ?
+        AdaptiveOpticsSim.Optics._propagation_checkpoint[] : nothing
+    _compiled_paths_slow!(owner, share_prefix, check)
+    _compiled_paths_fast!(w.closed_envelopes, w.closed_sources, owner, true, check)
+    _compiled_paths_fast!(w.only_envelopes, w.only_sources, owner, false, check)
     for k in 1:length(plan.fast_paths), a in 1:plan.n_anchor
         slot = _compiled_paths_slot(k, a, plan.n_anchor)
         gain = plan.pinhole_gain[a]
@@ -880,6 +888,7 @@ function _enqueue_compiled_paths!(owner::PreparedCompiledPaths, share_prefix::Bo
         @. open = closed + gain * only
     end
     for synthesis in owner.synthesis
+        _check_propagation(check)
         AdaptiveOpticsSim.Optics.synthesize_spectrum!(synthesis)
     end
     _compiled_paths_apply_pixel_mtf!(w.pixel_mtf)

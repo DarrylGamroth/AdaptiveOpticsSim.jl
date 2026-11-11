@@ -35,6 +35,7 @@ using KernelAbstractions
 using LinearAlgebra
 using Statistics
 import Interpolations
+using Base.ScopedValues: ScopedValue, with
 
 import ..AdaptiveOpticsSim:
     DimensionMismatchError,
@@ -77,6 +78,21 @@ import ..Backends:
     queue_kernel!,
     require_same_backend,
     synchronize_backend!
+
+const _propagation_checkpoint = ScopedValue{Union{Nothing,Function}}(nothing)
+
+"""
+    with_propagation_checkpoint(f, checkpoint)
+
+Run `f()` with a cooperative callback between CPU compiled optical propagation
+operations on the current task. The callback may pause or throw before the
+step publishes its products. After a throw, reset a prepared graph before
+reusing it. The callback must not access or mutate the in-flight optics.
+Accelerator execution does not invoke this callback.
+"""
+function with_propagation_checkpoint(f::F, checkpoint::C) where {F,C<:Function}
+    return with(f, _propagation_checkpoint => checkpoint)
+end
 
 include("zemax.jl")
 include("types.jl")
