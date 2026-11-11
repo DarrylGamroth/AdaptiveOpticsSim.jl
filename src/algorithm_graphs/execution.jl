@@ -142,6 +142,10 @@ boundary and therefore block during submission. The API promises deferred
 graph-boundary completion, not that every admitted node is nonblocking.
 """
 function step_graph_async!(graph::PreparedAlgorithmGraph)
+    return GraphStepTicket(graph, _submit_graph_step!(graph))
+end
+
+function _submit_graph_step!(graph::PreparedAlgorithmGraph)
     state = graph.state
     state.failed && throw(AlgorithmGraphError(
         "the algorithm graph is stopped after a failed step; reset it before reuse",
@@ -171,7 +175,7 @@ function step_graph_async!(graph::PreparedAlgorithmGraph)
         state.pending_sequence = UInt64(0)
         rethrow()
     end
-    return GraphStepTicket(graph, sequence)
+    return sequence
 end
 
 """
@@ -189,11 +193,15 @@ end
 # before the graph sequence commits. Publication shares the graph's existing
 # failure boundary; it cannot leave an advanced, healthy graph after failure.
 function _wait_graph_step!(ticket::GraphStepTicket, complete)
-    graph = ticket.graph
+    _complete_graph_step!(ticket.graph, ticket.sequence, complete)
+    return ticket.graph
+end
+
+function _complete_graph_step!(graph::PreparedAlgorithmGraph, sequence::UInt64, complete)
     state = graph.state
-    state.pending || _throw_stale_graph_step_ticket(ticket.sequence)
-    state.pending_sequence == ticket.sequence || throw(AlgorithmGraphError(
-        "algorithm graph completion ticket $(ticket.sequence) does not match " *
+    state.pending || _throw_stale_graph_step_ticket(sequence)
+    state.pending_sequence == sequence || throw(AlgorithmGraphError(
+        "algorithm graph completion ticket $sequence does not match " *
         "pending frame $(state.pending_sequence)",
     ))
     try
@@ -211,10 +219,10 @@ function _wait_graph_step!(ticket::GraphStepTicket, complete)
         state.pending_sequence = UInt64(0)
         rethrow()
     end
-    state.step_sequence = ticket.sequence
+    state.step_sequence = sequence
     state.pending = false
     state.pending_sequence = UInt64(0)
-    return graph
+    return nothing
 end
 
 """
@@ -223,12 +231,16 @@ end
 Invoke every prepared node once in prepared dependency order. Delayed links and the
 step sequence publish only after the execution context reports completion. A
 thrown node or device error stops the graph until [`reset_graph!`](@ref). This
-synchronous
-compatibility surface submits one frame with [`step_graph_async!`](@ref) and
-consumes its completion ticket before returning.
+synchronous call submits and completes one frame before returning.
 """
 function step_graph!(graph::PreparedAlgorithmGraph)
-    return wait_graph_step!(step_graph_async!(graph))
+    _step_graph!(graph)
+    return graph
+end
+
+function _step_graph!(graph::PreparedAlgorithmGraph)
+    sequence = _submit_graph_step!(graph)
+    return _complete_graph_step!(graph, sequence, nothing)
 end
 
 """

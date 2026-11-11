@@ -742,7 +742,7 @@ end
 function _validate_observation!(prepared, graph, observation, execution, shared)
     if !shared
         _stage_external_pupil!(graph, prepared)
-        step_graph!(graph)
+        _step_graph!(graph)
     end
     intensity = graph_output(graph, observation.output)
     response = _observation_response(observation)
@@ -802,7 +802,7 @@ function _integrate_observation!(emit::F, name, graph, observation, exposure, ex
                 # before their submission, as with the original host broadcast.
                 _synchronize_prepared_device_execution_context!(execution.context)
             end
-            step_graph!(response.graph)
+            _step_graph!(response.graph)
             emit(name,graph_output(response.graph, response.output),
                 merge(metadata,(;quantity=:detector_frame,frame_schema=response.frame_schema)))
         end
