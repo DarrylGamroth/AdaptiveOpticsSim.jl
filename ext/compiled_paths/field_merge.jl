@@ -2,15 +2,16 @@
 # The admitted suffix is common and linear, so it can propagate one combined
 # field. Build a prefix-only checkpoint schedule so no selected traversal
 # consumes a checkpoint from an omitted closed or pinhole-only suffix.
-struct SCCFieldMerge{S,P,R,I,D}
+struct SCCFieldMerge{S,P,R,I,D,C}
     steps::S
     prefixes::P
     resampling::R
     image_resample::I
     defocus::D
+    composed::C
 end
 
-function _prepare_scc_field_merge(owner; share_defocus=false)
+function _prepare_scc_field_merge(owner; share_defocus=false, compose_resampling=false)
     plan, w = owner.plan, owner.workspace
     w.branch_batch === nothing && return nothing
     w.image_resample === nothing && return nothing
@@ -64,8 +65,66 @@ function _prepare_scc_field_merge(owner; share_defocus=false)
         batch.kernel, batch.forward, _compiled_paths_seal(outputs), batch.coefficients)
     crop = _compiled_paths_prepare_branch_resampling(plan, w.field, plan.paths, resample)
     defocus = share_defocus ? _prepare_shared_scc_defocus(owner) : nothing
+    composed = compose_resampling ? _prepare_scc_composed_resampling(plan, w.field, crop, resample) : nothing
     return SCCFieldMerge(_compiled_paths_seal(steps), _compiled_paths_seal(prefixes),
-        crop, resample, defocus)
+        crop, resample, defocus, composed)
+end
+
+struct SCCComposedResampling{O,A}
+    operators::O
+    temporary::A
+end
+
+function _prepare_scc_composed_resampling(plan, field::A, crop, resample) where {A}
+    T = real(eltype(field))
+    T === Float32 || return nothing
+    n = plan.image_size
+    # Convert the second resampling's raw FFT input to a centered image input.
+    centered = mod1.((1:n) .- fld(n, 2), n)
+    image = fft(ComplexF64.(dropdims(Array(resample.kernel); dims=3)), 2)[:, centered]
+    operators = Tuple{A,A}[]
+    for entry in crop.operators
+        entry === nothing && return nothing
+        kernel, post = entry
+        first = ComplexF64.(Array(kernel))
+        if isempty(post)
+            left = right = image * first
+        else
+            phase = ComplexF64.(Array(post))
+            i, j = Tuple(argmax(abs.(phase)))
+            pivot = phase[i, j]
+            iszero(pivot) && return nothing
+            row = phase[:, j]
+            column = phase[i, :] ./ pivot
+            # Admit only an intermediate screen separable to field precision.
+            maximum(abs, phase - row * transpose(column)) <= 4eps(T) * abs(pivot) ||
+                return nothing
+            left = image * (row .* first)
+            right = image * (column .* first)
+        end
+        scale = n * plan.grid
+        push!(operators, (_compiled_paths_resident(plan.target, left ./ scale, eltype(field)),
+            _compiled_paths_resident(plan.target, right ./ scale, eltype(field))))
+    end
+    return SCCComposedResampling(_compiled_paths_seal(operators), crop.temporary)
+end
+
+function _finish_scc_resampling!(owner, merge, ::Nothing, op, work, index, output)
+    _compiled_paths_stage_branch_image!(merge.resampling, owner, op, work,
+        index, index, output, merge.image_resample)
+    return nothing
+end
+
+function _finish_scc_resampling!(owner, merge, composed::SCCComposedResampling,
+        op, work, index, output)
+    w = owner.workspace
+    frequency = w.physical_fft.scratch
+    _compiled_paths_apply_resampling_roll!(frequency, op, work, true)
+    left, right = composed.operators[index]
+    coefficients = w.prepared_mul_coefficients
+    Backends._enqueue_mul!(composed.temporary, left, frequency, coefficients)
+    Backends._enqueue_mul!(output, composed.temporary, transpose(right), coefficients)
+    return nothing
 end
 
 struct SharedSCCDefocus{A,F,S,G}
@@ -207,8 +266,8 @@ function _propagate_scc_field!(owner, path, offset, index, merge, product)
         n^2 * previous.scale, one(closed[terminal].gouy), cld(n, 2); ndrange=shape)
     slot = _compiled_paths_slot(path.path_index, path.anchor_index, plan.n_anchor)
     work = w.operations[offset + length(closed)]
-    _compiled_paths_stage_branch_image!(merge.resampling, owner, last(closed), work,
-        index, index, w.closed_sources[slot], merge.image_resample)
+    _finish_scc_resampling!(owner, merge, merge.composed, last(closed), work,
+        index, w.closed_sources[slot])
     return nothing
 end
 
