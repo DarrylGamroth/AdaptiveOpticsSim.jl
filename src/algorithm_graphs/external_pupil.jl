@@ -709,8 +709,8 @@ function _propagate_external_pupil!(propagation, prepared, start, finish)
     # Every other runtime input (including physical DM OPD) remains bound
     # explicitly to the original branch input. The coordinated node checks
     # matching values before executing its shared prefix.
-    sequence = _submit_graph_step!(propagation.graph)
-    _complete_graph_step!(propagation.graph, sequence, () -> _publish_external_pupil_propagation!(propagation))
+    _submit_graph_step!(propagation.graph)
+    _finish_pending_graph_step!(propagation.graph, () -> _publish_external_pupil_propagation!(propagation))
     return true
 end
 

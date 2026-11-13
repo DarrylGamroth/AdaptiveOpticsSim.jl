@@ -142,7 +142,8 @@ boundary and therefore block during submission. The API promises deferred
 graph-boundary completion, not that every admitted node is nonblocking.
 """
 function step_graph_async!(graph::PreparedAlgorithmGraph)
-    return GraphStepTicket(graph, _submit_graph_step!(graph))
+    _submit_graph_step!(graph)
+    return GraphStepTicket(graph, graph.state.pending_sequence)
 end
 
 function _submit_graph_step!(graph::PreparedAlgorithmGraph)
@@ -175,7 +176,7 @@ function _submit_graph_step!(graph::PreparedAlgorithmGraph)
         state.pending_sequence = UInt64(0)
         rethrow()
     end
-    return sequence
+    return nothing
 end
 
 """
@@ -204,6 +205,14 @@ function _complete_graph_step!(graph::PreparedAlgorithmGraph, sequence::UInt64, 
         "algorithm graph completion ticket $sequence does not match " *
         "pending frame $(state.pending_sequence)",
     ))
+    return _finish_pending_graph_step!(graph, complete)
+end
+
+# A synchronous step owns the pending state throughout. Read its sequence here
+# so the number never has to cross an inferred or dynamically dispatched call.
+function _finish_pending_graph_step!(graph::PreparedAlgorithmGraph, complete)
+    state = graph.state
+    sequence = state.pending_sequence
     try
         _with_prepared_device_execution_context(graph.context) do
             _synchronize_prepared_graph_execution_context!(
@@ -239,8 +248,8 @@ function step_graph!(graph::PreparedAlgorithmGraph)
 end
 
 function _step_graph!(graph::PreparedAlgorithmGraph)
-    sequence = _submit_graph_step!(graph)
-    return _complete_graph_step!(graph, sequence, nothing)
+    _submit_graph_step!(graph)
+    return _finish_pending_graph_step!(graph, nothing)
 end
 
 """
