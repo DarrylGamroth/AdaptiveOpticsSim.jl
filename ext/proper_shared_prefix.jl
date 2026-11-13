@@ -7,12 +7,12 @@ struct SharedOpticalTrainPlan{P}
     prefix_count::Int
 end
 
-struct SharedOpticalTrainOwner{P,B,G,I,C}
+struct SharedOpticalTrainOwner{P,B,G,I,V}
     prefix::P
     branches::B
     geometry::G
     inputs::I
-    validation_context::C
+    validation::V
 end
 
 _scalar_train(owner::OpticalTrainOwner) = owner
@@ -119,7 +119,8 @@ function AOG._prepare_external_pupil_propagation(
             ((AOG.graph_output(graph,_shared_output(index)),trains[index].output),) :
             ((getproperty(graph.nodes.propagation.outputs,_shared_output(index)),trains[index].output),
              (AOG.graph_output(graph,_shared_output(index)),only(values(graphs[index].outputs))))))
-    return (; graph, outputs=bindings,state=AOG._ExternalPupilPropagationState(true))
+    publication = AOG._prepare_external_pupil_publication(graph, bindings)
+    return (; graph, publication, state=AOG._ExternalPupilPropagationState(true))
 end
 
 function AOG.graph_node_ports(::Type{SharedOpticalTrainNode{T}}, plan::SharedOpticalTrainPlan) where {T}
@@ -228,15 +229,103 @@ function AOG.prepare_graph_node(::Type{SharedOpticalTrainNode{T}}, plan::SharedO
             path_inputs[index], (;output=getproperty(outputs, _shared_output(index))), (;), target)
         _shared_train_suffix(owner, plan.prefix_count)
     end
-    validation_context = Backends._prepare_device_execution_context(target)
-    return SharedOpticalTrainOwner(prefix, Tuple(branches), geometry, prefix_inputs,
-        validation_context)
+    validation = _prepare_shared_train_validation(target, prefix_inputs)
+    return SharedOpticalTrainOwner(prefix, Tuple(branches), geometry, prefix_inputs, validation)
+end
+
+struct SharedTrainValidation{C,D,H,A,P,F}
+    context::C
+    device::D
+    host::H
+    arrays::A
+    runtime::P
+    full::F
+end
+
+@kernel function _shared_train_equal!(flags, a, b, start)
+    index = @index(Global, Linear)
+    lane = @index(Local, Linear)
+    block = @index(Group, Linear)
+    mismatch = @localmem UInt32 (256,)
+    mismatch[lane] = UInt32(index <= length(a) && a[index] != b[index])
+    @synchronize
+    for offset in (128,64,32,16,8,4,2,1)
+        if lane <= offset
+            mismatch[lane] |= mismatch[lane+offset]
+        end
+        @synchronize
+    end
+    if lane == 1
+        flags[start+block] = UInt8(mismatch[1])
+    end
+end
+
+_prepare_shared_train_validation(target, inputs) = Backends._prepare_device_execution_context(target)
+
+function _prepare_shared_train_validation(
+        target::Backends.AcceleratorComputeDevice{Backends.CUDABackend},
+        inputs)
+    reference = first(inputs)
+    roles = (:pupil_opd, :pupil_amplitude)
+    pairs = Tuple((getproperty(reference, role), getproperty(branch, role))
+        for role in keys(reference) for branch in Base.tail(inputs) if role ∉ roles)
+    pairs = (pairs..., Tuple((getproperty(reference, role), getproperty(branch, role))
+        for role in roles for branch in Base.tail(inputs))...)
+    runtime_pairs = length(pairs) - length(roles) * length(Base.tail(inputs))
+    counts = map(pair -> cld(length(first(pair)), 256), pairs)
+    context = Backends._prepare_device_execution_context(target)
+    # Leave unusual shapes on the portable comparison path.
+    all(pair -> axes(first(pair)) == axes(last(pair)) && !Base.has_offset_axes(first(pair)), pairs) ||
+        return context
+    all(>(0), counts) || return context
+    return Backends._with_prepared_device_execution_context(context) do
+        device = Backends.allocate_device_array(target, UInt8, sum(counts))
+        host = FixedSizeVector{UInt8,Vector{UInt8}}(undef, length(device))
+        style = Backends.execution_style(device)
+        function enqueue(selected)
+            start = 0
+            for ((a,b), blocks) in zip(selected, counts)
+                Backends.launch_kernel_async!(style, _shared_train_equal!, device, a, b, start;
+                    ndrange=256blocks)
+                start += blocks
+            end
+            return nothing
+        end
+        runtime = pairs[1:runtime_pairs]
+        enqueue(pairs)
+        Backends._synchronize_prepared_device_execution_context!(context)
+        full = Backends._capture_prepared_device_kernel_graph(() -> enqueue(pairs), context)
+        prefix = isempty(runtime) ? nothing :
+            Backends._capture_prepared_device_kernel_graph(() -> enqueue(runtime), context)
+        arrays = (device, Tuple(array for pair in pairs for array in pair)...)
+        return SharedTrainValidation(context, device, host, arrays,
+            (prefix, sum(counts[1:runtime_pairs]; init=0)), full)
+    end
 end
 
 function AOG._shared_prefix_inputs_match(owner::SharedOpticalTrainOwner, include_pupil::Bool=true)
-    return Backends._with_prepared_device_execution_context(owner.validation_context) do
-        _shared_train_inputs_match(owner.inputs, include_pupil)
+    return _shared_prefix_inputs_match(owner.validation, owner.inputs, include_pupil)
+end
+
+function _shared_prefix_inputs_match(context, inputs, include_pupil)
+    return Backends._with_prepared_device_execution_context(context) do
+        _shared_train_inputs_match(inputs, include_pupil)
     end
+end
+
+function _shared_prefix_inputs_match(validation::SharedTrainValidation, inputs, include_pupil)
+    capture, count = include_pupil ? (validation.full, length(validation.host)) : validation.runtime
+    capture === nothing && return true
+    context = validation.context
+    Backends._with_prepared_device_execution_context(context) do
+        Backends._launch_prepared_device_graph!(capture, context, validation.arrays)
+        Backends._copy_prepared_device_buffer!(context, parent(validation.host), validation.device)
+        Backends._synchronize_prepared_device_execution_context_blocking!(context)
+    end
+    for index in 1:count
+        iszero(validation.host[index]) || return false
+    end
+    return true
 end
 
 function _shared_train_inputs_match(inputs, include_pupil)

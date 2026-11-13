@@ -3,7 +3,8 @@ module AdaptiveOpticsSimProperExt
 using AdaptiveOpticsSim
 using Proper
 using FFTW: fft, fftshift, ifftshift
-using FixedSizeArrays: FixedSizeMatrixDefault, FixedSizeVectorDefault
+using FixedSizeArrays: FixedSizeMatrixDefault, FixedSizeVectorDefault, FixedSizeVector
+using KernelAbstractions: @kernel, @index, @localmem, @synchronize
 import AdaptiveOpticsSim.AlgorithmGraphs as AOG
 import AdaptiveOpticsSim.Backends
 

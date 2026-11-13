@@ -153,9 +153,10 @@ struct _PixelIntegrationPlan{R,C}
     columns::C
 end
 
-struct _PixelIntegrationValidation{D,H}
+struct _PixelIntegrationValidation{D,H,C}
     device::D
     host::H
+    context::C
 end
 
 struct _PixelIntegrationOwner{P,I,O,V}
@@ -186,7 +187,7 @@ function _pixel_integration_validation(target::AcceleratorComputeDevice)
     # device-to-host copy without a new allocation or a scalar device read.
     host = FixedSizeVector{UInt32,Vector{UInt32}}(undef, 1)
     fill!(host, UInt32(0))
-    return _PixelIntegrationValidation(device, host)
+    return _PixelIntegrationValidation(device, host, Backends._current_device_execution_context(device))
 end
 
 function prepare_graph_node(::Type{PixelIntegrationNode{T}}, config::PixelIntegrationNodeConfig,
@@ -257,7 +258,7 @@ function _enqueue_pixel_integration!(style::AcceleratorStyle, owner)
 end
 
 function _check_pixel_integration!(validation::_PixelIntegrationValidation)
-    copyto!(parent(validation.host), validation.device)
+    Backends._read_prepared_device_buffer!(validation.context, parent(validation.host), validation.device)
     iszero(only(validation.host)) || throw(AlgorithmGraphError(
         "pixel integration requires finite nonnegative cell-integrated flux"))
     return nothing

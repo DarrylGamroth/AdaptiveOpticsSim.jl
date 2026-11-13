@@ -258,6 +258,10 @@ _finish_exposure!(::Nothing,exposure) =
 _finish_exposure!(execution::_ExternalExposureExecution,exposure) =
     _launch_prepared_device_graph!(execution.finish,execution.context,
         (exposure.integrated,exposure.image))
+_synchronize_exposure_image!(::Nothing, image) =
+    Backends.synchronize_backend!(execution_style(image))
+_synchronize_exposure_image!(execution::_ExternalExposureExecution, image) =
+    _synchronize_prepared_device_execution_context_blocking!(execution.context)
 _clear_exposure!(::Nothing,exposure) = (fill!(exposure.integrated,0); nothing)
 _clear_exposure!(execution::_ExternalExposureExecution,exposure) =
     _launch_prepared_device_graph!(execution.clear,execution.context,(exposure.integrated,))
@@ -308,7 +312,7 @@ function _integrate_intensity!(emit::F,exposure,intensity,timestamp,duration,exe
                 _finish_exposure!(execution,exposure)
                 # A consumer may copy the borrowed image to the host or submit
                 # a detector graph on another stream. Publish completed pixels.
-                Backends.synchronize_backend!(execution_style(exposure.image))
+                _synchronize_exposure_image!(execution, exposure.image)
                 exposure.sequence+=1
                 emit(exposure.image,ModelTimestamp(exposure.start_ns),ModelDuration(exposure.duration_ns),exposure.sequence)
             else
@@ -697,7 +701,7 @@ function _propagate_external_pupil!(propagation, prepared, start, finish)
             _stage_external_pupil!(graph, prepared)
         end
     end
-    owner = prepared_graph_node(propagation.graph, :propagation)
+    owner = prepared_graph_node(propagation.graph, Val(:propagation))
     # Pupil quantities were just staged identically by this sole owner. The
     # exposed joint graph still checks every prefix input on direct submission.
     propagation.state.shared = _shared_prefix_inputs_match(owner, false)
@@ -705,18 +709,51 @@ function _propagate_external_pupil!(propagation, prepared, start, finish)
     # Every other runtime input (including physical DM OPD) remains bound
     # explicitly to the original branch input. The coordinated node checks
     # matching values before executing its shared prefix.
-    ticket = step_graph_async!(propagation.graph)
-    _wait_graph_step!(ticket, () -> _publish_external_pupil_propagation!(propagation))
+    sequence = _submit_graph_step!(propagation.graph)
+    _complete_graph_step!(propagation.graph, sequence, () -> _publish_external_pupil_propagation!(propagation))
     return true
 end
 
-function _publish_external_pupil_propagation!(propagation)
-    _with_prepared_device_execution_context(propagation.graph.context) do
-        for (source, destination) in propagation.outputs
-            copyto_backend_async!(destination, source)
-        end
+function _prepare_external_pupil_publication(graph, bindings)
+    return _prepare_external_pupil_publication(graph.execution, graph.target, graph.context, bindings)
+end
+
+_prepare_external_pupil_publication(execution, target, context, bindings) = bindings
+
+function _prepare_external_pupil_publication(::_PreparedCapturedGraphExecution,
+        ::AcceleratorComputeDevice{Backends.CUDABackend}, context, bindings)
+    enqueue = () -> _copy_external_pupil_products!(bindings)
+    capture = _with_prepared_device_execution_context(context) do
+        Backends._capture_prepared_device_kernel_graph(enqueue, context)
     end
-    _synchronize_prepared_device_execution_context!(propagation.graph.context)
+    arrays = Tuple(array for binding in bindings for array in binding)
+    return (; capture, arrays)
+end
+
+function _copy_external_pupil_products!(bindings)
+    for (source, destination) in bindings
+        copyto_backend_async!(destination, source)
+    end
+    return nothing
+end
+
+function _publish_external_pupil_products!(bindings::Tuple, context)
+    _copy_external_pupil_products!(bindings)
+    _synchronize_prepared_device_execution_context!(context)
+    return nothing
+end
+
+function _publish_external_pupil_products!(publication::NamedTuple, context)
+    _launch_prepared_device_graph!(publication.capture, context, publication.arrays)
+    _synchronize_prepared_device_execution_context_blocking!(context)
+    return nothing
+end
+
+function _publish_external_pupil_propagation!(propagation)
+    context = propagation.graph.context
+    _with_prepared_device_execution_context(context) do
+        _publish_external_pupil_products!(propagation.publication, context)
+    end
     return nothing
 end
 
@@ -800,7 +837,7 @@ function _integrate_observation!(emit::F, name, graph, observation, exposure, ex
                 _launch_prepared_device_graph!(execution.scale,execution.context,(image,input))
                 # Response graphs own a different stream. Publish scaled pixels
                 # before their submission, as with the original host broadcast.
-                _synchronize_prepared_device_execution_context!(execution.context)
+                _synchronize_prepared_device_execution_context_blocking!(execution.context)
             end
             _step_graph!(response.graph)
             emit(name,graph_output(response.graph, response.output),
@@ -815,7 +852,7 @@ function _integrate_observation!(emit::F, name, graph, observation, exposure, ex
             # Both chopping variants share scientific accumulation storage but
             # retain separate streams; complete the final clear before handing
             # that storage to the next variant or the caller.
-            _synchronize_prepared_device_execution_context!(execution.context)
+            _synchronize_prepared_device_execution_context_blocking!(execution.context)
         end
     end
     return nothing

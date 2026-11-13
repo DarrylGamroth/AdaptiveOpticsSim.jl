@@ -366,6 +366,12 @@ end
     return nothing
 end
 
+@inline function Backends._current_device_execution_context(storage::CUDA.CuArray)
+    CUDA.context() == CUDA.context(storage) || return nothing
+    return CUDAPreparedDeviceExecutionContext(CUDA.device(), CUDA.context(),
+        CUDA.stream(), Backends.compute_device(storage))
+end
+
 function Backends._copy_prepared_device_buffer!(
     context::CUDAPreparedDeviceExecutionContext,
     destination::Array{T,N}, source::CUDA.CuArray{T,N,CUDA.DeviceMemory},
@@ -524,12 +530,12 @@ end
 
 function Backends._launch_prepared_device_graph!(captured::CUDAPreparedDeviceGraph,
         context::CUDAPreparedDeviceExecutionContext,arrays::Tuple)
-    # pointer(array) uses CUDA's public managed-memory ownership transfer: it
-    # completes a previous foreign stream and records this stream as the writer.
-    # This owner is serialized, including callbacks, so no competing acquisition
-    # can occur between these transfers and submission of the retained graph.
     GC.@preserve arrays begin
-        foreach(pointer,arrays)
+        # CUDA 6.5 captures array ownership with the kernel and transfers it
+        # on launch. Older releases require the public pointer handoff.
+        @static if Base.pkgversion(CUDA) < v"6.5"
+            foreach(pointer, arrays)
+        end
         Backends._launch_prepared_device_graph!(captured,context)
     end
     return nothing

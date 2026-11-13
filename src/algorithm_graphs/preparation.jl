@@ -1244,11 +1244,19 @@ end
     ::Val{Name},
 ) where {Name} = getproperty(graph.inputs, Name).values
 
-function graph_input(graph::PreparedAlgorithmGraph, name::Symbol)
-    hasproperty(graph.inputs, name) || throw(AlgorithmGraphError(
-        "prepared graph has no input named $name",
-    ))
-    return getproperty(graph.inputs, name).values
+@inline function graph_input(graph::PreparedAlgorithmGraph, name::Symbol)
+    return _graph_input_values(keys(graph.inputs), values(graph.inputs), name)
+end
+
+# Project each binding to its array before selecting it by name. Returning
+# heterogeneous binding records from a dynamic lookup can box them.
+@inline function _graph_input_values(names::Tuple, inputs::Tuple, name::Symbol)
+    first(names) === name && return first(inputs).values
+    return _graph_input_values(Base.tail(names), Base.tail(inputs), name)
+end
+
+@noinline function _graph_input_values(::Tuple{}, ::Tuple{}, name::Symbol)
+    throw(AlgorithmGraphError("prepared graph has no input named $name"))
 end
 
 @inline graph_output(

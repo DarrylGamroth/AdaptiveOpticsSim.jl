@@ -341,6 +341,25 @@ end
     return copyto!(destination, source)
 end
 
+# Backends may retain the stream on which a prepared node owns its output.
+_current_device_execution_context(storage) = nothing
+
+_read_prepared_device_buffer!(::Nothing, destination, source) = copyto!(destination, source)
+
+function _read_prepared_device_buffer!(context::_AbstractPreparedDeviceExecutionContext,
+        destination, source)
+    GC.@preserve destination source begin
+        _with_prepared_device_execution_context(context) do
+            try
+                _copy_prepared_device_buffer!(context, destination, source)
+            finally
+                _synchronize_prepared_device_execution_context_blocking!(context)
+            end
+        end
+    end
+    return destination
+end
+
 # Captured execution may select a backend completion path that avoids host-side
 # event/task bookkeeping. The default preserves ordinary stream semantics;
 # accelerator extensions may specialize this only for capture-qualified work,
