@@ -253,6 +253,7 @@ function AOG.reset_graph_node!(owner::CompiledPathsOwner)
     return nothing
 end
 AOG.optical_sampling_m(owner::CompiledPathsOwner)=owner.sampling_m
+AOG.optical_sampling_requires_step(::CompiledPathsOwner) = false
 _compiled_paths_capture_capability(target)=AOG.GraphNodeCaptureUnsupported()
 _compiled_paths_capture_capability(::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}})=
     AOG.GraphNodeCaptureSafe()

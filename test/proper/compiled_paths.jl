@@ -437,15 +437,33 @@ end
             input_names=(opd=:opd,amplitude=:amplitude))
         calibrated=compiled_paths_test_graph(model;output_sampling_calibration=(
             sampling_m=15e-6,provenance="synthetic detector coordinate calibration"))
-        prepared=prepare_external_pupil((sensor=calibrated,);
-            exposure_durations=(sensor=ModelDuration(1_000_000),),observations,
-            input_names=(opd=:opd,amplitude=:amplitude))
+        prepared=AdaptiveOpticsSim.Optics.with_propagation_checkpoint(
+            () -> error("sampling validation executed optical propagation")) do
+            prepare_external_pupil((sensor=calibrated,);
+                exposure_durations=(sensor=ModelDuration(1_000_000),),observations,
+                input_names=(opd=:opd,amplitude=:amplitude))
+        end
         images=Matrix{Float64}[]
         emit(name,image,metadata)=push!(images,copy(image))
         @test step_external_pupil!(emit,prepared,zeros(8,8),zeros(8,8),
             ModelTimestamp(0),ModelDuration(1_000_000);domain=ntuple(_->UInt8(1),16),
             generation=UInt64(1),sequence=UInt64(1))
         @test only(images)≈500 .* graph_output(calibrated,:fringed)
+
+        function prepare_chopping(alternate)
+            chopped=(sensor=(;observations.sensor...,
+                chopping=(unfringed=alternate,initial_phase=:fringed)),)
+            return AdaptiveOpticsSim.Optics.with_propagation_checkpoint(
+                () -> error("chopping pitch validation executed optical propagation")) do
+                prepare_external_pupil((sensor=calibrated,);
+                    exposure_durations=(sensor=ModelDuration(1_000_000),),
+                    observations=chopped,input_names=(opd=:opd,amplitude=:amplitude))
+            end
+        end
+        @test_throws AlgorithmGraphError prepare_chopping(native)
+        alternate=compiled_paths_test_graph(model;output_sampling_calibration=(
+            sampling_m=15e-6,provenance="synthetic detector coordinate calibration"))
+        @test prepare_chopping(alternate).observations.sensor.chopping.unfringed===alternate
 
         # Shared scalar Proper prefixes must never replace compiled/fitted
         # propagation, even when multiple calibrated paths are observed.

@@ -303,3 +303,4 @@ function optical_sampling_m(config::PixelIntegrationNodeConfig)
 end
 
 optical_sampling_m(owner::_PixelIntegrationOwner) = optical_sampling_m(owner.plan.config)
+optical_sampling_requires_step(::_PixelIntegrationOwner) = false

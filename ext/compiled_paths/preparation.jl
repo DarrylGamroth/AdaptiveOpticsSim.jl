@@ -490,17 +490,34 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
     )
     execution = _compiled_paths_prepare_execution(plan, propagation)
     owner = PreparedCompiledPaths(plan, workspace, inputs, products, execution_context, synthesis, execution)
-    # Prime PROPER's shape-dependent storage and plans outside execution.
-    for p in paths, seq in (p.prefix, p.closed, p.only), op in seq
-        if op.kind in (PathTransferFunction, PathFourierTransform)
-            _compiled_paths_proper!(workspace, op)
-        end
-    end
+    _prepare_compiled_paths_workspace(
+        Backends.array_backend_selector(typeof(wf.field)), workspace, paths)
     fft_workspace = Proper.fft_workspace(ctx)
     fft_workspace.plans_valid || throw(ArgumentError("compiled optical paths PROPER FFT plans were not prepared"))
     wf.field === fft_workspace.scratch || throw(ArgumentError(
         "compiled optical paths PROPER field must retain its prepared FFT scratch binding"))
     return owner
+end
+
+function _prepare_compiled_paths_workspace(::Backends.CPUBackend, workspace, paths)
+    wf, ctx = workspace.wavefront, workspace.context
+    ny, nx = size(wf.field)
+    fft = Proper.fft_workspace(ctx)
+    # All paths use the same grid. The CPU propagators regenerate phase
+    # coefficients for each operation and need only the storage and FFT plans.
+    Proper.ensure_fft_plans!(fft, ny, nx, Proper.fft_planning_style(ctx))
+    Proper.ensure_qphase_vectors!(Proper.qphase_workspace(ctx), nx, ny)
+    wf.field = fill!(fft.scratch, zero(eltype(wf.field)))
+    return nothing
+end
+
+function _prepare_compiled_paths_workspace(::Backends.AbstractArrayBackend, workspace, paths)
+    for p in paths, seq in (p.prefix, p.closed, p.only), op in seq
+        if op.kind in (PathTransferFunction, PathFourierTransform)
+            _compiled_paths_proper!(workspace, op)
+        end
+    end
+    return nothing
 end
 
 # Fixed geometry is shared across optical branches. The cold dictionary never

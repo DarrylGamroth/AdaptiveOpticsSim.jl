@@ -444,16 +444,28 @@ function _validate_chopping(graph, observation, input_names)
     return nothing
 end
 
+"""
+    optical_sampling_requires_step(owner)
+
+Return whether a prepared optical sampling owner needs a graph step before
+`optical_sampling_m(owner)` reports its output pitch. Owners with a pitch
+fixed during preparation may return `false`.
+"""
+optical_sampling_requires_step(owner) = true
+public optical_sampling_requires_step
+
 function _validate_chopping_sampling(graph, observation)
     haskey(observation, :chopping) || return nothing
     other = observation.chopping.unfringed
-    # Sampling is established by propagation, including all spectral channels.
+    first_owner = prepared_graph_node(graph, observation.sampling_node)
+    other_owner = prepared_graph_node(other, observation.sampling_node)
     try
-        step_graph!(graph); step_graph!(other)
-        first_sampling = optical_sampling_m(prepared_graph_node(graph, observation.sampling_node))
-        other_sampling = optical_sampling_m(prepared_graph_node(other, observation.sampling_node))
-        isfinite(first_sampling) && first_sampling > 0 && isfinite(other_sampling) && other_sampling > 0 &&
-            isapprox(first_sampling, other_sampling; rtol=8eps(Float32), atol=0) ||
+        optical_sampling_requires_step(first_owner) && step_graph!(graph)
+        optical_sampling_requires_step(other_owner) && step_graph!(other)
+        first_pitch = optical_sampling_m(first_owner)
+        other_pitch = optical_sampling_m(other_owner)
+        isfinite(first_pitch) && first_pitch > 0 && isfinite(other_pitch) && other_pitch > 0 &&
+            isapprox(first_pitch, other_pitch; rtol=8eps(Float32), atol=0) ||
             throw(AlgorithmGraphError("chopping optical sampling must match"))
     finally
         reset_graph!(graph); reset_graph!(other)
@@ -504,10 +516,10 @@ function _validate_observation_response(response, graph, observation, duration)
     seconds isa Real && !(seconds isa Bool) && isfinite(seconds) && seconds > 0 &&
         isapprox(Float64(seconds) * 1e9, model_nanoseconds(duration); rtol=8eps(Float32), atol=0.5) ||
         throw(AlgorithmGraphError("response detector duration must match the integrated exposure"))
-    # PROPER reports output sampling only after propagation. Probe once while
-    # cold, then reset; this does not consume an acquisition or detector draw.
-    step_graph!(graph)
-    optical_sampling = optical_sampling_m(prepared_graph_node(graph, observation.sampling_node))
+    owner = prepared_graph_node(graph, observation.sampling_node)
+    probe = optical_sampling_requires_step(owner)
+    probe && step_graph!(graph)
+    optical_sampling = optical_sampling_m(owner)
     all(pitch -> isapprox(pitch, optical_sampling; rtol=8eps(Float32), atol=0), sampling) ||
         throw(AlgorithmGraphError("response pixel sampling differs from optical sampling; declare a resampling model explicitly"))
     reset_graph!(graph)
@@ -535,7 +547,8 @@ exposure_duration_s=..., frame_schema=...)`. The explicit scale converts each re
 sample to cell-integrated photons/s; it includes the caller's radiometric and
 spatial calibration and is never normalized by the current image sum. A response
 uses the same optical grid and runs once per complete exposure. Preparation
-probes and resets the optical graph to check sampling. Detector readout and noise
+checks the prepared optical sampling, probing and resetting graphs whose owner
+requires a propagation step to report sampling. Detector readout and noise
 therefore run at the exposure cadence, after optical integration. Responses reset
 after an input discontinuity or a new generation. Required `frame_schema` labels
 the output quantity without inferring electrons or ADC units.
