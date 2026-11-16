@@ -302,9 +302,15 @@ end
         for product in (:fringed, :unfringed)
             selected = compiled_paths_test_graph(model; dm, opd, amplitude, products=(product,))
             owner = AlgorithmGraphs.prepared_graph_node(selected, :optics)
-            @test owner.selection === nothing
+            @test first(owner.selection) === Val(product)
+            if product === :unfringed
+                @test !any(last(owner.selection))
+            end
             step_graph!(selected)
             @test graph_output(selected, product) == graph_output(full, product)
+            if product === :unfringed
+                @test all(source -> all(iszero, source), owner.propagation.workspace.only_sources)
+            end
             @test CP._compiled_paths_selected_exact!(owner.propagation, Val(product)) ==
                 graph_output(full, product)
             reset_graph!(selected)
@@ -316,6 +322,36 @@ end
         step_graph!(reference)
         @test graph_output(reference, :reference) == graph_output(full, :reference)
     end
+end
+
+@testset "Unfringed execution retains reference checkpoints" begin
+    fixture = compiled_paths_shared_fixture()
+    paths = fixture.metadata["propagations"]
+    first_path, later_path = paths[1], paths[3]
+    first_path["only"] = [Dict{String,Any}("kind"=>"mult", "array"=>"edge")]
+    later_path["prefix"] = deepcopy(first_path["prefix"])
+    later_path["closed"] = deepcopy(first_path["only"])
+    dm, opd, attenuation = (zeros(Float32, fixture.n, fixture.n) for _ in 1:3)
+    prepare() = AdaptiveOpticsSim.Optics.prepare_compiled_optical_paths(
+        fixture.metadata, ref->fixture.arrays[ref]; T=Float32, dm_opd=dm,
+        entrance_opd=opd, entrance_attenuation=attenuation)
+    full, selected = prepare(), prepare()
+    @test any(CP._compiled_paths_reference_sequences(selected.plan.shared_prefixes))
+    for level in (1f-8, 3f-8)
+        @. dm = level * sin(0.2f0 * (1:fixture.n))
+        expected = AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(full).unfringed
+        @test CP._compiled_paths_selected_exact!(selected, Val(:unfringed)) == expected
+        @test all(source -> all(iszero, source), selected.workspace.only_sources)
+    end
+    # A checkpoint read by an unused reference branch has no closed-field consumer.
+    later_path["only"] = deepcopy(later_path["closed"])
+    later_path["closed"] = deepcopy(paths[2]["closed"])
+    full, selected = prepare(), prepare()
+    sharing = selected.plan.shared_prefixes
+    @test any(path -> !isempty(path.only.checkpoints), sharing)
+    @test !any(CP._compiled_paths_reference_sequences(sharing))
+    expected = AdaptiveOpticsSim.Optics.propagate_compiled_optical_paths!(full).unfringed
+    @test CP._compiled_paths_selected_exact!(selected, Val(:unfringed)) == expected
 end
 
 @testset "Compiled optical path artifact and live grids" begin

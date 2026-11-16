@@ -127,6 +127,31 @@ function _compiled_paths_shared_prefixes(paths)
         for i in eachindex(paths)]),length(slot_ends)
 end
 
+# Follow cache reads backward through the executor's prefix/closed/reference
+# order. A reference sequence is needed only when it writes a field used by a
+# retained sequence. Track cache slots because the planner recycles them.
+function _compiled_paths_reference_sequences(sharing)
+    needed = BitSet()
+    reference_sequences = fill(false, length(sharing))
+    function trace!(sequence)
+        for checkpoint in sequence.checkpoints
+            delete!(needed, checkpoint.cache_index)
+        end
+        sequence.count > 0 && push!(needed, sequence.cache_index)
+        return nothing
+    end
+    for index in reverse(eachindex(sharing))
+        path = sharing[index]
+        if any(point -> point.cache_index in needed, path.only.checkpoints)
+            reference_sequences[index] = true
+            trace!(path.only)
+        end
+        trace!(path.closed)
+        trace!(path.prefix)
+    end
+    return _compiled_paths_seal(reference_sequences)
+end
+
 function _compiled_paths_array(target, ::Type{T}, dims...) where {T}
     out = Backends.allocate_device_array(target, T, dims...)
     fill!(out, zero(T))

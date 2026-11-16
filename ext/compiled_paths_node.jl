@@ -138,6 +138,14 @@ function _native_scc_selection(owner, product, execution, target)
     return nothing
 end
 
+_native_scc_selection(owner, product, ::AOG.StreamGraphExecution, ::Backends.HostComputeDevice) =
+    (product, nothing)
+
+function _native_scc_selection(owner, product::Val{:unfringed}, ::AOG.StreamGraphExecution,
+        ::Backends.HostComputeDevice)
+    return (product, _compiled_paths_reference_sequences(owner.propagation.plan.shared_prefixes))
+end
+
 function _native_scc_selection(owner, product, ::AOG.CapturedGraphExecution,
         ::Backends.AcceleratorComputeDevice{Backends.CUDABackend})
     return (product, _prepare_scc_field_merge(owner.propagation;
@@ -184,11 +192,17 @@ function _enqueue_compiled_paths_node!(owner, selection::Tuple{Val{P},M}) where 
     propagation = owner.propagation
     _interpolate_grid!(propagation.inputs.dm_opd, owner.inputs.dm_opd, owner.mapping.dm)
     _compiled_paths_entrance!(owner, owner.mapping.pupil)
-    intensity = merge === nothing ? _compiled_paths_selected_exact!(propagation, product) :
-        _compiled_paths_merged!(propagation, product, merge)
+    intensity = _compiled_paths_node_product!(propagation, product, merge)
     Backends.copyto_backend_async!(getproperty(owner.outputs, P), intensity)
     return nothing
 end
+
+_compiled_paths_node_product!(owner, product, ::Nothing) =
+    _compiled_paths_selected_exact!(owner, product)
+_compiled_paths_node_product!(owner, product::Val{:unfringed}, sequences::FixedSizeVectorDefault{Bool}) =
+    _compiled_paths_selected_exact!(owner, product, sequences)
+_compiled_paths_node_product!(owner, product, merge) =
+    _compiled_paths_merged!(owner, product, merge)
 
 function _step_compiled_paths_node!(::Backends.ScalarCPUStyle,owner)
     _compiled_paths_validate_inputs!(owner,owner.reference)

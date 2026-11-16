@@ -532,8 +532,10 @@ function _compiled_paths_branches!(owner, path, sharing, offset, index, pair)
     return other+length(b)
 end
 
-function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true)
+function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true;
+        reference_sequences=nothing)
     plan,w=owner.plan,owner.workspace
+    include_reference = reference_sequences === nothing
     offset=0
     check = _compiled_paths_checkpoint(plan.target)
     for (index,path) in enumerate(plan.paths)
@@ -546,26 +548,34 @@ function _compiled_paths_slow!(owner,share_prefix::Bool=true,prepared::Bool=true
             Backends.copyto_backend_async!(w.field,path.entrance)
         end
         offset=_compiled_paths_sequence!(owner,path.prefix,offset,sharing.prefix,share_prefix,prepared,3index-2,check)
-        pair = prepared && share_prefix ? _compiled_paths_branch_pair(w.branch_batch,index) : nothing
+        pair = include_reference && prepared && share_prefix ?
+            _compiled_paths_branch_pair(w.branch_batch,index) : nothing
         if pair !== nothing
             offset = _compiled_paths_branches!(owner,path,sharing,offset,index,pair)
             continue
         end
-        if !share_prefix || sharing.only.count==0
+        run_only = include_reference || reference_sequences[index]
+        if run_only && (!share_prefix || sharing.only.count==0)
             Backends.copyto_backend_async!(w.prefix,w.field)
         end
         offset=_compiled_paths_sequence!(owner,path.closed,offset,sharing.closed,share_prefix,prepared,3index-1,check)
         slot=_compiled_paths_slot(path.path_index,path.anchor_index,plan.n_anchor)
         _compiled_paths_stage_image!(w.image_resample,owner,2index-1,w.closed_sources[slot],prepared)
-        if !share_prefix || sharing.only.count==0
-            Backends.copyto_backend_async!(w.field,w.prefix)
+        if run_only
+            if !share_prefix || sharing.only.count==0
+                Backends.copyto_backend_async!(w.field,w.prefix)
+            end
+            offset=_compiled_paths_sequence!(owner,path.only,offset,sharing.only,share_prefix,prepared,3index,check)
+            if include_reference
+                _compiled_paths_stage_image!(w.image_resample,owner,2index,w.only_sources[slot],prepared)
+            end
+        else
+            offset += length(path.only)
         end
-        offset=_compiled_paths_sequence!(owner,path.only,offset,sharing.only,share_prefix,prepared,3index,check)
-        _compiled_paths_stage_image!(w.image_resample,owner,2index,w.only_sources[slot],prepared)
     end
     for a in 1:plan.n_anchor
         w.closed_sources[a] .*=plan.main_phase
-        w.only_sources[a] .*=plan.main_phase
+        include_reference && (w.only_sources[a] .*=plan.main_phase)
     end
     return nothing
 end
@@ -708,8 +718,11 @@ function _compiled_paths_open_envelopes!(plan, w)
     return nothing
 end
 
-_compiled_paths_selected_exact!(owner, product::Val{:unfringed}) =
-    _compiled_paths_selected!(owner, product)
+function _compiled_paths_selected_exact!(owner, product::Val{:unfringed},
+        reference_sequences=_compiled_paths_reference_sequences(owner.plan.shared_prefixes))
+    _compiled_paths_slow!(owner; reference_sequences)
+    return _compiled_paths_selected_intensity!(owner, product)
+end
 
 function _compiled_paths_selected_exact!(owner, ::Val{:fringed})
     plan, w = owner.plan, owner.workspace
