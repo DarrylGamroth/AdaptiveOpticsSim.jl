@@ -921,10 +921,11 @@ propagation, coronagraph masks, or a model already written in PROPER style.
 The optional `compiled_optical_paths_f32` and `compiled_optical_paths_f64`
 factories execute a frozen multi-path Fresnel model. Load `Proper`, `YAML` and
 `FITSIO`; FITSIO remains a weak dependency. Model YAML binds every real or complex
-matrix by SHA-256, logical shape, numeric type, FITS HDUs and axis permutation.
-Asset paths are contained within the model directory. A changed file requires a
-new model hash. Parsing and all file reads happen during cold preparation;
-execution retains concrete plans, arrays, scratch and exact live input bindings.
+matrix by its path, logical shape, numeric type, FITS HDUs and axis permutation.
+The loader checks that these paths stay inside the model directory. Git can
+verify the file contents when an application is installed from a pinned export.
+Parsing and file reads happen during preparation. Execution retains concrete
+plans, arrays, scratch and exact live input bindings.
 
 ```yaml
 type: compiled_optical_paths_f32
@@ -932,7 +933,6 @@ bindings:
   entrance_reference_amplitude: pupil_reference
 config:
   model_path: model/sky.yaml
-  model_sha256: <sha256 of sky.yaml>
   dm_grid:
     size: [128, 128]
     axes: [1, 2]
@@ -1010,7 +1010,7 @@ the node's numeric type and nonempty provenance. `optical_sampling_m` then
 reports this pitch for observation/detector validation. The prepared node retains
 the declaration as `output_sampling_calibration`. Every output value and shape
 remains unchanged; the compiled propagation and resampling operations still use
-the hash-bound artifact metric. This differs from a Proper train's
+the compiled model's metric. This differs from a Proper train's
 `output_sampling_m`, which performs numerical grid mapping. Omit the calibration
 to retain the artifact's `dx_output` pitch. The declaration establishes neither
 absolute full-sensor ROI origin nor physical radiometry or detector response.
@@ -1041,7 +1041,7 @@ relative `.yaml` or `.yml` filename. Keep authored inputs separate from this
 generated output; neither metadata nor arrays in the frozen source are rewritten.
 
 Validate the numerical executor with `test/proper/compiled_paths.jl`; it includes
-an independent centered Fresnel-equation fixture, artifact integrity and metric
+an independent centered Fresnel-equation fixture, artifact schema and metric
 mapping checks, opaque-reference admission, changed-support rejection and prepared
 allocation checks. Shared-prefix checks compare with independent execution under
 changing live inputs, both spectral summation modes and reset. The

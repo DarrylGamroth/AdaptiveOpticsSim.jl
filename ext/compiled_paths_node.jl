@@ -4,7 +4,6 @@ using FixedSizeArrays: FixedSizeVector
 struct CompiledPathsNode{T} end
 struct CompiledPathsConfiguration{D,P,R,T,C}
     path::String
-    sha256::String
     dm_grid::D
     pupil_grid::P
     reference::R
@@ -20,8 +19,7 @@ function AOG._compiled_optical_paths_node(::Type{T},name,config,props,bindings) 
     AOG.graph_node_bindings(AOG.CompiledOpticalPathsNodeFactory{T}(),config)
     AOG._require_named_fields(props,(),(),"compiled optical paths props")
     path=AOG._file_string(config.model_path,"compiled optical model path")
-    hash=AOG._file_string(config.model_sha256,"compiled optical model SHA-256")
-    metadata,_=AOG._read_compiled_optical_model(path,hash)
+    metadata,_=AOG._read_compiled_optical_model(path)
     dm_grid=_entrance_pupil_grid(config.dm_grid,T,AOG._file_integer(first(config.dm_grid.size),"DM resolution"))
     pupil_grid=_entrance_pupil_grid(config.pupil_grid,T,AOG._file_integer(first(config.pupil_grid.size),"pupil resolution"))
     mode=Symbol(metadata["mode"])
@@ -38,7 +36,7 @@ function AOG._compiled_optical_paths_node(::Type{T},name,config,props,bindings) 
     end
     calibration=AOG._compiled_output_sampling_calibration(config,T)
     sampling=calibration===nothing ? T(metadata["dx_output"]) : calibration.sampling_m
-    c=CompiledPathsConfiguration(path,hash,dm_grid,pupil_grid,reference,schemas,mode,amplitude_mode,
+    c=CompiledPathsConfiguration(path,dm_grid,pupil_grid,reference,schemas,mode,amplitude_mode,
         summation,Int(metadata["image_size"]),sampling,calibration)
     return AOG.algorithm_node(name,CompiledPathsNode{T},c;props=NamedTuple())
 end
@@ -97,7 +95,7 @@ function AOG.prepare_graph_node(::Type{CompiledPathsNode{T}},c::CompiledPathsCon
         Base.has_offset_axes(array) && throw(AOG.AlgorithmGraphError("compiled optical $role requires one-based storage"))
         _validate_compiled_paths_buffer(target,array,T,shape,"compiled optical $role")
     end
-    metadata,read_array=AOG._read_compiled_optical_model(c.path,c.sha256)
+    metadata,read_array=AOG._read_compiled_optical_model(c.path)
     live=metadata["live"]
     ndm=Int(live["dm_size"])
     nentrance=Int(live["entrance_size"])

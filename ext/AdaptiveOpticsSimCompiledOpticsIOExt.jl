@@ -2,7 +2,6 @@ module AdaptiveOpticsSimCompiledOpticsIOExt
 using AdaptiveOpticsSim
 using FITSIO
 using YAML
-using SHA
 import AdaptiveOpticsSim.AlgorithmGraphs as AOG
 
 function _asset(root,relative)
@@ -13,30 +12,22 @@ function _asset(root,relative)
     startswith(path,root*"/") || throw(ArgumentError("compiled optical asset escapes model directory"))
     return path
 end
-function _digest(path,expected)
-    expected isa String && occursin(r"^[0-9a-f]{64}$",expected) || throw(ArgumentError("invalid compiled optical SHA-256"))
-    bytes2hex(sha256(read(path)))==expected || throw(ArgumentError("compiled optical artifact SHA-256 mismatch"))
-end
-function AOG._read_compiled_optical_model(path::AbstractString,expected::AbstractString)
+function AOG._read_compiled_optical_model(path::AbstractString)
     path=realpath(path)
-    _digest(path,expected)
     yaml=Base.get_extension(AdaptiveOpticsSim,:AdaptiveOpticsSimYAMLExt)
     metadata=yaml._read_strict_yaml(path,ArgumentError)
     metadata isa AbstractDict && get(metadata,"schema_version",nothing)==1 || throw(ArgumentError("unsupported compiled optical model schema"))
     descriptors=get(metadata,"arrays",nothing)
     descriptors isa AbstractDict && !isempty(descriptors) || throw(ArgumentError("compiled optical model requires typed array descriptors"))
     root=dirname(path)
-    verified=Set{String}()
     function read_array(reference)
         haskey(descriptors,reference) || throw(ArgumentError("compiled optical array reference is undeclared"))
         d=descriptors[reference]
-        Set(keys(d))==Set(("path","sha256","shape","type","axes","real_hdu","imag_hdu")) ||
+        required = ("path","shape","type","axes","real_hdu","imag_hdu")
+        all(key -> haskey(d, key), required) &&
+            all(key -> key in required || key == "sha256", keys(d)) ||
             throw(ArgumentError("unknown or missing compiled optical array descriptor fields"))
         array_path=_asset(root,d["path"])
-        if !(reference in verified)
-            _digest(array_path,d["sha256"])
-            push!(verified,reference)
-        end
         types=Dict("Float32"=>Float32,"Float64"=>Float64,"ComplexF32"=>ComplexF32,"ComplexF64"=>ComplexF64)
         haskey(types,d["type"]) || throw(ArgumentError("unsupported compiled optical array type"))
         d["axes"] isa AbstractVector && d["axes"] in ([1,2],[2,1]) &&

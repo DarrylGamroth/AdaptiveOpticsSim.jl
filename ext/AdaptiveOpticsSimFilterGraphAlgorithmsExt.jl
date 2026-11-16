@@ -48,8 +48,7 @@ function prepare_optics(plan::OpticalModel, target)
 end
 
 function prepare_optics(configuration)
-    metadata, read_array = AOG._read_compiled_optical_model(
-        configuration.model_path, configuration.model_sha256)
+    metadata, read_array = AOG._read_compiled_optical_model(configuration.model_path)
     Int(metadata["image_size"]) == configuration.image_size &&
         Int(metadata["live"]["dm_size"]) == configuration.dm_size &&
         Int(metadata["live"]["entrance_size"]) == configuration.pupil_size ||
@@ -61,8 +60,7 @@ function prepare_optics(configuration)
 end
 
 function prepare_response(configuration)
-    metadata, read_array = AOG._read_compiled_optical_model(
-        configuration.model_path, configuration.model_sha256)
+    metadata, read_array = AOG._read_compiled_optical_model(configuration.model_path)
     Int(metadata["image_size"]) == configuration.image_size ||
         throw(DimensionMismatch("SCC model and detector image grids differ"))
     fast = metadata["fast"]
@@ -105,7 +103,7 @@ end
 
     @configuration FittedSCCPropagationConfiguration begin
         model_path::String => graph_rebuild
-        model_sha256::String => graph_rebuild
+        (model_sha256::String = "") => graph_rebuild
         dm_size::Int => graph_rebuild
         pupil_size::Int => graph_rebuild
         image_size::Int => graph_rebuild
@@ -131,7 +129,7 @@ end
 
     @configuration FittedSCCPixelMTFConfiguration begin
         model_path::String => graph_rebuild
-        model_sha256::String => graph_rebuild
+        (model_sha256::String = "") => graph_rebuild
         image_size::Int => graph_rebuild
     end
 
@@ -246,11 +244,10 @@ function FGA.enqueue!(node::CapturedSCCNode{<:PixelWorkspace})
     return nothing
 end
 
-function O.fitted_scc_filter_graph(model_path::AbstractString, model_sha256::AbstractString)
+function O.fitted_scc_filter_graph(model_path::AbstractString, ::AbstractString = "")
     path = abspath(model_path)
-    metadata, _ = AOG._read_compiled_optical_model(path, model_sha256)
-    detector = Dict("model_path" => path, "model_sha256" => String(model_sha256),
-        "image_size" => Int(metadata["image_size"]))
+    metadata, _ = AOG._read_compiled_optical_model(path)
+    detector = Dict("model_path" => path, "image_size" => Int(metadata["image_size"]))
     optics = merge(detector, Dict("dm_size" => Int(metadata["live"]["dm_size"]),
         "pupil_size" => Int(metadata["live"]["entrance_size"])))
     nodes = [

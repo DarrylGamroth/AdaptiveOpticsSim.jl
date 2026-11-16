@@ -339,7 +339,7 @@ by preparing the in-memory definition.
 ```julia
 using AdaptiveOpticsSim, Proper, FITSIO, YAML, FilterGraphAlgorithms, FilterGraphs
 
-pilot = AdaptiveOpticsSim.Optics.fitted_scc_filter_graph(model_path, model_sha256)
+pilot = AdaptiveOpticsSim.Optics.fitted_scc_filter_graph(model_path)
 graph = FilterGraphs.prepare_graph(pilot.document; algorithms=pilot.algorithms)
 ```
 

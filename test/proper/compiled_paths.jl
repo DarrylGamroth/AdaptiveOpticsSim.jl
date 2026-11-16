@@ -363,17 +363,26 @@ end
         amplitude.=reference
         reset_graph!(ratio_graph);step_graph!(ratio_graph)
         @test graph_output(ratio_graph,:fringed)≈compiled_paths_synthetic_oracle(f,dm,opd,zeros(8,8)).fringed
-        # Cold I/O rejects altered hashes, shape contracts and escaping assets.
-        @test_throws ArgumentError AlgorithmGraphs._read_compiled_optical_model(model.path,"0"^64)
+        # Cold I/O retains path and array contracts without comparing legacy hashes.
         metadata=deepcopy(model.metadata)
         metadata["arrays"]["entrance"]["path"]="../outside"
         path=joinpath(directory,"escape.yaml");write(path,YAML.write(metadata))
-        _,reader=AlgorithmGraphs._read_compiled_optical_model(path,bytes2hex(sha256(read(path))))
+        _,reader=AlgorithmGraphs._read_compiled_optical_model(path)
         @test_throws ArgumentError reader("entrance")
         FITS(joinpath(directory,"entrance"),"r+") do file
             write(file[1],ones(8,8))
         end
-        @test_throws ArgumentError compiled_paths_test_graph(model)
+        _,reader=AlgorithmGraphs._read_compiled_optical_model(model.path)
+        @test real.(reader("entrance")) == ones(8,8)
+        metadata["arrays"]["entrance"]["path"]="entrance"
+        delete!(metadata["arrays"]["entrance"], "sha256")
+        write(path,YAML.write(metadata))
+        _,reader=AlgorithmGraphs._read_compiled_optical_model(path)
+        @test size(reader("entrance")) == (8,8)
+        metadata["arrays"]["entrance"]["shape"]=[7,8]
+        write(path,YAML.write(metadata))
+        _,reader=AlgorithmGraphs._read_compiled_optical_model(path)
+        @test_throws ArgumentError reader("entrance")
     end
 end
 

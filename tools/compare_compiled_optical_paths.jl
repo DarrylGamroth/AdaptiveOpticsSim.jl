@@ -6,7 +6,7 @@ length(ARGS) in (2,3) || error("Usage: compare_compiled_optical_paths.jl MODEL.y
 model_path,legacy_root=abspath.(ARGS[1:2])
 T=length(ARGS)==3 ? Dict("Float32"=>Float32,"Float64"=>Float64)[ARGS[3]] : Float64
 hash(path)=bytes2hex(sha256(read(path)))
-metadata,reader=AlgorithmGraphs._read_compiled_optical_model(model_path,hash(model_path))
+metadata,reader=AlgorithmGraphs._read_compiled_optical_model(model_path)
 legacy_manifest=joinpath(legacy_root,"manifest.toml")
 metadata["provenance"]["imported_manifest_sha256"]==hash(legacy_manifest) || error("reference manifest identity differs")
 legacy=TOML.parsefile(legacy_manifest)

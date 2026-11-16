@@ -33,7 +33,7 @@ physical radiometry remain the caller's responsibility. Requires Proper.jl.
 function propagate_compiled_optical_paths! end
 
 """
-    fitted_scc_filter_graph(model_path, model_sha256)
+    fitted_scc_filter_graph(model_path)
 
 Construct an opt-in FilterGraphs definition and its Algorithm declarations for
 a fitted SCC optical model and a downstream pixel MTF. Inputs are the native

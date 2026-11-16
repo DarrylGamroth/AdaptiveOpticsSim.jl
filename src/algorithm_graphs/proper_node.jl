@@ -117,7 +117,7 @@ native pitch without binding execution inputs, outputs or an accelerator.
 function optical_sampling_m end
 
 # Model parsing is cold I/O, owned by the optional YAML/FITSIO extension.
-function _read_compiled_optical_model(path,hash)
+function _read_compiled_optical_model(path)
     throw(AlgorithmGraphError("compiled optical model reading requires YAML.jl and FITSIO.jl; load both before preparation"))
 end
 
@@ -126,7 +126,7 @@ struct CompiledOpticalPathsNodeFactory{T<:Union{Float32,Float64}} end
 """
     compiled_optical_paths_node_factory(; T=Float64)
 
-Return the cold factory for a hash-bound compiled multi-path Fresnel model.
+Return the cold factory for a compiled multi-path Fresnel model.
 Proper supplies execution; YAML and FITSIO supply optional model artifact I/O.
 Optional `output_sampling_calibration=(sampling_m=..., provenance="...")`
 declares the physical pitch of existing output samples in detector coordinates.
@@ -159,7 +159,7 @@ end
 
 function graph_node_bindings(::CompiledOpticalPathsNodeFactory{T}, config::NamedTuple) where {T}
     _require_named_fields(config, _COMPILED_PATHS_FIELDS,
-        (:model_path, :model_sha256, :dm_grid, :pupil_grid), "compiled optical paths config")
+        (:model_path, :dm_grid, :pupil_grid), "compiled optical paths config")
     _compiled_output_sampling_calibration(config, T)
     mode = hasproperty(config,:entrance_amplitude_mode) ? config.entrance_amplitude_mode : "reference_ratio"
     mode in ("reference_ratio","log_attenuation") || throw(AlgorithmGraphError("invalid entrance_amplitude_mode"))
