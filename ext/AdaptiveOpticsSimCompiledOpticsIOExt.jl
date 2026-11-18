@@ -12,6 +12,55 @@ function _asset(root,relative)
     startswith(path,root*"/") || throw(ArgumentError("compiled optical asset escapes model directory"))
     return path
 end
+
+function _read_plane(file, index, ::Type{T}, shape) where {T}
+    hdu = file[index]
+    hdu isa ImageHDU{T,2} && size(hdu) == shape ||
+        throw(ArgumentError("compiled optical array type or shape differs"))
+    return read(hdu)
+end
+
+@inline _pixel(re, ::Nothing, i, j) = re[i,j]
+@inline _pixel(re, im, i, j) = complex(re[i,j], im[i,j])
+
+function _assemble_pixels(re::Matrix, im, ::Type{T}, swap) where {T}
+    if !swap
+        im === nothing && return eltype(re) === T ? re : T.(re)
+        result = Matrix{T}(undef, size(re))
+        result .= complex.(re, im)
+        return result
+    end
+    result = Matrix{T}(undef, size(re, 2), size(re, 1))
+    # A strip of input columns stays in cache while each output column is filled.
+    for start in 1:32:size(re, 2)
+        columns = start:min(start + 31, size(re, 2))
+        for i in axes(re, 1), j in columns
+            result[j,i] = _pixel(re, im, i, j)
+        end
+    end
+    return result
+end
+
+function _read_pixels(file, real_hdu, imag_hdu, stored_type, output_type, shape, swap)
+    real_hdu <= length(file) && imag_hdu <= length(file) ||
+        throw(ArgumentError("compiled optical array HDU is missing"))
+    disk_shape = swap ? reverse(shape) : shape
+    re = _read_plane(file, real_hdu, real(stored_type), disk_shape)
+    im = imag_hdu == 0 ? nothing : _read_plane(file, imag_hdu, real(stored_type), disk_shape)
+    values = _assemble_pixels(re, im, output_type, swap)
+    all(isfinite, values) || throw(ArgumentError(
+        "compiled optical array contains nonfinite values or overflows conversion to $output_type"))
+    return values
+end
+
+struct FITSArrayReader{F}
+    decode::F
+end
+
+(reader::FITSArrayReader)(reference) = reader.decode(reference, nothing)
+AdaptiveOpticsSim.Optics._read_compiled_array_as(reader::FITSArrayReader, reference, T) =
+    reader.decode(reference, T)
+
 function AOG._read_compiled_optical_model(path::AbstractString)
     path=realpath(path)
     yaml=Base.get_extension(AdaptiveOpticsSim,:AdaptiveOpticsSimYAMLExt)
@@ -20,7 +69,7 @@ function AOG._read_compiled_optical_model(path::AbstractString)
     descriptors=get(metadata,"arrays",nothing)
     descriptors isa AbstractDict && !isempty(descriptors) || throw(ArgumentError("compiled optical model requires typed array descriptors"))
     root=dirname(path)
-    function read_array(reference)
+    function read_array(reference, output_type)
         haskey(descriptors,reference) || throw(ArgumentError("compiled optical array reference is undeclared"))
         d=descriptors[reference]
         required = ("path","shape","type","axes","real_hdu","imag_hdu")
@@ -40,15 +89,11 @@ function AOG._read_compiled_optical_model(path::AbstractString)
         imag_hdu isa Integer && !(imag_hdu isa Bool) && imag_hdu>=0 || throw(ArgumentError("invalid imag_hdu"))
         T=types[d["type"]]
         (T<:Complex)==(imag_hdu>0) || throw(ArgumentError("compiled optical array type disagrees with imaginary HDU"))
-        values=FITS(array_path,"r") do file
-            real_hdu<=length(file) && imag_hdu<=length(file) || throw(ArgumentError("compiled optical array HDU is missing"))
-            re=permutedims(read(file[real_hdu]),Tuple(d["axes"]))
-            imag_hdu==0 ? re : complex.(re,permutedims(read(file[imag_hdu]),Tuple(d["axes"])))
+        return FITS(array_path, "r") do file
+            _read_pixels(file, real_hdu, imag_hdu, T, something(output_type, T),
+                (Int(shape[1]), Int(shape[2])), d["axes"][1] == 2)
         end
-        collect(size(values))==shape && eltype(values)===T && all(isfinite,values) ||
-            throw(ArgumentError("compiled optical array type, shape or finite-value contract differs"))
-        return values
     end
-    return metadata,read_array
+    return metadata, FITSArrayReader(read_array)
 end
 end

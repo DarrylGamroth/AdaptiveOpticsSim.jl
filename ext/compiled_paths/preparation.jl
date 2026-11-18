@@ -165,11 +165,22 @@ function _compiled_paths_convert(values, ::Type{T}, role) where {T}
     return converted
 end
 
+# The decoded buffer belongs to this preparation. Only a device transfer needs
+# a second allocation when the decoder already produced dense host storage.
+_compiled_paths_upload(::Backends.HostComputeDevice, values::Array) = values
+
+function _compiled_paths_upload(target, values)
+    out = Backends.allocate_device_array(target, eltype(values), size(values)...)
+    copyto!(out, values)
+    return out
+end
+
+AdaptiveOpticsSim.Optics._read_compiled_array_as(reader, reference, T) =
+    _compiled_paths_convert(reader(reference), T, "compiled optical paths array")
+
 function _compiled_paths_resident(target, values, ::Type{T}) where {T}
     converted = _compiled_paths_convert(values, T, "compiled optical paths array")
-    out = _compiled_paths_array(target, T, size(values)...)
-    copyto!(out, converted)
-    return out
+    return _compiled_paths_upload(target, converted)
 end
 
 function _compiled_paths_fft_workspace(target, ::Type{T}, n) where {T}
@@ -339,7 +350,8 @@ function _prepare_compiled_paths(metadata, read_array, execution_context;
     cache = Dict{String,A}()
     function loadarray(reference)
         get!(cache, String(reference)) do
-            _compiled_paths_resident(target, read_array(reference), Complex{T})
+            values = AdaptiveOpticsSim.Optics._read_compiled_array_as(read_array, reference, Complex{T})
+            _compiled_paths_upload(target, values)
         end
     end
     operation_type = typeof(_compiled_paths_operation(Dict("kind" => "normalize"), loadarray, empty, T))

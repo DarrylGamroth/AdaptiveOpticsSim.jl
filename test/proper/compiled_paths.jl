@@ -739,3 +739,60 @@ check_compiled_input_groups(Array,AdaptiveOpticsSim.Backends.HostComputeDevice()
         @test graph_output(graph, :fringed) == expected_graph
     end
 end
+
+@testset "FITS optical array precision and axis order" begin
+    mktempdir() do dir
+        function model_reader(stored, axes_order, shape)
+            descriptor = Dict("path"=>"planes.fits", "shape"=>collect(shape),
+                "type"=>string(stored), "axes"=>axes_order, "real_hdu"=>1,
+                "imag_hdu"=>stored <: Complex ? 2 : 0)
+            path = joinpath(dir, "model.yaml")
+            write(path, YAML.write(Dict("schema_version"=>1, "arrays"=>Dict("test"=>descriptor))))
+            return last(AlgorithmGraphs._read_compiled_optical_model(path))
+        end
+
+        for stored in (Float32, Float64, ComplexF32, ComplexF64), axes_order in ([1,2], [2,1])
+            R = real(stored)
+            # Non-square planes cross the transpose strip boundary; the imaginary
+            # signal distinguishes a transpose from a conjugate transpose.
+            re = [R(i + 0.125j) for i in 1:5, j in 1:35]
+            im = [R(j - 0.25i) for i in 1:5, j in 1:35]
+            re[1,1] = -zero(R)
+            path = joinpath(dir, "planes.fits")
+            FITS(path, "w") do f
+                write(f, re)
+                stored <: Complex && write(f, im)
+            end
+            native = stored <: Complex ? complex.(re, im) : re
+            expected = permutedims(native, Tuple(axes_order))
+            reader = model_reader(stored, axes_order, size(expected))
+            @test isequal(reader("test"), expected)
+            for T in (ComplexF32, ComplexF64)
+                actual = AdaptiveOpticsSim.Optics._read_compiled_array_as(reader, "test", T)
+                @test actual isa Matrix{T}
+                @test isequal(actual, T.(expected))
+            end
+        end
+
+        reader = model_reader(ComplexF64, [2,1], (35,5))
+        read_as(T) = AdaptiveOpticsSim.Optics._read_compiled_array_as(reader, "test", T)
+        for bad in (fill(1.0,1,35), ones(Float32,5,35), fill(NaN,5,35), fill(Inf,5,35))
+            FITS(joinpath(dir,"planes.fits"), "w") do f
+                write(f, ones(5,35))
+                write(f, bad)
+            end
+            @test_throws ArgumentError read_as(ComplexF64)
+        end
+        FITS(joinpath(dir,"planes.fits"), "w") do f
+            write(f, fill(floatmax(Float64),5,35))
+            write(f, zeros(5,35))
+        end
+        @test_throws ArgumentError read_as(ComplexF32)
+        @test all(isfinite, read_as(ComplexF64))
+
+        source = ones(ComplexF32, 3, 4)
+        owned = AdaptiveOpticsSim.Optics._read_compiled_array_as(_ -> source, "test", ComplexF32)
+        fill!(owned, 0)
+        @test all(isone, source)
+    end
+end

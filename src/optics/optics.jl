@@ -22,6 +22,10 @@ Backend execution policies, including CUDA math mode, are fixed at preparation
 and capture; changing them requires a new preparation/capture.
 """
 function prepare_compiled_optical_paths end
+
+# Return an owned host array in execution precision. File readers may decode
+# directly into this storage. User-supplied readers retain ownership of their input.
+function _read_compiled_array_as end
 """
     propagate_compiled_optical_paths!(owner)
 
