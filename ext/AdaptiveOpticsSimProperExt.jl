@@ -335,9 +335,9 @@ function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}
     context = Proper.RunContext(Matrix{Complex{T}})
     wf = Proper.prop_begin(plan.diameter_m, plan.wavelength_um*T(1e-6), n;
         beam_diam_fraction=T(plan.pupil_resolution/n), context)
-    masks = map(plan.steps) do step
+    planes = map(plan.steps) do step
+        sampling = T(Proper.prop_get_sampling(wf))
         mask = if step.op === :circular_mask
-            sampling = Proper.prop_get_sampling(wf)
             isfinite(sampling) && sampling > 0 ||
                 throw(AOG.AlgorithmGraphError("circular mask has invalid plane sampling"))
             center = fld(n,2)+1
@@ -357,21 +357,19 @@ function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}
             end
             centered
         elseif step.op === :sampled_mask
-            _resample_mask(step, n, T(Proper.prop_get_sampling(wf)))
+            _resample_mask(step, n, sampling)
         else
             nothing
         end
         _train_optic!(wf, step, mask, context)
-        if mask === nothing
-            nothing
-        else
-            device_mask = Backends.allocate_device_array(target, eltype(mask), n, n)
-            copyto!(device_mask, mask)
-            device_mask
+        device_mask = if mask !== nothing
+            copyto!(Backends.allocate_device_array(target, eltype(mask), n, n), mask)
         end
+        return (; mask=device_mask, sampling)
     end
     _require_output_reference(plan.output_quantity, wf)
-    return (; masks, sampling_m=T(Proper.prop_get_sampling(wf)))
+    return (; masks=map(p -> p.mask, planes), plane_sampling_m=map(p -> p.sampling, planes),
+        sampling_m=T(Proper.prop_get_sampling(wf)))
 end
 
 function AOG.prepare_graph_node(::Type{OpticalTrainNode{T}}, plan::OpticalTrainPlan{T},
@@ -413,7 +411,7 @@ function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, targ
         owner = OpticalTrainOwner(plan,workspace,inputs.pupil_opd,inputs.pupil_amplitude,
             outputs.output,geometry.sampling_m)
     end
-    return (; owner, geometry.sampling_m)
+    return (; owner, geometry.sampling_m, geometry.plane_sampling_m)
 end
 
 _prepare_train_capture!(owner, target) = nothing

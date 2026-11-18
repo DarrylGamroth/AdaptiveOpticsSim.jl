@@ -101,22 +101,6 @@ function _bilinear_interpolation_plan(grid, n, sampling::T, outside::T) where {T
     return BilinearInterpolationPlan(rows, columns, dy, dx, grid.axes, outside)
 end
 
-function _prepare_opd_interpolation(plan::OpticalTrainPlan{T}, masks) where {T}
-    context = Proper.RunContext(Matrix{Complex{T}})
-    wf = Proper.prop_begin(plan.diameter_m, plan.wavelength_um*T(1e-6), plan.resolution;
-        beam_diam_fraction=T(plan.pupil_resolution/plan.resolution), context)
-    return map(plan.steps, masks) do step, mask
-        interpolation = step.op === :add_opd ?
-            _bilinear_interpolation_plan(step, plan.resolution,
-                T(Proper.prop_get_sampling(wf)), step.outside_opd_m) : nothing
-        _train_optic!(wf, step, _interpolation_host_mask(mask), context)
-        interpolation
-    end
-end
-
-_interpolation_host_mask(::Nothing) = nothing
-_interpolation_host_mask(mask) = Backends.host_array(mask)
-
 _prepare_grid_interpolation(::Nothing, target) = nothing
 _prepare_grid_interpolation(plan::BilinearInterpolationPlan, ::Backends.HostComputeDevice) = plan
 
@@ -160,8 +144,12 @@ function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs, 
             !Base.has_offset_axes(array) && Backends.compute_device(array) == target ||
             throw(AOG.AlgorithmGraphError("runtime OPD buffer contract mismatch for '$(step.input)'"))
     end
-    train = _prepare_optical_train(plan, inputs, outputs, target).owner
-    interpolation = map(_prepare_opd_interpolation(plan, train.workspace.masks)) do grid
+    prepared = _prepare_optical_train(plan, inputs, outputs, target)
+    train = prepared.owner
+    # Sample each OPD on its incident plane, before that optical step is applied.
+    interpolation = map(plan.steps, prepared.plane_sampling_m) do step, sampling
+        step.op === :add_opd || return nothing
+        grid = _bilinear_interpolation_plan(step, plan.resolution, sampling, step.outside_opd_m)
         _prepare_grid_interpolation(grid, target)
     end
     opd_inputs = map(plan.steps) do step
