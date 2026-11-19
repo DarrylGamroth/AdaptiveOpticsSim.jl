@@ -480,6 +480,7 @@ AOG.optical_sampling_m(plan::OpticalTrainPlan) =
     last(_prepare_train_geometry(plan, Backends.HostComputeDevice()).surfaces).sampling_m
 
 AOG.optical_sampling_m(owner::OpticalTrainOwner) = last(owner.surfaces).sampling_m
+AOG.optical_sampling_requires_step(::OpticalTrainOwner) = false
 _optical_train_capture_capability(::Backends.AbstractComputeDevice) = AOG.GraphNodeCaptureUnsupported()
 _optical_train_capture_capability(::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}}) = AOG.GraphNodeCaptureSafe()
 AOG.graph_node_capture_capability(owner::OpticalTrainOwner) =

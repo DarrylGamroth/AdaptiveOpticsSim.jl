@@ -155,7 +155,11 @@ end
         empty = runtime_opd_graph(propagation,(;);T,amplitude=T.(amplitude))
         zero_screen = runtime_opd_graph((first_step,propagation...),
             (first=zeros(T,16,16),);T,amplitude=T.(amplitude))
+        owner = AlgorithmGraphs.prepared_graph_node(zero_screen,:optics)
+        @test !AlgorithmGraphs.optical_sampling_requires_step(owner)
+        prepared_pitch = optical_sampling_m(owner)
         step_graph!(empty); step_graph!(zero_screen)
+        @test prepared_pitch ≈ prop_get_sampling(owner.train.workspace.wavefront)
         @test graph_output(zero_screen,:intensity) ≈ graph_output(empty,:intensity)
 
         addition = runtime_opd_graph((first_step,second_step,propagation...),

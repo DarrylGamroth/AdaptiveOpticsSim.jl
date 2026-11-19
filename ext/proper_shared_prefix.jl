@@ -207,12 +207,20 @@ function _enqueue_train_suffix!(branch, owner::RuntimeOPDTrainOwner)
     return nothing
 end
 
+# Branch construction is cold. Specialize the numerical owner on its own path,
+# without inferring every other path while building this branch.
+Base.@nospecializeinfer function _prepare_shared_branch(@nospecialize(path::OpticalTrainPlan),
+        @nospecialize(geometry), index, @nospecialize(inputs::NamedTuple),
+        @nospecialize(outputs::NamedTuple), target, prefix_count)
+    path_inputs = _shared_train_inputs(inputs, index, path, typeof(path.diameter_m))
+    output = getproperty(outputs, _shared_output(index))
+    owner = _prepare_train_owner(path, path_inputs, (; output), target, geometry)
+    return _shared_train_suffix(owner, prefix_count)
+end
+
 function AOG.prepare_graph_node(::Type{SharedOpticalTrainNode{T}}, plan::SharedOpticalTrainPlan,
         props::NamedTuple{(:geometries,)}, inputs::NamedTuple, outputs::NamedTuple,
         ::NamedTuple{()}, target) where {T}
-    path_inputs = map(eachindex(plan.paths)) do index
-        _shared_train_inputs(inputs, index, plan.paths[index], T)
-    end
     reference = first(plan.paths)
     prefix_plan = _train_with_steps(reference, reference.steps[1:plan.prefix_count])
     prefix_output = Backends.allocate_device_array(target, _output_type(T, reference.output_quantity),
@@ -229,13 +237,13 @@ function AOG.prepare_graph_node(::Type{SharedOpticalTrainNode{T}}, plan::SharedO
     _require_output_reference(prefix_plan.output_quantity, geometry)
     prefix = _prepare_train_owner(prefix_plan, first(prefix_inputs),
         (; output=prefix_output), target, prefix_geometry)
-    branches = map(eachindex(plan.paths)) do index
-        owner = _prepare_train_owner(plan.paths[index], path_inputs[index],
-            (; output=getproperty(outputs, _shared_output(index))), target, props.geometries[index])
-        _shared_train_suffix(owner, plan.prefix_count)
+    prefix_count = plan.prefix_count
+    indices = ntuple(identity, length(plan.paths))
+    branches = map(plan.paths, props.geometries, indices) do path, geometry, index
+        _prepare_shared_branch(path, geometry, index, inputs, outputs, target, prefix_count)
     end
     validation = _prepare_shared_train_validation(target, prefix_inputs)
-    return SharedOpticalTrainOwner(prefix, Tuple(branches), geometry, prefix_inputs, validation)
+    return SharedOpticalTrainOwner(prefix, branches, geometry, prefix_inputs, validation)
 end
 
 struct SharedTrainValidation{C,D,H,A,P,F}

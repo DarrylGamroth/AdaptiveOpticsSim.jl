@@ -230,6 +230,7 @@ function AOG.step_graph_node!(owner::PolychromaticOpticalTrainOwner)
 end
 
 AOG.optical_sampling_m(owner::PolychromaticOpticalTrainOwner) = owner.sampling_m
+AOG.optical_sampling_requires_step(::PolychromaticOpticalTrainOwner) = false
 function AOG.graph_node_capture_capability(owner::PolychromaticOpticalTrainOwner)
     return all(channel -> AOG.graph_node_capture_capability(channel) isa AOG.GraphNodeCaptureSafe,
         owner.channels) ? AOG.GraphNodeCaptureSafe() : AOG.GraphNodeCaptureUnsupported()

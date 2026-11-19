@@ -34,6 +34,7 @@ struct UnsupportedProperDevice <: AdaptiveOpticsSim.Backends.AbstractComputeDevi
             channel(2.0,3.0;transmission=0.4))
         mixed = train_graph(merge(config,(;channels));T,opd,amplitude)
         owner = AlgorithmGraphs.prepared_graph_node(mixed,:optics)
+        @test !AlgorithmGraphs.optical_sampling_requires_step(owner)
         reference_pitch = optical_sampling_m(owner) # Prepared output pitch, before first step.
         step_graph!(mixed)
         expected = zeros(16,16)

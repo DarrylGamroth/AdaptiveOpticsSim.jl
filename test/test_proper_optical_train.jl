@@ -47,6 +47,9 @@ end
         (op="lens",focal_length_m=0.2),(op="propagate",distance_m=0.2))
     propagation = merge(config,(;steps))
     graph = train_graph(propagation;opd,amplitude)
+    owner = AlgorithmGraphs.prepared_graph_node(graph,:optics)
+    @test !AlgorithmGraphs.optical_sampling_requires_step(owner)
+    prepared_pitch = optical_sampling_m(owner)
     step_graph!(graph)
     context = Proper.RunContext(Matrix{ComplexF64})
     wf = prop_begin(0.008,1.55e-6,16;beam_diam_fraction=0.5,context)
@@ -59,8 +62,8 @@ end
     prop_lens(wf,0.2,context,"lens")
     prop_propagate(wf,0.2,context,"propagate")
     direct,_ = prop_end(wf)
-    owner = AlgorithmGraphs.prepared_graph_node(graph,:optics)
-    @test optical_sampling_m(owner) ≈ prop_get_sampling(wf)
+    @test prepared_pitch ≈ prop_get_sampling(wf)
+    @test optical_sampling_m(owner) == prepared_pitch
     surface = last(owner.surfaces)
     @test all(name -> isequal(surface[name], getproperty(wf, name)), keys(surface))
     @test owner.plan.steps[1].name == "entrance clear aperture"

@@ -260,6 +260,7 @@ function _begin_sampled_pupil!(train, entrance::BilinearInterpolationPlan,phase=
 end
 
 AOG.optical_sampling_m(owner::RuntimeOPDTrainOwner) = AOG.optical_sampling_m(owner.train)
+AOG.optical_sampling_requires_step(::RuntimeOPDTrainOwner) = false
 AOG.graph_node_capture_capability(owner::RuntimeOPDTrainOwner) =
     _optical_train_capture_capability(Backends.compute_device(owner.train.output))
 AOG.reset_graph_node!(owner::RuntimeOPDTrainOwner) = AOG.reset_graph_node!(owner.train)
