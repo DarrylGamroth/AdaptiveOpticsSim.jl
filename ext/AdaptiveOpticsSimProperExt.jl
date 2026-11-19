@@ -154,21 +154,28 @@ function _mask_snapshot(array, ::Type{T}, quantity) where {T}
     return FixedSizeMatrixDefault{T}(converted)
 end
 
-function _train_optic!(wf, step, mask, context)
+function _train_surface!(wf, step, args...)
     if step.op === :propagate
-        Proper.prop_propagate(wf, step.distance_m, context, step.name)
+        Proper.prop_propagate(wf, step.distance_m, args...)
     elseif step.op === :propagate_to_focus
-        Proper.prop_propagate(wf, Proper.prop_get_distancetofocus(wf)+step.offset_m, context, step.name)
+        Proper.prop_propagate(wf, Proper.prop_get_distancetofocus(wf)+step.offset_m, args...)
     elseif step.op === :lens
-        Proper.prop_lens(wf, step.focal_length_m, context, step.name)
+        Proper.prop_lens(wf, step.focal_length_m, args...)
     elseif step.op === :circular_aperture
         Proper.prop_circular_aperture(wf, step.radius_m)
     elseif step.op === :circular_obscuration
         Proper.prop_circular_obscuration(wf, step.radius_m)
-    elseif step.op === :multiply
+    end
+    return nothing
+end
+
+function _train_optic!(wf, step, mask, context)
+    if step.op === :multiply
         Proper.prop_multiply(wf, step.amplitude)
     elseif step.op === :circular_mask || step.op === :sampled_mask
         Proper.prop_multiply(wf, mask)
+    else
+        _train_surface!(wf, step, context, step.name)
     end
     return nothing
 end
@@ -332,9 +339,8 @@ end
 
 function _prepare_train_geometry(plan::OpticalTrainPlan{T}, target) where {T}
     n = plan.resolution
-    context = Proper.RunContext(Matrix{Complex{T}})
-    wf = Proper.prop_begin(plan.diameter_m, plan.wavelength_um*T(1e-6), n;
-        beam_diam_fraction=T(plan.pupil_resolution/n), context)
+    wf = Proper.WaveFrontGeometry(plan.diameter_m, plan.wavelength_um*T(1e-6), n;
+        beam_diam_fraction=T(plan.pupil_resolution/n))
     # Index 1 is the entrance. Each following surface is the geometry just after
     # its optical step, including PROPER's reference-surface transition.
     entrance = _wavefront_geometry(wf)
@@ -366,7 +372,7 @@ function _prepare_train_geometry(plan::OpticalTrainPlan{T}, target) where {T}
         else
             nothing
         end
-        _train_optic!(wf, step, mask, context)
+        _train_surface!(wf, step)
         surfaces[index + 1] = _wavefront_geometry(wf)
         if mask !== nothing
             copyto!(Backends.allocate_device_array(target, eltype(mask), n, n), mask)

@@ -61,6 +61,8 @@ end
     direct,_ = prop_end(wf)
     owner = AlgorithmGraphs.prepared_graph_node(graph,:optics)
     @test optical_sampling_m(owner) ≈ prop_get_sampling(wf)
+    surface = last(owner.surfaces)
+    @test all(name -> isequal(surface[name], getproperty(wf, name)), keys(surface))
     @test owner.plan.steps[1].name == "entrance clear aperture"
     @test @inferred(step_graph!(graph)) === graph
     @test graph_output(graph,:intensity) ≈ direct
