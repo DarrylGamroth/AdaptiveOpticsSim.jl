@@ -257,6 +257,7 @@ const TEST_CI_SHARD_SPECS = (
         "quality",
         "prepared-execution-interfaces",
         "execution-strategies",
+        "graph-input-copy",
         "algorithm-graphs",
         "spatial-ao-residual",
         "zemax",
