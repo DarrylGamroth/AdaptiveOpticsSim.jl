@@ -178,15 +178,14 @@ function AOG.prepare_graph_node(::Type{PolychromaticOpticalTrainNode{T}},
     eltype(outputs.output) === T && size(outputs.output) == (n,n) &&
         Backends.compute_device(outputs.output) == target ||
         throw(AOG.AlgorithmGraphError("Proper optical train buffer contract mismatch"))
-    reference_sampling = _prepare_masks(plan.reference, target).sampling_m
+    reference_sampling = last(_prepare_train_geometry(plan.reference, target).surfaces).sampling_m
     output_sampling = something(plan.output_sampling_m, reference_sampling)
-    prepared = map(plan.channels) do channel
+    channels = map(plan.channels) do channel
         output = Backends.allocate_device_array(target, T, n, n)
         _prepare_optical_train(channel, inputs, (; output), target)
     end
-    channels = map(p -> p.owner, prepared)
-    overlaps = map(prepared) do channel
-        _prepare_cell_overlaps(_cell_overlaps(n, channel.sampling_m, output_sampling), n, target)
+    overlaps = map(channels) do channel
+        _prepare_cell_overlaps(_cell_overlaps(n, AOG.optical_sampling_m(channel), output_sampling), n, target)
     end
     scratch = Backends.allocate_device_array(target, T, n, n)
     fill!(scratch, 0)

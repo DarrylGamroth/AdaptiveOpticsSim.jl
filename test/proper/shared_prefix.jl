@@ -84,6 +84,34 @@ shared_prefix_exposure_state(exposure) = (exposure.start_ns,exposure.covered_ns,
 shared_prefix_feed!(owner,args...;kwargs...) =
     step_external_pupil!((name,image,metadata)->nothing,owner,args...;kwargs...)
 
+@testset "Shared branches reuse static masks and keep separate wavefronts" begin
+    plant = shared_prefix_test_owner()
+    graph = AlgorithmGraphs.optical_execution_graph(plant, :scc)
+    shared = AlgorithmGraphs.prepared_graph_node(graph, :propagation)
+    originals = map(shared_prefix_branches(plant)) do path
+        AlgorithmGraphs.prepared_graph_node(path, :optics).train
+    end
+    prefix = shared.prefix.train
+    prefix_count = length(prefix.plan.steps)
+    @test prefix.workspace.masks[5] === originals[1].workspace.masks[5]
+    @test shared.geometry === originals[1].surfaces[prefix_count + 1]
+    @test prefix.workspace.context !== originals[1].workspace.context
+    for (branch, original) in zip(shared.branches, originals)
+        train = branch.owner.train
+        @test train.workspace.masks === original.workspace.masks
+        @test train.surfaces === original.surfaces
+        @test train.workspace.context !== original.workspace.context
+        @test !Base.mightalias(train.workspace.wavefront.field, original.workspace.wavefront.field)
+        @test !Base.mightalias(train.workspace.padded_opd, original.workspace.padded_opd)
+        @test !Base.mightalias(train.workspace.shifted_mask, original.workspace.shifted_mask)
+        @test !Base.mightalias(train.output, original.output)
+    end
+    # A separately prepared prescription must retain its own mask coefficients.
+    edited = shared_prefix_test_graph(:fringed; sampled_phase=0.6)
+    edited_mask = AlgorithmGraphs.prepared_graph_node(edited, :optics).train.workspace.masks[5]
+    @test edited_mask != prefix.workspace.masks[5]
+end
+
 @testset "Shared prefix retains terminal rectangular pixel integration" begin
     for T in (Float32,Float64)
         shared = shared_prefix_test_owner(;T,pixel_integration=true)

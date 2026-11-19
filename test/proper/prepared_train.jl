@@ -47,7 +47,7 @@ function force_prepared_train(owner,target)
     workspace=ext.OpticalTrainWorkspace(w.wavefront,w.context,w.padded_opd,w.padded_amplitude,
         w.masks,w.shifted_mask,execution)
     replacement=ext.OpticalTrainOwner(train.plan,workspace,train.pupil_opd,train.pupil_amplitude,
-        train.output,train.sampling_m)
+        train.output,train.surfaces)
     return ext.RuntimeOPDTrainOwner(replacement,owner.interpolation,owner.inputs,owner.entrance)
 end
 

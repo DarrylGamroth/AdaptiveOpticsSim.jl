@@ -106,7 +106,8 @@ function AOG._prepare_external_pupil_propagation(
             _shared_pixels(index) => :output) for index in eachindex(paths))
     plan = SharedOpticalTrainPlan(paths, prefix_count)
     T = typeof(reference.diameter_m)
-    node = AOG.algorithm_node(:propagation, SharedOpticalTrainNode{T}, plan)
+    node = AOG.algorithm_node(:propagation, SharedOpticalTrainNode{T}, plan;
+        props=(; geometries=map(train -> (; masks=train.workspace.masks, train.surfaces), trains)))
     pixels = Tuple(AOG.algorithm_node(_shared_pixels(index), AOG.PixelIntegrationNode{T},
         configurations[index].pixels) for index in eachindex(paths)
         if configurations[index].pixels !== nothing)
@@ -207,7 +208,7 @@ function _enqueue_train_suffix!(branch, owner::RuntimeOPDTrainOwner)
 end
 
 function AOG.prepare_graph_node(::Type{SharedOpticalTrainNode{T}}, plan::SharedOpticalTrainPlan,
-        ::NamedTuple{()}, inputs::NamedTuple, outputs::NamedTuple,
+        props::NamedTuple{(:geometries,)}, inputs::NamedTuple, outputs::NamedTuple,
         ::NamedTuple{()}, target) where {T}
     path_inputs = map(eachindex(plan.paths)) do index
         _shared_train_inputs(inputs, index, plan.paths[index], T)
@@ -218,15 +219,19 @@ function AOG.prepare_graph_node(::Type{SharedOpticalTrainNode{T}}, plan::SharedO
         reference.resolution, reference.resolution)
     prefix_inputs = Tuple(_shared_train_inputs(inputs, index, prefix_plan, T)
         for index in eachindex(plan.paths))
-    prefix = AOG.prepare_graph_node(OpticalTrainNode{T}, prefix_plan, (;),
-        first(prefix_inputs), (;output=prefix_output), (;), target)
-    # Propagation geometry depends only on the frozen train. Establish the
-    # split on the host before warming or recording any suffix trajectory.
-    _enqueue_train_prefix!(prefix)
-    geometry = _wavefront_geometry(_scalar_train(prefix).workspace.wavefront)
+    # The admitted graphs have already simulated these exact optical paths.
+    # Reuse their static masks and geometry, keeping each owner's FFT scratch,
+    # live field, input bindings and output buffers independent.
+    base = first(props.geometries)
+    prefix_geometry = (; masks=base.masks[1:plan.prefix_count],
+        surfaces=view(base.surfaces, 1:(plan.prefix_count + 1)))
+    geometry = last(prefix_geometry.surfaces)
+    _require_output_reference(prefix_plan.output_quantity, geometry)
+    prefix = _prepare_train_owner(prefix_plan, first(prefix_inputs),
+        (; output=prefix_output), target, prefix_geometry)
     branches = map(eachindex(plan.paths)) do index
-        owner = AOG.prepare_graph_node(OpticalTrainNode{T}, plan.paths[index], (;),
-            path_inputs[index], (;output=getproperty(outputs, _shared_output(index))), (;), target)
+        owner = _prepare_train_owner(plan.paths[index], path_inputs[index],
+            (; output=getproperty(outputs, _shared_output(index))), target, props.geometries[index])
         _shared_train_suffix(owner, plan.prefix_count)
     end
     validation = _prepare_shared_train_validation(target, prefix_inputs)

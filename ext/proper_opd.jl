@@ -130,7 +130,7 @@ _require_sampled_train_target(::Backends.AcceleratorComputeDevice{<:Union{Backen
 _require_sampled_train_target(target) =
     throw(AOG.AlgorithmGraphError("runtime OPD steps and pupil_grid support host, CUDA and AMDGPU compute devices only"))
 
-function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs, target) where {T}
+function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs, target, geometry) where {T}
     _require_sampled_train_target(target)
     length(plan.steps) <= AOG._PROPER_MAX_SAMPLED_STEPS ||
         throw(AOG.AlgorithmGraphError("sampled scalar train exceeds the total optical step limit"))
@@ -144,10 +144,10 @@ function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs, 
             !Base.has_offset_axes(array) && Backends.compute_device(array) == target ||
             throw(AOG.AlgorithmGraphError("runtime OPD buffer contract mismatch for '$(step.input)'"))
     end
-    prepared = _prepare_optical_train(plan, inputs, outputs, target)
-    train = prepared.owner
+    train = _prepare_optical_train(plan, inputs, outputs, target, geometry)
     # Sample each OPD on its incident plane, before that optical step is applied.
-    interpolation = map(plan.steps, prepared.plane_sampling_m) do step, sampling
+    interpolation = map(plan.steps, ntuple(identity, length(plan.steps))) do step, index
+        sampling = train.surfaces[index].sampling_m
         step.op === :add_opd || return nothing
         grid = _bilinear_interpolation_plan(step, plan.resolution, sampling, step.outside_opd_m)
         _prepare_grid_interpolation(grid, target)

@@ -259,13 +259,13 @@ struct OpticalTrainWorkspace{W,C,A,M,S,E}
     execution::E
 end
 
-struct OpticalTrainOwner{P,W,D,A,O,T}
+struct OpticalTrainOwner{P,W,D,A,O,S}
     plan::P
     workspace::W
     pupil_opd::D
     pupil_amplitude::A
     output::O
-    sampling_m::T
+    surfaces::S
 end
 
 function _mask_sample(step, row, col)
@@ -330,12 +330,17 @@ function _band_limited_mask(step, n, sampling::T) where {T}
     return output
 end
 
-function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}
+function _prepare_train_geometry(plan::OpticalTrainPlan{T}, target) where {T}
     n = plan.resolution
     context = Proper.RunContext(Matrix{Complex{T}})
     wf = Proper.prop_begin(plan.diameter_m, plan.wavelength_um*T(1e-6), n;
         beam_diam_fraction=T(plan.pupil_resolution/n), context)
-    planes = map(plan.steps) do step
+    # Index 1 is the entrance. Each following surface is the geometry just after
+    # its optical step, including PROPER's reference-surface transition.
+    entrance = _wavefront_geometry(wf)
+    surfaces = Vector{typeof(entrance)}(undef, length(plan.steps) + 1)
+    surfaces[1] = entrance
+    masks = map(plan.steps, ntuple(identity, length(plan.steps))) do step, index
         sampling = T(Proper.prop_get_sampling(wf))
         mask = if step.op === :circular_mask
             isfinite(sampling) && sampling > 0 ||
@@ -362,25 +367,28 @@ function _prepare_masks(plan::OpticalTrainPlan{T}, target) where {T}
             nothing
         end
         _train_optic!(wf, step, mask, context)
-        device_mask = if mask !== nothing
+        surfaces[index + 1] = _wavefront_geometry(wf)
+        if mask !== nothing
             copyto!(Backends.allocate_device_array(target, eltype(mask), n, n), mask)
         end
-        return (; mask=device_mask, sampling)
     end
     _require_output_reference(plan.output_quantity, wf)
-    return (; masks=map(p -> p.mask, planes), plane_sampling_m=map(p -> p.sampling, planes),
-        sampling_m=T(Proper.prop_get_sampling(wf)))
+    return (; masks, surfaces=FixedSizeVectorDefault{typeof(entrance)}(surfaces))
 end
 
 function AOG.prepare_graph_node(::Type{OpticalTrainNode{T}}, plan::OpticalTrainPlan{T},
         ::NamedTuple{()}, inputs::NamedTuple,
         outputs::NamedTuple{(:output,)}, ::NamedTuple{()}, target) where {T}
-    (plan.pupil_grid !== nothing || any(step -> step.op === :add_opd, plan.steps)) &&
-        return _prepare_runtime_opd_train(plan, inputs, outputs, target)
-    return _prepare_optical_train(plan, inputs, outputs, target).owner
+    return _prepare_train_owner(plan, inputs, outputs, target, nothing)
 end
 
-function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, target) where {T}
+function _prepare_train_owner(plan, inputs, outputs, target, geometry)
+    (plan.pupil_grid !== nothing || any(step -> step.op === :add_opd, plan.steps)) &&
+        return _prepare_runtime_opd_train(plan, inputs, outputs, target, geometry)
+    return _prepare_optical_train(plan, inputs, outputs, target, geometry)
+end
+
+function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, target, geometry=nothing) where {T}
     n = plan.resolution
     for (array, shape, numeric_type) in
             ((inputs.pupil_opd, (plan.pupil_resolution, plan.pupil_resolution), T),
@@ -397,21 +405,23 @@ function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, targ
     padded_amplitude = similar(padded_opd)
     fill!(padded_opd, 0)
     fill!(padded_amplitude, 0)
-    geometry = _prepare_masks(plan, target)
+    if geometry === nothing
+        geometry = _prepare_train_geometry(plan, target)
+    end
     shifted_mask = any(step -> step.op === :sampled_mask, plan.steps) ?
         Backends.allocate_device_array(target, Complex{T}, n, n) : nothing
     workspace = OpticalTrainWorkspace(wavefront, context, padded_opd, padded_amplitude,
         geometry.masks, shifted_mask, nothing)
-    owner = OpticalTrainOwner(plan, workspace, inputs.pupil_opd, inputs.pupil_amplitude, outputs.output, geometry.sampling_m)
+    owner = OpticalTrainOwner(plan, workspace, inputs.pupil_opd, inputs.pupil_amplitude, outputs.output, geometry.surfaces)
     _prepare_train_capture!(owner, target)
     execution = _prepare_train_execution(owner,target)
     if execution !== nothing
         workspace = OpticalTrainWorkspace(wavefront,context,padded_opd,padded_amplitude,
             geometry.masks,shifted_mask,execution)
         owner = OpticalTrainOwner(plan,workspace,inputs.pupil_opd,inputs.pupil_amplitude,
-            outputs.output,geometry.sampling_m)
+            outputs.output,geometry.surfaces)
     end
-    return (; owner, geometry.sampling_m, geometry.plane_sampling_m)
+    return owner
 end
 
 _prepare_train_capture!(owner, target) = nothing
@@ -461,9 +471,9 @@ AOG.step_graph_node!(owner::OpticalTrainOwner) =
     _step_train_execution!(owner,owner.workspace.execution)
 
 AOG.optical_sampling_m(plan::OpticalTrainPlan) =
-    _prepare_masks(plan, Backends.HostComputeDevice()).sampling_m
+    last(_prepare_train_geometry(plan, Backends.HostComputeDevice()).surfaces).sampling_m
 
-AOG.optical_sampling_m(owner::OpticalTrainOwner) = owner.sampling_m
+AOG.optical_sampling_m(owner::OpticalTrainOwner) = last(owner.surfaces).sampling_m
 _optical_train_capture_capability(::Backends.AbstractComputeDevice) = AOG.GraphNodeCaptureUnsupported()
 _optical_train_capture_capability(::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}}) = AOG.GraphNodeCaptureSafe()
 AOG.graph_node_capture_capability(owner::OpticalTrainOwner) =
