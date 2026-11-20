@@ -118,6 +118,7 @@ const REVIEWED_SUPPORTED_API = (
             :prepare_telescope, :propagation_input_metadata, :propagation_output_metadata,
             :propagation_plan, :spatial_filter_output, :spatial_filter_plan,
             :resample_measured_influences, :validate_direct_imaging_batch,
+            :with_propagation_checkpoint,
         ),
         public_extension =
         (
@@ -380,7 +381,7 @@ const REVIEWED_SUPPORTED_API = (
         (
             :GraphNodeCaptureSafe, :GraphNodeCaptureUnsupported, :enqueue_graph_node!,
             :graph_node_capture_capability, :graph_node_ports, :graph_port_contract,
-            :graph_node_bindings,
+            :graph_node_bindings, :optical_sampling_requires_step,
             :prepare_graph_node, :reset_graph_node!, :step_graph_node!,
         ),
     ),
