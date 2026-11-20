@@ -39,7 +39,8 @@ _finish_optical_train!(wavefront, output, ::Val{:intensity}) =
 _finish_optical_train!(wavefront, output, ::Val{:electric_field}) =
     Proper.prop_end!(output, wavefront; noabs=true)
 
-function _train_step(step::NamedTuple, ::Type{T}, config, bindings) where {T}
+Base.@nospecializeinfer function _train_step(step::NamedTuple, ::Type{T},
+        @nospecialize(config), @nospecialize(bindings)) where {T}
     hasproperty(step, :op) || throw(AOG.AlgorithmGraphError("optical step is missing op"))
     op = AOG._file_string(step.op, "optical step op")
     op == "add_opd" && return _runtime_opd_step(step, T)
@@ -208,14 +209,21 @@ struct OpticalTrainPlan{T,S,G,Q}
     output_quantity::Q
 end
 
-function AOG._proper_optical_train_node(::Type{T}, name::Symbol,
-        config::NamedTuple, props::NamedTuple, bindings::NamedTuple) where {T<:Union{Float32,Float64}}
+# Authoring data can have a new tuple type after every structural change.
+# Normalize each step before sealing the concrete plan used by execution.
+Base.@nospecializeinfer function AOG._proper_optical_train_node(::Type{T}, name::Symbol,
+        @nospecialize(config::NamedTuple), @nospecialize(props::NamedTuple),
+        @nospecialize(bindings::NamedTuple)) where {T<:Union{Float32,Float64}}
     AOG.graph_node_bindings(AOG.ProperOpticalTrainNodeFactory{T}(), config)
     AOG._require_named_fields(props, (), (), "Proper optical train props")
-    steps = map(AOG._file_tuple(config.steps, "steps")) do step
+    declarations = AOG._file_tuple(config.steps, "steps")
+    normalized = Vector{NamedTuple}(undef, length(declarations))
+    for index in eachindex(normalized)
+        step = getfield(declarations, index)
         step isa NamedTuple || throw(AOG.AlgorithmGraphError("step must be a mapping"))
-        _train_step(step, T, config, bindings)
+        normalized[index] = _train_step(step, T, config, bindings)
     end
+    steps = Tuple(normalized)
     _validate_runtime_opd_inputs(steps)
     n = AOG._file_integer(config.resolution, "resolution")
     iseven(n) || throw(AOG.AlgorithmGraphError("Proper optical train resolution must be even for centered propagation"))
@@ -337,7 +345,8 @@ function _band_limited_mask(step, n, sampling::T) where {T}
     return output
 end
 
-function _prepare_train_geometry(plan::OpticalTrainPlan{T}, target) where {T}
+Base.@nospecializeinfer function _prepare_train_geometry(
+        @nospecialize(plan::OpticalTrainPlan{T}), target) where {T}
     n = plan.resolution
     wf = Proper.WaveFrontGeometry(plan.diameter_m, plan.wavelength_um*T(1e-6), n;
         beam_diam_fraction=T(plan.pupil_resolution/n))
@@ -346,7 +355,9 @@ function _prepare_train_geometry(plan::OpticalTrainPlan{T}, target) where {T}
     entrance = _wavefront_geometry(wf)
     surfaces = Vector{typeof(entrance)}(undef, length(plan.steps) + 1)
     surfaces[1] = entrance
-    masks = map(plan.steps, ntuple(identity, length(plan.steps))) do step, index
+    masks = Vector{Union{Nothing,AbstractMatrix}}(undef, length(plan.steps))
+    for index in eachindex(masks)
+        step = getfield(plan.steps, index)
         sampling = T(Proper.prop_get_sampling(wf))
         mask = if step.op === :circular_mask
             isfinite(sampling) && sampling > 0 ||
@@ -374,12 +385,12 @@ function _prepare_train_geometry(plan::OpticalTrainPlan{T}, target) where {T}
         end
         _train_surface!(wf, step)
         surfaces[index + 1] = _wavefront_geometry(wf)
-        if mask !== nothing
+        masks[index] = if mask !== nothing
             copyto!(Backends.allocate_device_array(target, eltype(mask), n, n), mask)
         end
     end
     _require_output_reference(plan.output_quantity, wf)
-    return (; masks, surfaces=FixedSizeVectorDefault{typeof(entrance)}(surfaces))
+    return (; masks=Tuple(masks), surfaces=FixedSizeVectorDefault{typeof(entrance)}(surfaces))
 end
 
 function AOG.prepare_graph_node(::Type{OpticalTrainNode{T}}, plan::OpticalTrainPlan{T},
@@ -388,13 +399,16 @@ function AOG.prepare_graph_node(::Type{OpticalTrainNode{T}}, plan::OpticalTrainP
     return _prepare_train_owner(plan, inputs, outputs, target, nothing)
 end
 
-function _prepare_train_owner(plan, inputs, outputs, target, geometry)
+Base.@nospecializeinfer function _prepare_train_owner(@nospecialize(plan::OpticalTrainPlan),
+        @nospecialize(inputs), @nospecialize(outputs), target, @nospecialize(geometry))
     (plan.pupil_grid !== nothing || any(step -> step.op === :add_opd, plan.steps)) &&
         return _prepare_runtime_opd_train(plan, inputs, outputs, target, geometry)
     return _prepare_optical_train(plan, inputs, outputs, target, geometry)
 end
 
-function _prepare_optical_train(plan::OpticalTrainPlan{T}, inputs, outputs, target, geometry=nothing) where {T}
+Base.@nospecializeinfer function _prepare_optical_train(
+        @nospecialize(plan::OpticalTrainPlan{T}), @nospecialize(inputs), @nospecialize(outputs),
+        target, @nospecialize(geometry=nothing)) where {T}
     n = plan.resolution
     for (array, shape, numeric_type) in
             ((inputs.pupil_opd, (plan.pupil_resolution, plan.pupil_resolution), T),

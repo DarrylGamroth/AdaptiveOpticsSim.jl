@@ -40,7 +40,8 @@ function _shared_path_configuration(graph, train)
     return (; pixels)
 end
 
-function _same_train_entrance(a, b)
+Base.@nospecializeinfer function _same_train_entrance(
+        @nospecialize(a::OpticalTrainPlan), @nospecialize(b::OpticalTrainPlan))
     return typeof(a.diameter_m) === typeof(b.diameter_m) &&
         a.resolution == b.resolution && a.pupil_resolution == b.pupil_resolution &&
         a.diameter_m == b.diameter_m && a.wavelength_um == b.wavelength_um &&
@@ -48,12 +49,23 @@ function _same_train_entrance(a, b)
         a.output_quantity === b.output_quantity
 end
 
-function AOG._prepare_external_pupil_propagation(
-        owners::Tuple{Vararg{Union{OpticalTrainOwner,RuntimeOPDTrainOwner}}},
-        graphs, observations)
-    length(owners) >= 2 || return nothing
-    trains = map(_scalar_train, owners)
-    paths = map(train -> train.plan, trains)
+# Admission uses topology and bindings at runtime. The prepared graph below
+# still specializes execution on its concrete numerical owners.
+Base.@nospecializeinfer function AOG._prepare_external_pupil_propagation(
+        @nospecialize(owners::Tuple{Vararg{Union{OpticalTrainOwner,RuntimeOPDTrainOwner}}}),
+        @nospecialize(branches::Tuple), @nospecialize(observations))
+    count = length(owners)
+    count >= 2 || return nothing
+    graphs = Vector{AOG.PreparedAlgorithmGraph}(undef, count)
+    trains = Vector{OpticalTrainOwner}(undef, count)
+    paths = Vector{OpticalTrainPlan}(undef, count)
+    for index in 1:count
+        graph = getfield(branches, index)
+        train = _scalar_train(getfield(owners, index))
+        graphs[index] = graph
+        trains[index] = train
+        paths[index] = train.plan
+    end
     reference = first(paths)
     all(plan -> _same_train_entrance(reference, plan), paths) || return nothing
     policies = map(AOG.graph_execution_policy, graphs)
@@ -64,8 +76,12 @@ function AOG._prepare_external_pupil_propagation(
     all(graph -> AOG.compute_device(graph) == target, graphs) || return nothing
     # Admit only a scalar root and optional ordinary terminal pixel integration.
     # Exact input identity proves the terminal reads this root's raw product.
-    configurations = map(_shared_path_configuration, graphs, trains)
-    any(isnothing, configurations) && return nothing
+    configurations = Vector{NamedTuple}(undef, count)
+    for index in 1:count
+        configuration = _shared_path_configuration(graphs[index], trains[index])
+        configuration === nothing && return nothing
+        configurations[index] = configuration
+    end
     # Independent graphs can encode an implicit ordering dependency through
     # caller-owned root inputs. Preserve their original chronology rather than
     # batching an input that a different path's raw or exported product changes.
@@ -104,10 +120,15 @@ function AOG._prepare_external_pupil_propagation(
     outputs = Tuple(AOG.graph_output(_shared_output(index),
         configurations[index].pixels === nothing ? :propagation => _shared_output(index) :
             _shared_pixels(index) => :output) for index in eachindex(paths))
-    plan = SharedOpticalTrainPlan(paths, prefix_count)
+    plan = SharedOpticalTrainPlan(Tuple(paths), prefix_count)
     T = typeof(reference.diameter_m)
+    geometries = Vector{NamedTuple}(undef, count)
+    for index in 1:count
+        train = trains[index]
+        geometries[index] = (; masks=train.workspace.masks, train.surfaces)
+    end
     node = AOG.algorithm_node(:propagation, SharedOpticalTrainNode{T}, plan;
-        props=(; geometries=map(train -> (; masks=train.workspace.masks, train.surfaces), trains)))
+        props=(; geometries=Tuple(geometries)))
     pixels = Tuple(AOG.algorithm_node(_shared_pixels(index), AOG.PixelIntegrationNode{T},
         configurations[index].pixels) for index in eachindex(paths)
         if configurations[index].pixels !== nothing)
@@ -222,8 +243,9 @@ Base.@nospecializeinfer function _prepare_shared_branch(@nospecialize(path::Opti
     return _shared_train_suffix(owner, prefix_count)
 end
 
-function AOG.prepare_graph_node(::Type{SharedOpticalTrainNode{T}}, plan::SharedOpticalTrainPlan,
-        props::NamedTuple{(:geometries,)}, inputs::NamedTuple, outputs::NamedTuple,
+Base.@nospecializeinfer function AOG.prepare_graph_node(::Type{SharedOpticalTrainNode{T}},
+        @nospecialize(plan::SharedOpticalTrainPlan), @nospecialize(props::NamedTuple{(:geometries,)}),
+        @nospecialize(inputs::NamedTuple), @nospecialize(outputs::NamedTuple),
         ::NamedTuple{()}, target) where {T}
     reference = first(plan.paths)
     prefix_plan = _train_with_steps(reference, reference.steps[1:plan.prefix_count])
@@ -242,12 +264,13 @@ function AOG.prepare_graph_node(::Type{SharedOpticalTrainNode{T}}, plan::SharedO
     prefix = _prepare_train_owner(prefix_plan, first(prefix_inputs),
         (; output=prefix_output), target, prefix_geometry)
     prefix_count = plan.prefix_count
-    indices = ntuple(identity, length(plan.paths))
-    branches = map(plan.paths, props.geometries, indices) do path, geometry, index
-        _prepare_shared_branch(path, geometry, index, inputs, outputs, target, prefix_count)
+    branches = Vector{NamedTuple}(undef, length(plan.paths))
+    for index in eachindex(branches)
+        branches[index] = _prepare_shared_branch(getfield(plan.paths, index),
+            getfield(props.geometries, index), index, inputs, outputs, target, prefix_count)
     end
     validation = _prepare_shared_train_validation(target, prefix_inputs)
-    return SharedOpticalTrainOwner(prefix, branches, geometry, prefix_inputs, validation)
+    return SharedOpticalTrainOwner(prefix, Tuple(branches), geometry, prefix_inputs, validation)
 end
 
 struct SharedTrainValidation{C,D,H,A,P,F}

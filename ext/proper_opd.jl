@@ -130,7 +130,9 @@ _require_sampled_train_target(::Backends.AcceleratorComputeDevice{<:Union{Backen
 _require_sampled_train_target(target) =
     throw(AOG.AlgorithmGraphError("runtime OPD steps and pupil_grid support host, CUDA and AMDGPU compute devices only"))
 
-function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs, target, geometry) where {T}
+Base.@nospecializeinfer function _prepare_runtime_opd_train(
+        @nospecialize(plan::OpticalTrainPlan{T}), @nospecialize(inputs), @nospecialize(outputs),
+        target, @nospecialize(geometry)) where {T}
     _require_sampled_train_target(target)
     length(plan.steps) <= AOG._PROPER_MAX_SAMPLED_STEPS ||
         throw(AOG.AlgorithmGraphError("sampled scalar train exceeds the total optical step limit"))
@@ -146,20 +148,21 @@ function _prepare_runtime_opd_train(plan::OpticalTrainPlan{T}, inputs, outputs, 
     end
     train = _prepare_optical_train(plan, inputs, outputs, target, geometry)
     # Sample each OPD on its incident plane, before that optical step is applied.
-    interpolation = map(plan.steps, ntuple(identity, length(plan.steps))) do step, index
+    interpolation = Vector{Union{Nothing,BilinearInterpolationPlan}}(nothing, length(plan.steps))
+    opd_inputs = Vector{Union{Nothing,AbstractMatrix}}(nothing, length(plan.steps))
+    for index in eachindex(interpolation)
+        step = getfield(plan.steps, index)
+        step.op === :add_opd || continue
         sampling = train.surfaces[index].sampling_m
-        step.op === :add_opd || return nothing
         grid = _bilinear_interpolation_plan(step, plan.resolution, sampling, step.outside_opd_m)
-        _prepare_grid_interpolation(grid, target)
-    end
-    opd_inputs = map(plan.steps) do step
-        step.op === :add_opd ? getproperty(inputs, step.input) : nothing
+        interpolation[index] = _prepare_grid_interpolation(grid, target)
+        opd_inputs[index] = getproperty(inputs, step.input)
     end
     entrance_geometry = plan.pupil_grid === nothing ? nothing :
         _bilinear_interpolation_plan(plan.pupil_grid, plan.resolution,
             plan.diameter_m/T(plan.pupil_resolution), zero(T))
     entrance = _prepare_grid_interpolation(entrance_geometry, target)
-    owner = RuntimeOPDTrainOwner(train, interpolation, opd_inputs, entrance)
+    owner = RuntimeOPDTrainOwner(train, Tuple(interpolation), Tuple(opd_inputs), entrance)
     _prepare_train_capture!(owner, target)
     return owner
 end
