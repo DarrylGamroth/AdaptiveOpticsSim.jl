@@ -181,12 +181,16 @@ function _enqueue_train_prefix!(owner::RuntimeOPDTrainOwner)
     return nothing
 end
 
-function _shared_train_suffix(owner::OpticalTrainOwner, prefix_count)
+# The prefix count is chosen during preparation. Reuse generic tuple slicing
+# across train shapes and keep the resulting tuples concrete for execution.
+Base.@nospecializeinfer function _shared_train_suffix(
+        @nospecialize(owner::OpticalTrainOwner), prefix_count)
     return (; owner, steps=owner.plan.steps[prefix_count+1:end],
         masks=owner.workspace.masks[prefix_count+1:end])
 end
 
-function _shared_train_suffix(owner::RuntimeOPDTrainOwner, prefix_count)
+Base.@nospecializeinfer function _shared_train_suffix(
+        @nospecialize(owner::RuntimeOPDTrainOwner), prefix_count)
     return (; owner, steps=owner.train.plan.steps[prefix_count+1:end],
         masks=owner.train.workspace.masks[prefix_count+1:end],
         inputs=owner.inputs[prefix_count+1:end],
