@@ -1,13 +1,16 @@
 using AdaptiveOpticsSim.AlgorithmGraphs: warmup_external_pupil!
 
 # Use the same optical-train/pixel-integration topology in both chopper phases.
-function warmup_test_camera(mask)
+function warmup_test_camera(mask; amplitude=ones(Float32, 16, 16), expose_optical_intensity=false)
     source = proper_camera_test_source()
     camera = AlgorithmGraphs.compose_proper_camera_graph(source; bindings=(; mask),
         output_shape=(8, 8), output_sampling_m=(1e-5, 1e-5),
         output_schema="test.camera-cell-flux/1", name="camera")
-    return prepare_algorithm_graph(load_algorithm_graph(camera; bindings=(
-        mask=mask, opd=zeros(Float32, 16, 16), amplitude=ones(Float32, 16, 16))))
+    if expose_optical_intensity
+        push!(camera["outputs"], Dict("name" => "optical_intensity", "source" => "optics.output"))
+    end
+    return prepare_algorithm_graph(load_algorithm_graph(camera;
+        bindings=(; mask, opd=zeros(Float32, 16, 16), amplitude)))
 end
 
 function warmup_test_owner()
@@ -164,4 +167,51 @@ end
             push!(steps, map(graph_step_sequence, (static_optics, detector))),
         detector_owner, zeros(4, 4), ones(4, 4); domain=ntuple(UInt8, 16))
     @test steps == [(1, 1), (2, 2)]
+end
+
+@testset "Fixed pupil warmup falls back when graph outputs alias pupil storage" begin
+    producer = warmup_test_camera(fill(0.7f0, 16, 16); expose_optical_intensity=true)
+    optical_intensity = graph_output(producer, :optical_intensity)
+    first_camera = warmup_test_camera(ones(Float32, 16, 16); amplitude=optical_intensity)
+    fringed = warmup_test_camera(fill(0.4f0, 16, 16))
+    unfringed = warmup_test_camera(fill(0.5f0, 16, 16))
+    camera = (output=:intensity, sampling_node=:camera_pixels)
+    plant = prepare_external_pupil((; first_camera, producer, scc=fringed);
+        exposure_durations=(first_camera=ModelDuration(2), producer=ModelDuration(2),
+            scc=ModelDuration(4)),
+        observations=(first_camera=camera, producer=camera,
+            scc=merge(camera, (; chopping=(; unfringed, initial_phase=:fringed)))))
+    @test plant.pupil_amplitude === optical_intensity
+    domain = ntuple(UInt8, 16)
+    opd = zeros(Float32, 16, 16)
+    amplitude = ones(Float32, 16, 16)
+    reference = NamedTuple[]
+    warmed = NamedTuple[]
+    function record_exposure!(records, name, image, metadata)
+        push!(records, (; name, metadata, bytes=copy(reinterpret(UInt8, vec(image)))))
+    end
+    for sequence in 1:4
+        @test step_external_pupil!((args...) -> record_exposure!(reference, args...),
+            plant, opd, amplitude, ModelTimestamp(2(sequence - 1)), ModelDuration(2);
+            domain, generation=UInt64(1), sequence=UInt64(sequence))
+    end
+    reset_external_pupil!(plant)
+    steps = Ref(UInt64(0))
+    warmup_external_pupil!(plant, opd, amplitude; domain) do name, image, metadata
+        steps[] = graph_step_sequence(producer)
+        record_exposure!(warmed, name, image, metadata)
+    end
+    @test steps[] == 4
+    @test length(warmed) == 10
+    @test last(warmed).metadata.chopped_image_kind === :unfringed
+    @test isequal(warmed, reference)
+
+    # A caller can also supply an exposed intermediate as the synthetic input.
+    # Zero keeps that matrix equal across samples, leaving alias admission decisive.
+    single = prepare_external_pupil((; producer,);
+        exposure_durations=(producer=ModelDuration(2),), observations=(producer=camera,))
+    warmup_external_pupil!(single, opd, optical_intensity; domain) do _, _, _
+        steps[] = graph_step_sequence(producer)
+    end
+    @test steps[] == 2
 end

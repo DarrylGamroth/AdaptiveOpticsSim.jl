@@ -1012,26 +1012,28 @@ function _supports_fixed_pupil_warmup(prepared, opd, amplitude)
     size(opd) == size(amplitude) == size(prepared.pupil_opd) || return false
     opd isa StridedMatrix{<:Union{Float32,Float64}} &&
         amplitude isa StridedMatrix{<:Union{Float32,Float64}} || return false
-    for (name, graph) in pairs(prepared.graphs)
-        observation = getproperty(prepared.observations, name)
-        # A response can own additional external bindings. Keep ordinary stepping
-        # unless the whole owner consists of independent optical observations.
-        _observation_response(observation) === nothing || return false
-        for variant in _observation_graphs(graph, observation)
-            compute_device(variant) == HostComputeDevice() &&
-                graph_execution_policy(variant) isa StreamGraphExecution &&
-                isempty(variant.delayed_links) &&
-                length(variant.inputs) == 2 &&
-                haskey(variant.inputs, prepared.input_names.opd) &&
-                haskey(variant.inputs, prepared.input_names.amplitude) &&
-                all(node -> _is_stateless_optical_node(node.owner), values(variant.nodes)) ||
-                return false
-            for buffer in (graph_input(variant, prepared.input_names.opd),
-                    graph_input(variant, prepared.input_names.amplitude),
-                    graph_output(variant, observation.output))
-                (Base.mightalias(opd, buffer) || Base.mightalias(amplitude, buffer)) && return false
-            end
-        end
+    # A response can own additional external bindings.
+    all(observation -> _observation_response(observation) === nothing,
+        values(prepared.observations)) || return false
+    graphs = Tuple(variant for (name, graph) in pairs(prepared.graphs)
+        for variant in _observation_graphs(graph, getproperty(prepared.observations, name)))
+    for graph in graphs
+        compute_device(graph) == HostComputeDevice() &&
+            graph_execution_policy(graph) isa StreamGraphExecution &&
+            isempty(graph.delayed_links) &&
+            length(graph.inputs) == 2 &&
+            all(node -> _is_stateless_optical_node(node.owner), values(graph.nodes)) ||
+            return false
+    end
+    names = (prepared.input_names.opd, prepared.input_names.amplitude)
+    inputs = Tuple(graph_input(graph, name) for graph in graphs for name in names)
+    any(input -> Base.mightalias(opd, input) || Base.mightalias(amplitude, input), inputs) &&
+        return false
+    pupil_buffers = (opd, amplitude, inputs...)
+    # A boundary pupil input can retain another graph's node output. Stepping
+    # that producer would change its consumers' input even with a fixed sample.
+    for graph in graphs, node in values(graph.nodes), output in values(node.outputs)
+        any(input -> Base.mightalias(output, input), pupil_buffers) && return false
     end
     return true
 end
@@ -1050,9 +1052,10 @@ through the usual borrowed-image contract.
 Independent streamed CPU observations with supported stateless optical nodes
 can reuse each phase's first intensity. Reuse requires strided Float32 or
 Float64 host samples independent of graph storage, with values matching the
-first sample. Owners with detector responses and samples after a pupil change
-use ordinary optical stepping. Exposure accumulation, detector responses and
-validation run at their usual cadence.
+first sample. A graph output that shares storage with any pupil input also
+requires ordinary optical stepping, as do detector responses and samples after
+a pupil change. Exposure accumulation, detector responses and validation run
+at their usual cadence.
 
 Give warmup exclusive access to the prepared owner. Callbacks may copy images
 and cancel by throwing. They must leave the prepared graphs, their bindings
