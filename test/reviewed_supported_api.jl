@@ -350,7 +350,7 @@ const REVIEWED_SUPPORTED_API = (
             :copyto_graph_input!,
             :graph_input_contract, :graph_output_contract,
             :CCDDetectorAcquisitionNode, :CCDDetectorAcquisitionNodeConfig,
-            :external_pupil_contract,
+            :external_pupil_contract, :warmup_external_pupil!,
             :optical_execution_graph,
             :CMOSDetectorAcquisitionNode, :CMOSDetectorAcquisitionNodeConfig,
             :DeformableMirrorSurfaceNode, :DeformableMirrorSurfaceNodeConfig,

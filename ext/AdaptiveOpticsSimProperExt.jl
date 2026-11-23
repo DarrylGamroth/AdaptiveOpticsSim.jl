@@ -495,6 +495,8 @@ AOG.optical_sampling_m(plan::OpticalTrainPlan) =
 
 AOG.optical_sampling_m(owner::OpticalTrainOwner) = last(owner.surfaces).sampling_m
 AOG.optical_sampling_requires_step(::OpticalTrainOwner) = false
+# Every scalar train step restarts the wavefront from the two bound pupil inputs.
+AOG._is_stateless_optical_node(::OpticalTrainOwner) = true
 _optical_train_capture_capability(::Backends.AbstractComputeDevice) = AOG.GraphNodeCaptureUnsupported()
 _optical_train_capture_capability(::Backends.AcceleratorComputeDevice{<:Union{Backends.CUDABackend,Backends.AMDGPUBackend}}) = AOG.GraphNodeCaptureSafe()
 AOG.graph_node_capture_capability(owner::OpticalTrainOwner) =

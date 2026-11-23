@@ -84,6 +84,7 @@ public PixelIntegrationNode, PixelIntegrationNodeConfig
 
 export IntensityExposure, reset_intensity_exposure!, integrate_intensity!
 export PreparedExternalPupil, prepare_external_pupil, step_external_pupil!, reset_external_pupil!
+public warmup_external_pupil!
 public external_pupil_contract
 public optical_execution_graph
 

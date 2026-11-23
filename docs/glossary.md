@@ -35,6 +35,13 @@ use `[x,y]`; publication transposes the spatial axes. A grey pupil supplies the
 same OPD and amplitude to every wavelength. Provisional registration describes
 an assumed normalized pupil correspondence, not a measured relay transform.
 
+**Fixed-pupil warmup** (`AlgorithmGraphs.warmup_external_pupil!`) exercises an
+external-pupil model over a synthetic exposure sequence and then resets its
+optical, exposure and detector state. An eligible optical graph can reuse the
+intensity from identical OPD and amplitude samples within this sequence. Each
+chopper phase has its own intensity, and each complete exposure runs its
+declared detector response.
+
 An **optical precision** selects `Float32` or `Float64` arithmetic and pupil,
 field and intensity array elements for an optical train. It does not change physical sampling,
 wavelength, model time or transport precision. Exposure accumulation can use

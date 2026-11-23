@@ -789,8 +789,11 @@ function _stage_external_pupil!(graph, prepared)
     return nothing
 end
 
-function _validate_observation!(prepared, graph, observation, execution, shared)
-    if !shared
+function _validate_observation!(prepared, graph, observation, execution, shared,
+        ::Val{Reuse}) where {Reuse}
+    # Warmup resets the step sequence before the first sample and enables reuse
+    # only for an unchanged pupil. Each variant commits its own first intensity.
+    if !(shared || (Reuse && graph_step_sequence(graph) > 0))
         _stage_external_pupil!(graph, prepared)
         _step_graph!(graph)
     end
@@ -807,23 +810,23 @@ function _validate_observation!(prepared, graph, observation, execution, shared)
 end
 
 function _validate_observation_variants!(
-        prepared, graph, observation, exposure, executions, start, finish, shared)
+        prepared, graph, observation, exposure, executions, start, finish, shared, reuse)
     if !haskey(observation, :chopping)
-        return _validate_observation!(prepared, graph, observation, first(executions), shared)
+        return _validate_observation!(prepared, graph, observation, first(executions), shared, reuse)
     end
     chopping = observation.chopping
     first_kind = _chopped_image_kind(chopping, start, exposure.duration_ns)
     crosses_phase = first_kind !== _chopped_image_kind(chopping, finish - 1, exposure.duration_ns)
     # Keep each phase's graph and execution concrete, in model-time order.
     if first_kind === :fringed
-        _validate_observation!(prepared, graph, observation, first(executions), shared)
+        _validate_observation!(prepared, graph, observation, first(executions), shared, reuse)
         if crosses_phase
-            _validate_observation!(prepared, chopping.unfringed, observation, last(executions), shared)
+            _validate_observation!(prepared, chopping.unfringed, observation, last(executions), shared, reuse)
         end
     else
-        _validate_observation!(prepared, chopping.unfringed, observation, last(executions), shared)
+        _validate_observation!(prepared, chopping.unfringed, observation, last(executions), shared, reuse)
         if crosses_phase
-            _validate_observation!(prepared, graph, observation, first(executions), shared)
+            _validate_observation!(prepared, graph, observation, first(executions), shared, reuse)
         end
     end
     return nothing
@@ -938,6 +941,13 @@ emission parity. A gap discards partial coverage without moving the phase origin
 function step_external_pupil!(emit::F,prepared::PreparedExternalPupil,opd::AbstractMatrix,
         amplitude::AbstractMatrix,timestamp::ModelTimestamp,duration::ModelDuration;
         domain::NTuple{16,UInt8},generation::UInt64,sequence::UInt64,lost_samples::UInt64=UInt64(0)) where {F}
+    return _step_external_pupil!(
+        emit, prepared, opd, amplitude, timestamp, duration, domain, generation, sequence,
+        lost_samples, Val(false))
+end
+
+function _step_external_pupil!(emit::F, prepared, opd, amplitude, timestamp, duration,
+        domain, generation, sequence, lost_samples, reuse) where {F}
     size(opd)==size(amplitude)==size(prepared.pupil_opd) || throw(DimensionMismatch("pupil sample shape"))
     Base.require_one_based_indexing(opd,amplitude)
     compute_device(opd)==compute_device(amplitude)==HostComputeDevice() ||
@@ -982,7 +992,7 @@ function step_external_pupil!(emit::F,prepared::PreparedExternalPupil,opd::Abstr
     map(values(prepared.graphs), values(prepared.observations), values(prepared.exposures),
             values(prepared.exposure_execution)) do graph, observation, exposure, executions
         _validate_observation_variants!(
-            prepared, graph, observation, exposure, executions, start, finish, shared)
+            prepared, graph, observation, exposure, executions, start, finish, shared, reuse)
     end
     map(keys(prepared.graphs), values(prepared.graphs), values(prepared.observations),
             values(prepared.exposures), values(prepared.exposure_execution), prepared.sampling_nodes) do name, graph, observation, exposure, executions, sampling_node
@@ -992,6 +1002,104 @@ function step_external_pupil!(emit::F,prepared::PreparedExternalPupil,opd::Abstr
     state.domain=domain;state.generation=generation;state.sequence=sequence
     state.last_end_ns=finish;state.lost_samples=lost_samples
     return true
+end
+
+_is_stateless_optical_node(owner) = false
+_is_stateless_optical_node(::_PixelIntegrationOwner) = true
+
+function _supports_fixed_pupil_warmup(prepared, opd, amplitude)
+    prepared.propagation === nothing || return false
+    size(opd) == size(amplitude) == size(prepared.pupil_opd) || return false
+    opd isa StridedMatrix{<:Union{Float32,Float64}} &&
+        amplitude isa StridedMatrix{<:Union{Float32,Float64}} || return false
+    for (name, graph) in pairs(prepared.graphs)
+        observation = getproperty(prepared.observations, name)
+        # A response can own additional external bindings. Keep ordinary stepping
+        # unless the whole owner consists of independent optical observations.
+        _observation_response(observation) === nothing || return false
+        for variant in _observation_graphs(graph, observation)
+            compute_device(variant) == HostComputeDevice() &&
+                graph_execution_policy(variant) isa StreamGraphExecution &&
+                isempty(variant.delayed_links) &&
+                length(variant.inputs) == 2 &&
+                haskey(variant.inputs, prepared.input_names.opd) &&
+                haskey(variant.inputs, prepared.input_names.amplitude) &&
+                all(node -> _is_stateless_optical_node(node.owner), values(variant.nodes)) ||
+                return false
+            for buffer in (graph_input(variant, prepared.input_names.opd),
+                    graph_input(variant, prepared.input_names.amplitude),
+                    graph_output(variant, observation.output))
+                (Base.mightalias(opd, buffer) || Base.mightalias(amplitude, buffer)) && return false
+            end
+        end
+    end
+    return true
+end
+
+"""
+    warmup_external_pupil!(emit, prepared, opd, amplitude; domain, check=Returns(nothing))
+
+Exercise a fresh or reset external-pupil owner with host OPD (metres) and
+relative field amplitude. Advance from model time zero in steps of the greatest
+common divisor of the exposure durations, for twice the longest exposure.
+Require at most 4096 samples. Use the supplied synthetic acquisition domain,
+generation one and consecutive sequences. Call `check()` before each sample
+and forward complete exposures synchronously to `emit(name, image, metadata)`
+through the usual borrowed-image contract.
+
+Independent streamed CPU observations with supported stateless optical nodes
+can reuse each phase's first intensity. Reuse requires strided Float32 or
+Float64 host samples independent of graph storage, with values matching the
+first sample. Owners with detector responses and samples after a pupil change
+use ordinary optical stepping. Exposure accumulation, detector responses and
+validation run at their usual cadence.
+
+Give warmup exclusive access to the prepared owner. Callbacks may copy images
+and cancel by throwing. They must leave the prepared graphs, their bindings
+and their output storage untouched. The prepared owner resets its optical
+graphs, exposures, detector responses and input admission after warmup,
+including if `check`, stepping or emission throws. The caller owns its buffers
+and any copies made by `emit`.
+"""
+function warmup_external_pupil!(emit::F, prepared::PreparedExternalPupil,
+        opd::AbstractMatrix, amplitude::AbstractMatrix;
+        domain::NTuple{16,UInt8}, check=Returns(nothing)) where {F}
+    prepared.state.domain === nothing ||
+        throw(ArgumentError("external pupil warmup requires a fresh or reset owner"))
+    try
+        durations = map(exposure -> exposure.duration_ns, values(prepared.exposures))
+        step = reduce(gcd, durations)
+        horizon = Base.checked_mul(maximum(durations), Int64(2))
+        samples = div(horizon, step)
+        0 < samples <= 4096 ||
+            throw(ArgumentError("external pupil warmup exceeds 4096 samples"))
+        duration = ModelDuration(step)
+        generation = UInt64(1)
+        check()
+        reuse = _supports_fixed_pupil_warmup(prepared, opd, amplitude)
+        initial_opd, initial_amplitude =
+            reuse ? (copy(opd), copy(amplitude)) : (nothing, nothing)
+        step_external_pupil!(emit, prepared, opd, amplitude, ModelTimestamp(0), duration;
+            domain, generation, sequence=UInt64(1)) ||
+            throw(AlgorithmGraphError("external pupil warmup sample rejected"))
+        for i in 2:samples
+            check()
+            timestamp = ModelTimestamp((i - 1) * step)
+            sequence = UInt64(i)
+            reuse = reuse && isequal(initial_opd, opd) && isequal(initial_amplitude, amplitude)
+            accepted = if reuse
+                _step_external_pupil!(emit, prepared, opd, amplitude, timestamp, duration,
+                    domain, generation, sequence, UInt64(0), Val(true))
+            else
+                step_external_pupil!(emit, prepared, opd, amplitude, timestamp, duration;
+                    domain, generation, sequence)
+            end
+            accepted || throw(AlgorithmGraphError("external pupil warmup sample rejected"))
+        end
+    finally
+        reset_external_pupil!(prepared)
+    end
+    return nothing
 end
 
 """
