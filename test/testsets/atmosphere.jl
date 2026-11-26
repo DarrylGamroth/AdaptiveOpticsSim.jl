@@ -1065,3 +1065,105 @@ end
     @test any(norm(rates_a[i] - rates_c[i]) > 0 for i in eachindex(rates_a))
 
 end
+
+@testset "Finite moving-screen low-frequency completion" begin
+    n = 20
+    diameter = 8.0
+    tel = Telescope(resolution=n, diameter=diameter)
+    params = (; r0=0.2, L0=25.0, reference_wavelength_m=500e-9,
+        fractional_cn2=[0.7, 0.3], wind_speed=[1.0, 1.0],
+        wind_direction_deg=[0.0, 180.0], altitude=[0.0, 4000.0])
+    native = MultiLayerAtmosphere(tel; params...)
+    completed = MultiLayerAtmosphere(tel; params..., low_frequency_completion=true)
+    advance_by!(native, 0; rng=MersenneTwister(198))
+    rng = MersenneTwister(198)
+    advance_by!(completed, 0; rng)
+
+    native_period = 3diameter
+    coarse_period = 27native_period
+    screens = map(completed.layers) do layer
+        return layer.low_frequency.state.phase_rad
+    end
+    for (base, layer) in zip(native.layers, completed.layers)
+        base_state = base.generator.state
+        native_state = layer.generator.state
+        @test base_state.noise_re == native_state.noise_re
+        @test base_state.noise_im == native_state.noise_im
+        # The native grid keeps its original PSD outside the refined cells.
+        expected_psd = copy(base_state.psd)
+        native_n = size(expected_psd, 1)
+        for j in 1:native_n, i in 1:native_n
+            if min(i - 1, native_n - i + 1) <= 6 && min(j - 1, native_n - j + 1) <= 6
+                expected_psd[i, j] = 0
+            end
+        end
+        @test native_state.psd == expected_psd
+        low = layer.low_frequency
+        psd = low.state.psd
+        @test size(psd) == (1296, 1296)
+        @test size(psd, 1) * low.params.sampling_m ≈ coarse_period
+        @test psd[1, 1] == 0
+        @test count(!iszero, psd) == (27 * 13)^2 - 1
+        @test psd[2, 1] ≈ 0.023 * params.r0^(-5 / 3) *
+            (inv(coarse_period)^2 + inv(params.L0)^2)^(-11 / 6)
+        @test psd[176, 1] > 0 && psd[1, 176] > 0
+        @test iszero(psd[177, 1]) && iszero(psd[1, 177])
+    end
+
+    initial_native = rendered_atmosphere_opd(native, tel)
+    initial_completed = rendered_atmosphere_opd(completed, tel)
+    rng_snapshot = copy(rng)
+    Atmospheres.initialize_atmosphere!(completed, rng)
+    @test rng == rng_snapshot
+    # Wind moves exactly one native period along each layer's x axis.
+    advance_by!(native, native_period; rng=MersenneTwister(198))
+    advance_by!(completed, native_period; rng)
+    repeated_native = rendered_atmosphere_opd(native, tel)
+    @test repeated_native ≈ initial_native
+    @test norm(rendered_atmosphere_opd(completed, tel) - initial_completed) > 1e-8
+    advance_by!(completed, coarse_period - native_period; rng)
+    @test rendered_atmosphere_opd(completed, tel) ≈ initial_completed atol=1e-18
+    @test rng == rng_snapshot
+
+    # Reset redraws the original two bands with the same seed and bindings.
+    snapshots = map(copy, screens)
+    Atmospheres._reset_multilayer_atmosphere!(completed, MersenneTwister(198))
+    @test all(screens[i] == snapshots[i] for i in eachindex(screens))
+    @test rendered_atmosphere_opd(completed, tel) == initial_completed
+
+    # An off-axis finite-height source exercises the coarse cone footprint.
+    src = LGSSource(magnitude=0.0, separation_arcsec=12.0,
+        position_angle_deg=38.0, altitude=80_000.0)
+    advance_by!(completed, 0.37; rng)
+    expected = rendered_atmosphere_opd(completed, tel, src)
+    output = zeros(n, n, 1)
+    prepared = prepare_atmosphere_direction_batch(completed, tel, [src], output)
+    render_atmosphere_directions!(prepared, completed, current_epoch(completed))
+    @test output[:, :, 1] == expected
+    Atmospheres._render_atmosphere_direction_batch!(KA_CPU_STYLE, prepared, completed)
+    @test output[:, :, 1] ≈ expected atol=1e-18
+
+    # Replay carries identical native-pixel displacement for both grids, then
+    # converts it before wrapping at each screen's own period.
+    renderer = prepare_atmosphere_renderer(completed, tel, src)
+    replay = Atmospheres._prepare_moving_screen_replay(completed, renderer, 0.001)
+    plan = replay.plan
+    state = replay.state
+    workspace = replay.workspace
+    state.offset_x .= (3n * 1.5, 3n * 1.5, -3n * 1.5, -3n * 1.5)
+    Backends.launch_kernel!(KA_CPU_STYLE, Atmospheres.advance_moving_screen_replay_kernel!,
+        state.offset_x, state.offset_y, workspace.start_x, workspace.start_y,
+        plan.offset_increment_x, plan.offset_increment_y, plan.base_start_x, plan.base_start_y,
+        plan.screen_period, plan.sampling_ratio, 4; ndrange=4)
+    @test state.offset_x[1:2:end] == state.offset_x[2:2:end]
+    @test plan.sampling_ratio ≈ [1, 48 / (3n), 1, 48 / (3n)]
+    @test workspace.start_x ≈ 1 .+ mod.(
+        plan.base_start_x .- state.offset_x .* plan.sampling_ratio .- 1, plan.screen_period)
+
+    # A physical cutoff above coarse Nyquist is valid on the native grid and
+    # applies to every occupied mode on the coarse grid.
+    rejection = SpatialAORejection(control_cutoff_cycles_per_m=1.1, residual_amplitude=0.25)
+    filter = Atmospheres._prepare_spatial_ao_rejection(rejection, completed)
+    Atmospheres._apply_spatial_ao_rejection!(filter)
+    @test all(screens[i] ≈ 0.25 .* snapshots[i] for i in eachindex(screens))
+end

@@ -497,6 +497,15 @@ must convert these bindings into the native node's configuration ownership;
 the binding tuple does not become execution state. Detector factories use
 `(name, config, props; detector)` with the scientific selector as a keyword.
 
+For finite frozen-flow layers, `multilayer_atmosphere_opd_f32` accepts
+`low_frequency_completion: true`. The native screen spans three pupil
+diameters. The optional screen spans 27 native periods. It replaces up to 13 × 13
+central native Fourier cells with samples at 27 times finer frequency spacing.
+The native screen retains the frequencies outside this band.
+Both screens exclude piston and move at the layer's physical wind velocity.
+This adds long-wavelength tilt power when the outer scale exceeds the native
+screen width. The combined field is still periodic. The default is `false`.
+
 ### Idealized spatial AO residual
 
 `spatial_ao_residual_node` declares an independent simplified facility-AO

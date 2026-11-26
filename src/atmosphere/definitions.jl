@@ -64,7 +64,8 @@ Cold declaration of one finite moving-screen multilayer atmosphere.
 
 Layer parameters are copied into fixed-size homogeneous host configuration
 storage. Explicit `layer_ids` are required because tuple position and altitude
-are not stable stochastic-owner identities.
+are not stable stochastic-owner identities. Set `low_frequency_completion=true`
+to include longer spatial wavelengths in each frozen-flow layer.
 """
 struct MultiLayerAtmosphereDefinition{
     T<:AbstractFloat,
@@ -75,6 +76,7 @@ struct MultiLayerAtmosphereDefinition{
     reference_wavelength_m::T
     L0::T
     layers::L
+    low_frequency_completion::Bool
 end
 
 """Cold declaration of one infinite boundary-injection multilayer atmosphere."""
@@ -154,6 +156,7 @@ function MultiLayerAtmosphereDefinition(;
     wind_direction_deg,
     altitude,
     layer_ids,
+    low_frequency_completion::Bool=false,
     T::Type{<:AbstractFloat}=Float64,
 )
     layers = _cold_atmosphere_layer_definitions(T;
@@ -169,6 +172,7 @@ function MultiLayerAtmosphereDefinition(;
             "atmosphere reference wavelength in metres"),
         _converted_positive_finite(L0, T, "atmosphere outer scale L0"),
         layers,
+        low_frequency_completion,
     )
 end
 
@@ -272,6 +276,7 @@ function _prepare_timed_atmosphere(
         wind_direction_deg=_definition_wind_directions_deg(definition),
         altitude=_definition_altitudes(definition),
         layer_ids=_definition_layer_ids(definition),
+        low_frequency_completion=definition.low_frequency_completion,
         T,
         backend=selector,
     )
@@ -363,6 +368,7 @@ function validate_timed_atmosphere_target(
 )
     for layer in atmosphere.layers
         _require_kolmogorov_target(layer.generator, target)
+        isnothing(layer.low_frequency) || _require_kolmogorov_target(layer.low_frequency, target)
         _require_telescope_target(layer.generator_telescope, target,
             "moving-layer generator telescope")
     end

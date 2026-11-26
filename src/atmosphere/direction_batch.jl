@@ -336,11 +336,22 @@ function _validate_batch_layer_storage(
     metadata::OpticalPlaneMetadata,
 )
     screen = _direction_batch_layer_screen(layer)
-    size(screen, 1) == size(screen, 2) || throw(DimensionMismatchError(
-        "an atmosphere batch layer screen must be square"))
     size(screen, 1) >= metadata.dimensions[1] ||
         throw(DimensionMismatchError(
             "an atmosphere batch layer screen is smaller than the pupil grid"))
+    sampling = _direction_batch_layer_sampling(layer)
+    metadata.sampling[1] == sampling &&
+        metadata.sampling[2] == sampling ||
+        throw(InvalidConfiguration(
+            "atmosphere layer and output pupil grid have incompatible physical sampling"))
+    _validate_batch_screen(screen, metadata)
+    _validate_batch_low_frequency(layer, metadata)
+    return screen
+end
+
+function _validate_batch_screen(screen, metadata::OpticalPlaneMetadata)
+    size(screen, 1) == size(screen, 2) || throw(DimensionMismatchError(
+        "an atmosphere batch layer screen must be square"))
     eltype(screen) === metadata.numeric_type || throw(InvalidConfiguration(
         "an atmosphere batch layer screen has an incompatible numeric type"))
     typeof(backend(screen)) === typeof(metadata.backend) ||
@@ -348,13 +359,15 @@ function _validate_batch_layer_storage(
             "an atmosphere batch layer screen has an incompatible backend"))
     compute_device(screen) == metadata.device || throw(InvalidConfiguration(
         "an atmosphere batch layer screen is on a different compute device"))
-    sampling = _direction_batch_layer_sampling(layer)
-    metadata.sampling[1] == sampling &&
-        metadata.sampling[2] == sampling ||
-        throw(InvalidConfiguration(
-            "atmosphere layer and output pupil grid have incompatible physical sampling"))
     return screen
 end
+
+@inline _validate_batch_low_frequency(::AbstractAtmosphereLayer, metadata) = nothing
+@inline _validate_batch_low_frequency(layer::MovingAtmosphereLayer, metadata) =
+    _validate_batch_low_frequency(layer.low_frequency, metadata)
+@inline _validate_batch_low_frequency(::Nothing, metadata) = nothing
+@inline _validate_batch_low_frequency(screen::KolmogorovAtmosphere, metadata) =
+    _validate_batch_screen(screen.state.phase_rad, metadata)
 
 function _validate_batch_preparation(
     atm::AbstractTimedAtmosphere,
@@ -714,6 +727,7 @@ end
     layer_offset_y,
     opd_scale,
     layer_index::Int,
+    sampling_ratio,
     n::Int,
     m::Int,
     direction_count::Int,
@@ -723,15 +737,15 @@ end
     if i <= n && j <= n && direction <= direction_count
         T = eltype(output)
         @inbounds begin
-            scale = footprint_scale[layer_index, direction]
+            scale = footprint_scale[layer_index, direction] * sampling_ratio
             start_x = T(m + 1) / T(2) -
                 scale * T(n - 1) / T(2) -
-                layer_offset_x +
-                shift_x[layer_index, direction]
+                layer_offset_x * sampling_ratio +
+                shift_x[layer_index, direction] * sampling_ratio
             start_y = T(m + 1) / T(2) -
                 scale * T(n - 1) / T(2) -
-                layer_offset_y +
-                shift_y[layer_index, direction]
+                layer_offset_y * sampling_ratio +
+                shift_y[layer_index, direction] * sampling_ratio
             start_x = normalize_start_coordinate(start_x, m)
             start_y = normalize_start_coordinate(start_y, m)
 
@@ -773,10 +787,39 @@ function _queue_atmosphere_direction_layer!(
     layer::AbstractAtmosphereLayer,
     layer_index::Int,
 )
+    return _queue_atmosphere_direction_screen!(phase, prepared, layer, layer_index,
+        _direction_batch_layer_screen(layer), one(eltype(prepared.workspace.output)),
+        layer_index == 1)
+end
+
+function _queue_atmosphere_direction_layer!(
+    phase::KernelLaunchPhase{<:AcceleratorStyle},
+    prepared::PreparedAtmosphereDirectionBatch,
+    layer::MovingAtmosphereLayer,
+    layer_index::Int,
+)
+    overwrite = layer_index == 1
+    for generator in _moving_layer_screens(layer)
+        _queue_atmosphere_direction_screen!(phase, prepared, layer, layer_index,
+            generator.state.phase_rad, _moving_screen_sampling_ratio(layer, generator),
+            overwrite)
+        overwrite = false
+    end
+    return nothing
+end
+
+function _queue_atmosphere_direction_screen!(
+    phase::KernelLaunchPhase{<:AcceleratorStyle},
+    prepared::PreparedAtmosphereDirectionBatch,
+    layer::AbstractAtmosphereLayer,
+    layer_index::Int,
+    screen,
+    sampling_ratio,
+    overwrite::Bool,
+)
     workspace = prepared.workspace
     output = workspace.output
     n = size(output, 1)
-    screen = _direction_batch_layer_screen(layer)
     m = size(screen, 1)
     T = eltype(output)
     queue_kernel!(
@@ -792,10 +835,11 @@ function _queue_atmosphere_direction_layer!(
         T(_direction_batch_layer_offset_y(layer)),
         T(_direction_batch_layer_opd_scale(layer)),
         layer_index,
+        T(sampling_ratio),
         n,
         m,
         prepared.params.direction_count,
-        layer_index == 1;
+        overwrite;
         ndrange=(
             n,
             n,
@@ -831,7 +875,7 @@ Render every frozen direction from one current atmosphere epoch into the
 prepared caller-owned atmospheric OPD stack. The complete batch contract is
 validated before any output slice is mutated. CPU execution preserves the
 single-direction serial algorithm; accelerator execution submits one
-three-dimensional kernel per atmosphere layer and explicitly waits for
+three-dimensional kernel per phase screen and explicitly waits for
 device-ready completion.
 """
 function render_atmosphere_directions!(

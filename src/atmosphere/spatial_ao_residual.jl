@@ -8,8 +8,10 @@ The real, even Fourier-amplitude transfer is zero at DC, `residual_amplitude`
 for nonzero radial frequencies at or below `control_cutoff_cycles_per_m`, and
 one above it. The PSD fraction below cutoff is `residual_amplitude^2`.
 
-The cutoff must be positive and no greater than the screen's axis Nyquist
-frequency (checked during preparation). The amplitude must lie in [0, 1].
+The cutoff must be positive and no greater than the native screen's axis
+Nyquist frequency (checked during preparation). When a low-frequency screen
+is present, the same physical cutoff applies to it. The amplitude must lie
+in [0, 1].
 This instantaneous model has no WFS noise, temporal servo, or facility fit.
 """
 struct SpatialAORejection{T<:AbstractFloat}
@@ -40,20 +42,22 @@ end
 
 # Exact screen bindings and owned transfer survive reset; only the FFT buffer
 # is replaceable scratch. Filtering never advances the atmosphere or its RNG.
-struct _PreparedSpatialAORejection{R,A,S,W}
+struct _PreparedSpatialAORejection{R,A,S,W,F}
     rejection::R
     transfer::A
     screens::S
     workspace::W
+    low_frequency::F
 end
 
 function _spatial_ao_transfer(rejection::SpatialAORejection, n::Int,
-        sampling_m::T) where {T<:AbstractFloat}
-    rejection.control_cutoff_cycles_per_m <= inv(T(2) * sampling_m) ||
+        sampling_m::T; check_nyquist::Bool=true) where {T<:AbstractFloat}
+    nyquist = inv(T(2) * sampling_m)
+    (!check_nyquist || rejection.control_cutoff_cycles_per_m <= nyquist) ||
         throw(InvalidConfiguration("spatial AO control cutoff exceeds axis Nyquist"))
     cutoff = T(rejection.control_cutoff_cycles_per_m)
     amplitude = T(rejection.residual_amplitude)
-    isfinite(cutoff) && zero(T) < cutoff <= inv(T(2) * sampling_m) ||
+    isfinite(cutoff) && cutoff > zero(T) && (!check_nyquist || cutoff <= nyquist) ||
         throw(InvalidConfiguration(
             "spatial AO control cutoff must be representable and not exceed axis Nyquist"))
     isfinite(amplitude) && zero(T) <= amplitude <= one(T) ||
@@ -72,23 +76,43 @@ _prepare_spatial_ao_rejection(::Nothing, ::MultiLayerAtmosphere) = nothing
 
 function _prepare_spatial_ao_rejection(rejection::SpatialAORejection,
         atmosphere::MultiLayerAtmosphere)
-    layers = atmosphere.layers
-    screens = map(layer -> layer.generator.state.phase_rad, Tuple(layers))
+    layers = Tuple(atmosphere.layers)
+    screens = map(layer -> layer.generator.state.phase_rad, layers)
+    sampling_m = first(layers).params.sampling_m
+    device = compute_device(first(screens))
+    all(layer -> layer.params.sampling_m == sampling_m, layers) ||
+        throw(InvalidConfiguration("spatial AO screens must have the same physical sampling"))
+    transfer, workspace = _prepare_spatial_ao_filter(rejection, screens, sampling_m, device)
+    low_frequency = _prepare_low_frequency_rejection(rejection, device,
+        map(layer -> layer.low_frequency, layers))
+    return _PreparedSpatialAORejection(rejection, transfer, screens, workspace, low_frequency)
+end
+
+_prepare_low_frequency_rejection(rejection, device, ::Tuple{Nothing,Vararg{Nothing}}) = nothing
+
+function _prepare_low_frequency_rejection(rejection, device, generators)
+    screens = map(generator -> generator.state.phase_rad, generators)
+    sampling_m = first(generators).params.sampling_m
+    all(generator -> generator.params.sampling_m == sampling_m, generators) ||
+        throw(InvalidConfiguration("spatial AO screens must have the same physical sampling"))
+    transfer, workspace = _prepare_spatial_ao_filter(rejection, screens, sampling_m, device;
+        check_nyquist=false)
+    return _PreparedSpatialAORejection(rejection, transfer, screens, workspace, nothing)
+end
+
+function _prepare_spatial_ao_filter(rejection, screens, sampling_m, device;
+        check_nyquist::Bool=true)
     first_screen = first(screens)
     T = eltype(first_screen)
     n = size(first_screen, 1)
-    sampling_m = first(layers).params.sampling_m
-    device = compute_device(first_screen)
-    for (layer, screen) in zip(layers, screens)
+    for screen in screens
         size(screen) == (n, n) && eltype(screen) === T || throw(InvalidConfiguration(
             "spatial AO screens must have the same square grid and precision"))
-        layer.params.sampling_m == sampling_m || throw(InvalidConfiguration(
-            "spatial AO screens must have the same physical sampling"))
         compute_device(screen) == device || throw(InvalidConfiguration(
             "spatial AO screens must occupy the same compute device"))
     end
-    host_transfer = _spatial_ao_transfer(rejection, n, sampling_m)
-    transfer, workspace = _with_compute_device(device) do
+    host_transfer = _spatial_ao_transfer(rejection, n, sampling_m; check_nyquist)
+    return _with_compute_device(device) do
         transfer = allocate_device_array(device, T, n, n)
         copyto!(transfer, host_transfer)
         buffer = allocate_device_array(device, Complex{T}, n, n)
@@ -96,7 +120,6 @@ function _prepare_spatial_ao_rejection(rejection::SpatialAORejection,
         ifft_plan = plan_ifft_backend!(buffer)
         return transfer, _SpatialAORejectionWorkspace(buffer, fft_plan, ifft_plan)
     end
-    return _PreparedSpatialAORejection(rejection, transfer, screens, workspace)
 end
 
 _apply_spatial_ao_rejection!(::Nothing) = nothing
@@ -111,5 +134,6 @@ function _apply_spatial_ao_rejection!(owner::_PreparedSpatialAORejection)
         enqueue_fft_plan!(buffer, workspace.ifft_plan)
         screen .= real.(buffer)
     end
+    _apply_spatial_ao_rejection!(owner.low_frequency)
     return nothing
 end

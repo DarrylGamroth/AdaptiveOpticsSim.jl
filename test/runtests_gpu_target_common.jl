@@ -755,6 +755,15 @@ function run_captured_atmosphere_replay_smoke(
 ) where {B<:Backends.GPUBackendTag}
     BackendArray = Backends.gpu_backend_array_type(B)
     target = compute_device(BackendArray(zeros(Float32, 1)))
+    native_frame, native_draws = _check_captured_atmosphere_replay(target, false)
+    completed_frame, completed_native_draws =
+        _check_captured_atmosphere_replay(target, true)
+    @test completed_native_draws == native_draws
+    @test completed_frame != native_frame
+    return nothing
+end
+
+function _check_captured_atmosphere_replay(target, low_frequency_completion)
     atmosphere_step = 0.001f0
     node = multilayer_atmosphere_opd_node(
         :atmosphere;
@@ -768,6 +777,9 @@ function run_captured_atmosphere_replay_smoke(
         wind_direction_deg=(0.0f0, 90.0f0),
         altitude=(0.0f0, 5000.0f0),
         layer_ids=(:ground, :high),
+        low_frequency_completion,
+        source_separation_arcsec=8.0f0,
+        source_position_angle_deg=35.0f0,
         atmosphere_step,
         rng_seed=UInt64(0x1701),
         atmosphere_opd_schema="test.graph.captured-atmosphere-opd-m.f32/1",
@@ -822,6 +834,15 @@ function run_captured_atmosphere_replay_smoke(
         captured_graph,
         Val(:atmosphere),
     )
+    if low_frequency_completion
+        for layer in allocation_owner.atmosphere.layers
+            @test compute_device(layer.low_frequency.state.phase_rad) == target
+        end
+        for offsets in (allocation_owner.replay.state.offset_x, allocation_owner.replay.state.offset_y)
+            host_offsets = Array(offsets)
+            @test host_offsets[1:2:end] == host_offsets[2:2:end]
+        end
+    end
     AlgorithmGraphs._preflight_captured_graph_node!(allocation_owner)
     _captured_atmosphere_completion_allocations(allocation_owner)
     AlgorithmGraphs._preflight_captured_graph_node!(allocation_owner)
@@ -839,7 +860,11 @@ function run_captured_atmosphere_replay_smoke(
         Array(graph_output(stream_graph, Val(:atmosphere_opd))) rtol = 2.0f-5 atol = 1.0f-12
     @test Array(graph_output(captured_graph, Val(:atmosphere_opd))) ==
         first_captured_frame
-    return nothing
+    native_draws = map(allocation_owner.atmosphere.layers) do layer
+        state = layer.generator.state
+        (Array(state.noise_re), Array(state.noise_im))
+    end
+    return first_captured_frame, native_draws
 end
 
 function run_captured_graph_execution_smoke(

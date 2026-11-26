@@ -657,6 +657,7 @@ end
             first_offset_y,
             first_amplitude,
             1,
+            1.0,
             4,
             10,
             2,
@@ -680,6 +681,7 @@ end
         second_offset_x = -0.4
         second_offset_y = 0.15
         second_amplitude = 0.25
+        sampling_ratio = 0.25
         AdaptiveOpticsSim.Backends.launch_kernel!(
             KA_CPU_STYLE,
             AdaptiveOpticsSim.Atmospheres.atmosphere_direction_layer_batch_kernel!,
@@ -693,6 +695,7 @@ end
             second_offset_y,
             second_amplitude,
             2,
+            sampling_ratio,
             4,
             10,
             2,
@@ -704,10 +707,10 @@ end
             AdaptiveOpticsSim.Atmospheres.accumulate_shifted_screen!(
                 expected_slice,
                 screen,
-                second_offset_x - batch_shift_x[2, direction],
-                second_offset_y - batch_shift_y[2, direction],
+                (second_offset_x - batch_shift_x[2, direction]) * sampling_ratio,
+                (second_offset_y - batch_shift_y[2, direction]) * sampling_ratio,
                 second_amplitude,
-                batch_scale[2, direction],
+                batch_scale[2, direction] * sampling_ratio,
             )
             expected_slice .*= batch_pupil
         end

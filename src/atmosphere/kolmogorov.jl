@@ -64,6 +64,13 @@ function KolmogorovAtmosphere(tel::Telescope;
     backend::AbstractArrayBackend=backend(tel),
 )
     selector = require_same_backend(tel, _resolve_backend_selector(backend))
+    return _prepare_kolmogorov_atmosphere(tel.params.resolution,
+        T(tel.aperture.sampling_m[1]), r0, reference_wavelength_m, L0, selector)
+end
+
+function _prepare_kolmogorov_atmosphere(n::Int, sampling_m::T, r0::Real,
+    reference_wavelength_m::Real, L0::Real,
+    selector::AbstractArrayBackend) where {T<:AbstractFloat}
     backend = _resolve_array_backend(selector)
     r0_t = _converted_positive_finite(r0, T,
         "atmosphere Fried parameter r0")
@@ -79,9 +86,8 @@ function KolmogorovAtmosphere(tel::Telescope;
         L0_t,
         reference_wavelength_t,
         reference_wavelength_t / T(2 * pi),
-        T(tel.aperture.sampling_m[1]),
+        sampling_m,
     )
-    n = tel.params.resolution
     phase_rad = backend{T}(undef, n, n)
     psd = backend{T}(undef, n, n)
     spectrum = backend{Complex{T}}(undef, n, n)

@@ -63,7 +63,7 @@ end
     screen,
     start_x,
     start_y,
-    layer_index::Int,
+    screen_index::Int,
     footprint_scale,
     output_scale,
     accumulate::Bool,
@@ -73,14 +73,14 @@ end
     i, j = @index(Global, NTuple)
     if i <= n && j <= n
         T = eltype(out)
-        y = @inbounds(start_y[layer_index]) + footprint_scale * T(j - 1)
+        y = @inbounds(start_y[screen_index]) + footprint_scale * T(j - 1)
         y0 = unsafe_trunc(Int, floor(y))
         fy = y - T(y0)
         wy0 = one(T) - fy
         iy0 = wrap_upper_index(y0, m)
         iy1 = wrap_upper_index(y0 + 1, m)
 
-        x = @inbounds(start_x[layer_index]) + footprint_scale * T(i - 1)
+        x = @inbounds(start_x[screen_index]) + footprint_scale * T(i - 1)
         x0 = unsafe_trunc(Int, floor(x))
         fx = x - T(x0)
         wx0 = one(T) - fx
@@ -121,21 +121,22 @@ end
     base_start_x,
     base_start_y,
     screen_period,
-    layer_count::Int,
+    sampling_ratio,
+    screen_count::Int,
 )
     i = @index(Global, Linear)
-    if i <= layer_count
+    if i <= screen_count
         @inbounds begin
             next_offset_x = offset_x[i] + offset_increment_x[i]
             next_offset_y = offset_y[i] + offset_increment_y[i]
             offset_x[i] = next_offset_x
             offset_y[i] = next_offset_y
             start_x[i] = _normalize_replay_start(
-                base_start_x[i] - next_offset_x,
+                base_start_x[i] - next_offset_x * sampling_ratio[i],
                 screen_period[i],
             )
             start_y[i] = _normalize_replay_start(
-                base_start_y[i] - next_offset_y,
+                base_start_y[i] - next_offset_y * sampling_ratio[i],
                 screen_period[i],
             )
         end
@@ -181,6 +182,7 @@ mutable struct MovingLayerState{T<:AbstractFloat}
     offset_x::T
     offset_y::T
     initialized::Bool
+    low_frequency_initialized::Bool
 end
 
 struct MovingAtmosphereLayer{
@@ -188,10 +190,12 @@ struct MovingAtmosphereLayer{
     S<:MovingLayerState,
     A<:KolmogorovAtmosphere,
     TT<:Telescope,
+    F<:Union{Nothing,KolmogorovAtmosphere},
 } <: AbstractAtmosphereLayer
     params::P
     generator::A
     generator_telescope::TT
+    low_frequency::F
     state::S
 end
 
@@ -219,9 +223,10 @@ struct _MovingScreenReplayPlan{T<:AbstractFloat,A<:AbstractVector{T}}
     base_start_x::A
     base_start_y::A
     screen_period::A
+    sampling_ratio::A
 end
 
-"""Persistent device-resident moving-screen offsets for one graph owner."""
+"""Persistent moving-screen offsets in native pixels for one device-graph owner."""
 mutable struct _MovingScreenReplayState{T<:AbstractFloat,A<:AbstractVector{T}}
     offset_x::A
     offset_y::A
@@ -245,6 +250,48 @@ end
     typeof(atm.params.r0)
 
 @inline moving_layer_screen_resolution(n::Int) = 3 * n
+
+function _prepare_low_frequency_screen(generator::KolmogorovAtmosphere)
+    # Replace the central native Fourier cells with a 27× finer frequency grid.
+    # Retain at least seven samples per wavelength of the highest refined mode
+    # to limit attenuation from bilinear pupil extraction.
+    period_ratio = 27
+    native_n = size(generator.state.phase_rad, 1)
+    native_max_mode = min(6, (native_n - 1) ÷ 2)
+    samples_per_native_period = min(48, 8 * (native_max_mode + 1))
+    n = period_ratio * samples_per_native_period
+    params = generator.params
+    native_period_m = native_n * params.sampling_m
+    sampling_m = native_period_m / samples_per_native_period
+    low_frequency = _prepare_kolmogorov_atmosphere(n, sampling_m, params.r0,
+        params.reference_wavelength_m, params.L0, backend(generator))
+
+    # FFT order is 0, 1, …, -2, -1. Zero the central square on the native grid
+    # and keep the coarse indices inside its outer cell boundaries, located at
+    # ±(native_max_mode + ½) in native frequency bins. DC stays zero on both.
+    ensure_psd!(generator, params.sampling_m)
+    native_psd = generator.state.psd
+    native_band = (1:(native_max_mode + 1), (native_n - native_max_mode + 1):native_n)
+    for rows in native_band, columns in native_band
+        fill!(view(native_psd, rows, columns), zero(eltype(native_psd)))
+    end
+    ensure_psd!(low_frequency, sampling_m)
+    max_mode = period_ratio * native_max_mode + period_ratio ÷ 2
+    excluded = (max_mode + 2):(n - max_mode)
+    psd = low_frequency.state.psd
+    fill!(view(psd, excluded, :), zero(eltype(psd)))
+    fill!(view(psd, :, excluded), zero(eltype(psd)))
+    return low_frequency
+end
+
+@inline _moving_layer_screens(layer::MovingAtmosphereLayer) =
+    _moving_layer_screens(layer.generator, layer.low_frequency)
+@inline _moving_layer_screens(generator, ::Nothing) = (generator,)
+@inline _moving_layer_screens(generator, low_frequency) = (generator, low_frequency)
+
+@inline _moving_screen_sampling_ratio(layer::MovingAtmosphereLayer,
+    generator::KolmogorovAtmosphere) =
+    layer.generator.params.sampling_m / generator.params.sampling_m
 
 function moving_layer_telescope(
     tel::Telescope;
@@ -272,6 +319,7 @@ function MovingAtmosphereLayer(
     wind_velocity_x::Real,
     wind_velocity_y::Real,
     altitude::Real,
+    low_frequency_completion::Bool=false,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=CPUBackend(),
 )
@@ -287,8 +335,9 @@ function MovingAtmosphereLayer(
     )
     params = MovingLayerParams(T(sqrt(cn2_fraction)), T(wind_velocity_x),
         T(wind_velocity_y), T(altitude), T(tel.aperture.sampling_m[1]))
-    state = MovingLayerState(zero(T), zero(T), false)
-    return MovingAtmosphereLayer(params, generator, screen_telescope, state)
+    low_frequency = low_frequency_completion ? _prepare_low_frequency_screen(generator) : nothing
+    state = MovingLayerState(zero(T), zero(T), false, false)
+    return MovingAtmosphereLayer(params, generator, screen_telescope, low_frequency, state)
 end
 
 function ensure_initialized!(layer::MovingAtmosphereLayer, rng::AbstractRNG)
@@ -474,6 +523,23 @@ function _accumulate_shifted_screen_async!(out::AbstractMatrix{T},
         screen, start_x, start_y, footprint_scale, output_scale, n, m)
 end
 
+@inline _accumulate_low_frequency!(accumulate!, out, ::Nothing,
+    offset_x, offset_y, footprint_scale, output_scale, native_sampling) = out
+
+function _accumulate_low_frequency!(accumulate!, out::AbstractMatrix{T},
+    screen::KolmogorovAtmosphere, offset_x::T, offset_y::T, footprint_scale::T,
+    output_scale::T, native_sampling::T) where {T<:AbstractFloat}
+    phase_rad = screen.state.phase_rad
+    n = size(out, 1)
+    m = size(phase_rad, 1)
+    sampling_ratio = native_sampling / screen.params.sampling_m
+    scale = footprint_scale * sampling_ratio
+    center = T(m + 1) / 2 - scale * T(n - 1) / 2
+    return accumulate!(execution_style(out), out, phase_rad,
+        center - offset_x * sampling_ratio, center - offset_y * sampling_ratio,
+        scale, output_scale, n, m)
+end
+
 function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope,
     src::Union{AbstractSource,Nothing}=nothing) where {T<:AbstractFloat}
     return render_layer!(out, layer, layer_render_context(src, layer, tel, T))
@@ -483,12 +549,13 @@ function render_layer!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer,
     shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
     opd_scale = T(layer.params.cn2_amplitude_scale) *
         T(layer.generator.params.opd_per_radian)
+    offset_x = layer.state.offset_x - shift_x
+    offset_y = layer.state.offset_y - shift_y
     extract_shifted_screen_async!(out, layer.generator.state.phase_rad,
-        layer.state.offset_x - shift_x,
-        layer.state.offset_y - shift_y,
-        opd_scale,
-        footprint_scale)
-    return out
+        offset_x, offset_y, opd_scale, footprint_scale)
+    return _accumulate_low_frequency!(_accumulate_shifted_screen_async!, out,
+        layer.low_frequency, offset_x, offset_y, footprint_scale, opd_scale,
+        layer.generator.params.sampling_m)
 end
 
 function render_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmosphereLayer, tel::Telescope,
@@ -500,12 +567,13 @@ function render_layer_accumulate!(out::AbstractMatrix{T}, layer::MovingAtmospher
     shift_x::T, shift_y::T, footprint_scale::T) where {T<:AbstractFloat}
     opd_scale = T(layer.params.cn2_amplitude_scale) *
         T(layer.generator.params.opd_per_radian)
+    offset_x = layer.state.offset_x - shift_x
+    offset_y = layer.state.offset_y - shift_y
     accumulate_shifted_screen!(out, layer.generator.state.phase_rad,
-        layer.state.offset_x - shift_x,
-        layer.state.offset_y - shift_y,
-        opd_scale,
-        footprint_scale)
-    return out
+        offset_x, offset_y, opd_scale, footprint_scale)
+    return _accumulate_low_frequency!(_accumulate_shifted_screen!, out,
+        layer.low_frequency, offset_x, offset_y, footprint_scale, opd_scale,
+        layer.generator.params.sampling_m)
 end
 
 function _render_layer_accumulate_async!(out::AbstractMatrix{T},
@@ -513,12 +581,13 @@ function _render_layer_accumulate_async!(out::AbstractMatrix{T},
     footprint_scale::T) where {T<:AbstractFloat}
     opd_scale = T(layer.params.cn2_amplitude_scale) *
         T(layer.generator.params.opd_per_radian)
+    offset_x = layer.state.offset_x - shift_x
+    offset_y = layer.state.offset_y - shift_y
     _accumulate_shifted_screen_async!(out, layer.generator.state.phase_rad,
-        layer.state.offset_x - shift_x,
-        layer.state.offset_y - shift_y,
-        opd_scale,
-        footprint_scale)
-    return out
+        offset_x, offset_y, opd_scale, footprint_scale)
+    return _accumulate_low_frequency!(_accumulate_shifted_screen_async!, out,
+        layer.low_frequency, offset_x, offset_y, footprint_scale, opd_scale,
+        layer.generator.params.sampling_m)
 end
 
 function evolve_layer!(layer::MovingAtmosphereLayer, duration::Real)
@@ -530,6 +599,16 @@ function evolve_layer!(layer::MovingAtmosphereLayer, duration::Real)
     return layer
 end
 
+"""
+    MultiLayerAtmosphere(telescope; low_frequency_completion=false, ...)
+
+Prepare independent finite von Kármán phase screens advected by the specified
+layer winds. With `low_frequency_completion=true`, each layer samples its
+central square of Fourier cells at 27 times finer frequency spacing, excluding
+the zero frequency. The two bands undergo the same physical advection and
+source footprint geometry. Retained native Fourier coefficients continue to
+use the original pupil sampling and seeded draws.
+"""
 function MultiLayerAtmosphere(tel::Telescope;
     r0::Real,
     reference_wavelength_m::Real,
@@ -539,6 +618,7 @@ function MultiLayerAtmosphere(tel::Telescope;
     wind_direction_deg::AbstractVector,
     altitude::AbstractVector,
     layer_ids=nothing,
+    low_frequency_completion::Bool=false,
     T::Type{<:AbstractFloat}=Float64,
     backend::AbstractArrayBackend=backend(tel))
 
@@ -585,6 +665,7 @@ function MultiLayerAtmosphere(tel::Telescope;
             wind_velocity_x=params.wind_velocity_x[i],
             wind_velocity_y=params.wind_velocity_y[i],
             altitude=params.altitude[i],
+            low_frequency_completion,
             T=T,
             backend=selector,
         ) for i in 1:n_layers
@@ -600,7 +681,22 @@ function initialize_atmosphere!(atm::MultiLayerAtmosphere, rng::AbstractRNG)
     @inbounds for layer in atm.layers
         ensure_initialized!(layer, rng)
     end
+    # Preserve every native layer's RNG draws when completion is enabled.
+    @inbounds for layer in atm.layers
+        _ensure_low_frequency_initialized!(layer.state, layer.low_frequency, rng)
+    end
     return atm
+end
+
+@inline _ensure_low_frequency_initialized!(::MovingLayerState, ::Nothing, ::AbstractRNG) = nothing
+
+function _ensure_low_frequency_initialized!(state::MovingLayerState,
+    screen::KolmogorovAtmosphere, rng::AbstractRNG)
+    if !state.low_frequency_initialized
+        regenerate_phase_screen!(screen, rng)
+        state.low_frequency_initialized = true
+    end
+    return nothing
 end
 
 function evolve_atmosphere!(atm::MultiLayerAtmosphere, duration::Real,
@@ -632,42 +728,48 @@ function _prepare_moving_screen_replay(
         "moving-screen replay duration must be positive",
     ))
     layers = atm.layers
-    layer_count = length(layers)
+    screen_count = sum(layer -> length(_moving_layer_screens(layer)), layers)
     n = size(renderer.pupil, 1)
     target = compute_device(renderer.pupil)
-    host_offset_increment_x = Vector{T}(undef, layer_count)
-    host_offset_increment_y = Vector{T}(undef, layer_count)
-    host_base_start_x = Vector{T}(undef, layer_count)
-    host_base_start_y = Vector{T}(undef, layer_count)
-    host_screen_period = Vector{T}(undef, layer_count)
+    host_offset_increment_x = Vector{T}(undef, screen_count)
+    host_offset_increment_y = Vector{T}(undef, screen_count)
+    host_base_start_x = Vector{T}(undef, screen_count)
+    host_base_start_y = Vector{T}(undef, screen_count)
+    host_screen_period = Vector{T}(undef, screen_count)
+    host_sampling_ratio = Vector{T}(undef, screen_count)
 
+    screen_index = 0
     @inbounds for i in eachindex(layers)
         layer = layers[i]
-        screen = layer.generator.state.phase_rad
-        m = size(screen, 1)
-        size(screen, 2) == m || throw(DimensionMismatchError(
-            "moving atmosphere layer screen must be square",
-        ))
-        m >= n || throw(DimensionMismatchError(
-            "moving atmosphere layer screen is smaller than the pupil",
-        ))
-        screen_period = T(m)
-        footprint_scale = renderer.footprint_scale[i]
-        host_offset_increment_x[i] =
-            layer.params.wind_velocity_x * dt / layer.params.sampling_m
-        host_offset_increment_y[i] =
-            layer.params.wind_velocity_y * dt / layer.params.sampling_m
-        host_base_start_x[i] = _normalize_replay_start(
-            T(m + 1) / T(2) - footprint_scale * T(n - 1) / T(2) +
-            renderer.shift_x[i],
-            screen_period,
-        )
-        host_base_start_y[i] = _normalize_replay_start(
-            T(m + 1) / T(2) - footprint_scale * T(n - 1) / T(2) +
-            renderer.shift_y[i],
-            screen_period,
-        )
-        host_screen_period[i] = screen_period
+        for generator in _moving_layer_screens(layer)
+            screen_index += 1
+            screen = generator.state.phase_rad
+            m = size(screen, 1)
+            size(screen, 2) == m || throw(DimensionMismatchError(
+                "moving atmosphere layer screen must be square",
+            ))
+            sampling_ratio = _moving_screen_sampling_ratio(layer, generator)
+            footprint_scale = renderer.footprint_scale[i] * sampling_ratio
+            footprint_scale * T(n - 1) <= T(m - 1) || throw(DimensionMismatchError(
+                "moving atmosphere layer screen is smaller than the pupil footprint",
+            ))
+            screen_period = T(m)
+            # Keep the same accumulated native-pixel displacement for both
+            # bands. Convert to coarse pixels only when sampling that screen.
+            host_offset_increment_x[screen_index] =
+                layer.params.wind_velocity_x * dt / layer.params.sampling_m
+            host_offset_increment_y[screen_index] =
+                layer.params.wind_velocity_y * dt / layer.params.sampling_m
+            center = T(m + 1) / T(2) - footprint_scale * T(n - 1) / T(2)
+            host_base_start_x[screen_index] = _normalize_replay_start(
+                center + renderer.shift_x[i] * sampling_ratio, screen_period,
+            )
+            host_base_start_y[screen_index] = _normalize_replay_start(
+                center + renderer.shift_y[i] * sampling_ratio, screen_period,
+            )
+            host_screen_period[screen_index] = screen_period
+            host_sampling_ratio[screen_index] = sampling_ratio
+        end
     end
 
     offset_increment_x = _copy_moving_screen_replay_vector(
@@ -690,10 +792,11 @@ function _prepare_moving_screen_replay(
         target,
         host_screen_period,
     )
-    offset_x = allocate_device_array(target, T, layer_count)
-    offset_y = allocate_device_array(target, T, layer_count)
-    start_x = allocate_device_array(target, T, layer_count)
-    start_y = allocate_device_array(target, T, layer_count)
+    sampling_ratio = _copy_moving_screen_replay_vector(target, host_sampling_ratio)
+    offset_x = allocate_device_array(target, T, screen_count)
+    offset_y = allocate_device_array(target, T, screen_count)
+    start_x = allocate_device_array(target, T, screen_count)
+    start_y = allocate_device_array(target, T, screen_count)
     fill!(offset_x, zero(T))
     fill!(offset_y, zero(T))
     copyto!(start_x, base_start_x)
@@ -705,6 +808,7 @@ function _prepare_moving_screen_replay(
         base_start_x,
         base_start_y,
         screen_period,
+        sampling_ratio,
     )
     state = _MovingScreenReplayState(offset_x, offset_y)
     workspace = _MovingScreenReplayWorkspace(start_x, start_y)
@@ -719,8 +823,8 @@ function _enqueue_moving_screen_replay!(
 ) where {T<:AbstractFloat}
     style = execution_style(opd)
     layers = atm.layers
-    layer_count = length(layers)
     plan = replay.plan
+    screen_count = length(plan.screen_period)
     state = replay.state
     workspace = replay.workspace
     launch_kernel_async!(
@@ -735,32 +839,38 @@ function _enqueue_moving_screen_replay!(
         plan.base_start_x,
         plan.base_start_y,
         plan.screen_period,
-        layer_count;
-        ndrange=layer_count,
+        plan.sampling_ratio,
+        screen_count;
+        ndrange=screen_count,
     )
 
     n = size(opd, 1)
+    screen_index = 0
     @inbounds for layer_index in eachindex(layers)
         layer = layers[layer_index]
-        screen = layer.generator.state.phase_rad
-        m = size(screen, 1)
         output_scale = T(layer.params.cn2_amplitude_scale) *
             T(layer.generator.params.opd_per_radian)
-        launch_kernel_async!(
-            style,
-            moving_layer_replay_kernel!,
-            opd,
-            screen,
-            workspace.start_x,
-            workspace.start_y,
-            layer_index,
-            T(renderer.footprint_scale[layer_index]),
-            output_scale,
-            layer_index != firstindex(layers),
-            n,
-            m;
-            ndrange=size(opd),
-        )
+        for generator in _moving_layer_screens(layer)
+            screen_index += 1
+            screen = generator.state.phase_rad
+            footprint_scale = T(renderer.footprint_scale[layer_index]) *
+                _moving_screen_sampling_ratio(layer, generator)
+            launch_kernel_async!(
+                style,
+                moving_layer_replay_kernel!,
+                opd,
+                screen,
+                workspace.start_x,
+                workspace.start_y,
+                screen_index,
+                footprint_scale,
+                output_scale,
+                screen_index != 1,
+                n,
+                size(screen, 1);
+                ndrange=size(opd),
+            )
+        end
     end
     launch_kernel_async!(
         style,
@@ -793,6 +903,7 @@ function _reset_multilayer_atmosphere!(
         layer.state.offset_x = zero(layer.state.offset_x)
         layer.state.offset_y = zero(layer.state.offset_y)
         layer.state.initialized = false
+        layer.state.low_frequency_initialized = false
     end
     advance_by!(atm, zero(timeline.model_time), rng)
     return atm

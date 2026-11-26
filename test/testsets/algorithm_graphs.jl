@@ -1466,10 +1466,18 @@ end
         step_graph!(graph)
         @test graph_output(graph, Val(:opd)) == first_frame
     end
+    config["low_frequency_completion"] = true
+    completed = prepare_algorithm_graph(load_algorithm_graph(document))
+    @test all(layer -> !isnothing(layer.low_frequency),
+        prepared_graph_node(completed, Val(:atmosphere)).atmosphere.layers)
+    config["low_frequency_completion"] = 1
+    @test_throws AlgorithmGraphError load_algorithm_graph(document)
+    delete!(config, "low_frequency_completion")
     delete!(config, "source_separation_arcsec")
     delete!(config, "source_position_angle_deg")
     graph = prepare_algorithm_graph(load_algorithm_graph(document))
     owner = prepared_graph_node(graph, Val(:atmosphere))
+    @test all(layer -> isnothing(layer.low_frequency), owner.atmosphere.layers)
     onaxis = prepare_atmosphere_renderer(owner.atmosphere, owner.telescope)
     reference = PupilFunction(owner.telescope)
     step_graph!(graph)

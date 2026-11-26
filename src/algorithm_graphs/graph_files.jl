@@ -326,6 +326,7 @@ function _multilayer_atmosphere_opd_f32_node(
 )
     config_fields = (
         :L0,
+        :low_frequency_completion,
         :altitude,
         :aperture_revision,
         :atmosphere_opd_schema,
@@ -392,6 +393,8 @@ function _multilayer_atmosphere_opd_f32_node(
             "$context.reference_wavelength_m",
         ),
         L0,
+        low_frequency_completion=_file_bool(get(config, :low_frequency_completion, false),
+            "$context.low_frequency_completion"),
         source_separation_arcsec=hasproperty(config, :source_separation_arcsec) ?
             _file_real(config.source_separation_arcsec, "$context.source_separation_arcsec") : 0.0,
         source_position_angle_deg=hasproperty(config, :source_position_angle_deg) ?

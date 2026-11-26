@@ -210,6 +210,7 @@ function _multilayer_atmosphere_opd_config(
     r0::Real,
     reference_wavelength_m::Real,
     L0::Real=25,
+    low_frequency_completion::Bool=false,
     fractional_cn2,
     wind_speed,
     wind_direction_deg,
@@ -254,6 +255,7 @@ function _multilayer_atmosphere_opd_config(
             r0=r0,
             reference_wavelength_m=reference_wavelength_m,
             L0=L0,
+            low_frequency_completion=low_frequency_completion,
             fractional_cn2=fractional_cn2,
             wind_speed=wind_speed,
             wind_direction_deg=wind_direction_deg,
@@ -292,7 +294,8 @@ on the graph's exact compute device. `source_separation_arcsec` and
 `source_position_angle_deg` select the atmospheric line of sight, using the same
 polar convention as the optical source (default: on axis). Each invocation
 advances the single atmosphere writer by `atmosphere_step` seconds and publishes one
-complete pupil-plane atmospheric OPD map in metres.
+complete pupil-plane atmospheric OPD map in metres. Set `low_frequency_completion=true`
+to advect an additional long-period screen with each layer.
 
 The node owns its evolving atmosphere and RNG state. It does not infer cadence
 from a detector exposure or wall time, apply a deformable-mirror surface, or
@@ -313,6 +316,7 @@ function multilayer_atmosphere_opd_node(
     rng_seed::Integer,
     atmosphere_opd_schema::AbstractString,
     L0::Real=25,
+    low_frequency_completion::Bool=false,
     central_obstruction_ratio::Real=0,
     pupil_reflectivity::Real=1,
     aperture_revision::Integer=0,
@@ -330,6 +334,7 @@ function multilayer_atmosphere_opd_node(
         r0,
         reference_wavelength_m,
         L0,
+        low_frequency_completion,
         fractional_cn2,
         wind_speed,
         wind_direction_deg,
