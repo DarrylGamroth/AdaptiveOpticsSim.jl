@@ -679,22 +679,12 @@ period to the application's cadence.
 AOS owns the reusable plant graph nodes, static YAML schema, lockstep HIL
 boundary, and pyRTC-compatible shared-memory adapter. Instrument command geometry,
 detector settings, calibration policy, complete graph files, and scientific
-acceptance tests belong to downstream packages:
-
-- [REVOLTClassicSim.jl](https://github.com/DarrylGamroth/REVOLTClassicSim.jl)
-  owns the Classic Shack–Hartmann graph, C-BLUE One IMX425 profile, HSDM277
-  geometry, RTC-reference composition, viewer, and full pyRTC calibration and
-  atmosphere test.
-- [REVOLTCopperSim.jl](https://github.com/DarrylGamroth/REVOLTCopperSim.jl)
-  owns the Copper Pyramid graph, HSDM277 geometry, calibration graph, viewer,
-  and opt-in pyRTC process test.
-
-Those packages bind AOS arrays and adapters directly; they do not require an
-instrument-specific scheduler in AOS. Their provisional influence functions,
-registration assumptions, calibration artifacts, and model-validity claims are
-documented and tested with the instrument definition that owns them. A future
-SPIDERS package can use the same graph protocol and the optional Proper
-companion seam without adding SPIDERS-specific topology to AOS.
+acceptance tests belong to the instrument owner. The
+[adaptive-optics-simulations](https://github.com/DarrylGamroth/adaptive-optics-simulations)
+repository supplies the Classic Shack–Hartmann, Copper pyramid, and SPIDERS
+optical declarations to the shared AOS compiler. Their influence functions,
+registration assumptions, and calibration artifacts are documented and tested
+with the instrument definitions that own them.
 
 ## Direct Julia Composition
 

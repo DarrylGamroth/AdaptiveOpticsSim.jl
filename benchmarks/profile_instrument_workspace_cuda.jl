@@ -6,19 +6,27 @@ using AdaptiveOpticsSim.AlgorithmGraphs
 using LinearAlgebra, Statistics, TOML
 import CUDA
 const NVTX = CUDA.CUDATools.Profile.NVTX
+isempty(ARGS) && error("expected classic, copper, or gpi2 [INSTRUMENTS_ROOT]")
 const INSTRUMENT = first(ARGS)
-if INSTRUMENT == "classic"
-    import REVOLTClassicSim
-    const Instrument = REVOLTClassicSim
-    const RATE_OUTPUT = :shwfs_photon_rate
-elseif INSTRUMENT == "copper"
-    import REVOLTCopperSim
-    const Instrument = REVOLTCopperSim
-    const RATE_OUTPUT = :pwfs_photon_rate
+if INSTRUMENT in ("classic", "copper")
+    length(ARGS) == 2 || error("expected $INSTRUMENT INSTRUMENTS_ROOT")
+    const INSTRUMENTS_ROOT = realpath(ARGS[2])
+    const INSTRUMENT_DIRECTORY = joinpath(INSTRUMENTS_ROOT, "revolt-" * INSTRUMENT)
+    include("instrument_simulation.jl")
+    const RATE_OUTPUT = INSTRUMENT == "classic" ? :shwfs_photon_rate : :pwfs_photon_rate
+    prepare_system(target, execution) = instrument_system(INSTRUMENT_DIRECTORY; target, execution)
+    prepare_calibration(target, execution=StreamGraphExecution()) =
+        instrument_system(INSTRUMENT_DIRECTORY; target, execution, simulation_graph="calibration")
+    calibration_opd(system) = graph_input(system.graph, :uncompensated_opd)
+    instrument_source() = INSTRUMENT_DIRECTORY
 elseif INSTRUMENT == "gpi2"
     import GPI2Sim
-    const Instrument = GPI2Sim
     const RATE_OUTPUT = :photon_rate
+    prepare_system(target, execution) = GPI2Sim.prepare_hil_system(; target, execution)
+    prepare_calibration(target, execution=StreamGraphExecution()) =
+        GPI2Sim.prepare_calibration_system(; target, execution, parameters=GPI2Sim.GPI2Parameters(noise=false))
+    calibration_opd(system) = system.uncompensated_opd
+    instrument_source() = pkgdir(GPI2Sim)
 else
     error("expected classic, copper, or gpi2")
 end
@@ -30,21 +38,13 @@ function fields(io, values::NamedTuple)
         TOML.print(io, Dict{String,typeof(value)}(String(key)=>value))
     end
 end
-prepare_system(target, execution) = Instrument.prepare_hil_system(; target, execution)
-function prepare_calibration(target, execution=StreamGraphExecution())
-    if INSTRUMENT == "gpi2"
-        return Instrument.prepare_calibration_system(; target, execution,
-            parameters=Instrument.GPI2Parameters(noise=false))
-    end
-    return Instrument.prepare_calibration_system(; target, execution, profile=:grid_gaussian)
-end
 function cycle!(boundary)
     sequence = step_hil_frame!(boundary)
     adopt_hil_command!(boundary, sequence)
     return nothing
 end
 function probe!(system)
-    opd = system.uncompensated_opd
+    opd = calibration_opd(system)
     n = size(opd, 1)
     host_opd = [2f-8 * (sin(Float32(2pi*i/n)) + cos(Float32(2pi*j/n)))
         for i in 1:n, j in 1:n]
@@ -93,7 +93,7 @@ function numerical_check(target)
         @assert captured_rate_error < 1e-3
     end
     return (; frame_relative_l2_error=frame_error, rate_relative_l2_error=rate_error,
-        pupil_resolution=size(cpu.uncompensated_opd,1), frame_shape=collect(size(actual)),
+        pupil_resolution=size(calibration_opd(cpu),1), frame_shape=collect(size(actual)),
         captured_calibration_admitted=captured !== nothing,
         captured_frame_relative_l2_error=captured_frame_error,
         captured_rate_relative_l2_error=captured_rate_error,
@@ -181,7 +181,7 @@ function main()
         fields(io, (; instrument=INSTRUMENT, julia=string(VERSION),
             aos_version=string(Base.pkgversion(AdaptiveOpticsSim)),
             aos_source=dirname(dirname(pathof(AdaptiveOpticsSim))),
-            instrument_source=dirname(dirname(pathof(Instrument))),
+            instrument_source=instrument_source(),
             device=CUDA.name(CUDA.device()), profile=PROFILE,
             endpoint="Completed graph GPU outputs; separate complete HIL cycle stages host frame and adopts same-sequence zero command. No transport or RTC.",
             oracle="Full-resolution noiseless CPU/GPU self parity, deterministic OPD and command probes; not an independent scientific oracle."))

@@ -1,14 +1,19 @@
 # Run the identical file against each checkout in separate, prepared environments:
-# julia --project=ISOLATED_ENV --startup-file=no HARNESS COPPER_ROOT OUTPUT_DIR [480:32,240:96]
+# julia --project=ISOLATED_ENV --startup-file=no HARNESS INSTRUMENTS_ROOT OUTPUT_DIR [480:32,240:96]
 # Optional AOS_MODULATION_MEMORY_ONLY=1440:256 prepares that extra case without stepping.
-# Dependencies: AdaptiveOpticsSim, REVOLTCopperSim, CUDA; stdlibs only otherwise.
+# Use the Copper simulation environment with CUDA and the desired AOS checkout.
 # This script never activates, installs, develops, or changes an environment.
-using AdaptiveOpticsSim, AdaptiveOpticsSim.AlgorithmGraphs, REVOLTCopperSim
+using AdaptiveOpticsSim, AdaptiveOpticsSim.AlgorithmGraphs
 using LinearAlgebra, Statistics, TOML, SHA
 import CUDA
 
 const AOS = AdaptiveOpticsSim
 const AG = AOS.AlgorithmGraphs
+isempty(ARGS) && error("expected INSTRUMENTS_ROOT OUTPUT [RESOLUTION:POINTS,...]")
+const INSTRUMENTS_ROOT = realpath(first(ARGS))
+const COPPER_DIRECTORY = joinpath(INSTRUMENTS_ROOT, "revolt-copper")
+include("instrument_simulation.jl")
+include("copper_optical_probes.jl")
 
 function source_record(mod)
     root = dirname(dirname(pathof(mod)))
@@ -69,10 +74,10 @@ function modulation_batch_record(graph)
         "fft_workspace_type"=>hasproperty(batch,:fft_workspace) ? string(typeof(batch.fft_workspace)) : "native")
 end
 
-function prepare_case(n, points, target; calibration, execution)
-    definition = REVOLTCopperSim._graph_definition(:grid_gaussian, target;
-        calibration, pupil_resolution=n, modulation_points=points)
-    prepare_algorithm_graph(definition; target, execution)
+function prepare_case(n, points, target; calibration=true, execution=CapturedGraphExecution())
+    simulation_graph = calibration ? "calibration" : "production"
+    settings = (; profile="grid_gaussian", pupil_resolution=n, modulation_points=points)
+    return instrument_system(COPPER_DIRECTORY; target, execution, simulation_graph, settings)
 end
 function timings!(graph; warmups=32, samples=128, require_zero=true)
     for _ in 1:warmups
@@ -110,18 +115,18 @@ function compare(a,b)
     Dict("identical"=>a==b, "max_abs"=>maximum(abs,delta),
         "relative_l2"=>iszero(scale) ? norm(delta) : norm(delta)/scale)
 end
-function interaction64!(system, divisor, convergence)
+function interaction64!(system, divisor)
     command = graph_input(system.graph,:pdm_command)
     host = zeros(Float32,277)
-    matrix = Matrix{Float64}(undef,2length(convergence.OFFSETS),277)
+    matrix = Matrix{Float64}(undef,2length(OFFSETS),277)
     for actuator in 1:277
-        host[actuator]=Float32(convergence.POKE)
+        host[actuator]=Float32(POKE)
         copyto!(command,host); CUDA.synchronize(); step_graph!(system.graph)
-        positive = convergence.raw_slopes(Array(graph_output(system.graph,:pwfs_photon_rate)),divisor)
-        host[actuator]=-Float32(convergence.POKE)
+        positive = raw_slopes(Array(graph_output(system.graph,:pwfs_photon_rate)),divisor)
+        host[actuator]=-Float32(POKE)
         copyto!(command,host); CUDA.synchronize(); step_graph!(system.graph)
-        negative = convergence.raw_slopes(Array(graph_output(system.graph,:pwfs_photon_rate)),divisor)
-        matrix[:,actuator] .= (positive.-negative)./(2convergence.POKE)
+        negative = raw_slopes(Array(graph_output(system.graph,:pwfs_photon_rate)),divisor)
+        matrix[:,actuator] .= (positive.-negative)./(2POKE)
         host[actuator]=0f0
         actuator % 32 == 0 && println("interaction ",actuator,"/277")
     end
@@ -151,27 +156,27 @@ function dense_preparation!(directory)
     end
     result
 end
-function run_case!(directory,n,points,target,convergence,progress!)
+function run_case!(directory,n,points,target,progress!)
     prefix="n$(n)-m$(points)"
     GC.gc(true); CUDA.reclaim()
     before=pool_record()
-    system=convergence.prepare_case(n,points;target)
+    system=prepare_case(n,points,target)
     result=Dict{String,Any}("resolution"=>n,"points"=>points,
         "pool_before"=>before,"pool_after"=>pool_record(),
         "modulation"=>modulation_record(system.graph,n,points),
         "modulation_batch"=>modulation_batch_record(system.graph))
     progress!(result)
-    rates=convergence.probe_rates(system,n)
-    divisor=convergence.flat_divisor(rates[:,:,1])
-    slopes=hcat((convergence.raw_slopes(rates[:,:,i],divisor) for i in axes(rates,3))...)
+    rates=probe_rates(system,n)
+    divisor=flat_divisor(rates[:,:,1])
+    slopes=hcat((raw_slopes(rates[:,:,i],divisor) for i in axes(rates,3))...)
     size(slopes)==(1432,13) || error("unexpected Copper slope/probe shape")
     result["rates"]=write_array(directory,prefix*"-rates",rates)
     result["slopes"]=write_array(directory,prefix*"-slopes",slopes)
     result["divisor"]=divisor
-    result["probes"]=collect(convergence.PROBES)
+    result["probes"]=collect(PROBES)
     progress!(result)
-    result["interaction"]=write_array(directory,prefix*"-interaction",interaction64!(system,divisor,convergence))
-    result["interaction_poke_m"]=convergence.POKE
+    result["interaction"]=write_array(directory,prefix*"-interaction",interaction64!(system,divisor))
+    result["interaction_poke_m"]=POKE
     progress!(result)
     result["calibration_captured"]=timings!(system.graph)
     progress!(result)
@@ -179,42 +184,40 @@ function run_case!(directory,n,points,target,convergence,progress!)
     # Prepare each noisy owner independently: equal seed, physical inputs and
     # initialization. Save full rates and noisy frames for cross-revision parity.
     captured=prepare_case(n,points,target;calibration=false,execution=CapturedGraphExecution())
-    first=replay!(captured)
-    second=replay!(captured)
+    first=replay!(captured.graph)
+    second=replay!(captured.graph)
     first.rates==second.rates && first.images==second.images || error("captured reset is not deterministic")
     result["captured_reset_rates"]=compare(first.rates,second.rates)
     result["captured_reset_frames"]=compare(first.images,second.images)
     result["atmosphere_rates"]=write_array(directory,prefix*"-atmosphere-rates",first.rates)
     result["atmosphere_frames"]=write_array(directory,prefix*"-atmosphere-frames",first.images)
     progress!(result)
-    result["atmosphere_captured"]=timings!(captured)
+    result["atmosphere_captured"]=timings!(captured.graph)
     progress!(result)
     captured=nothing; GC.gc(true); CUDA.reclaim()
     stream=prepare_case(n,points,target;calibration=false,execution=StreamGraphExecution())
-    streamed=replay!(stream)
+    streamed=replay!(stream.graph)
     result["stream_rates"]=write_array(directory,prefix*"-stream-rates",streamed.rates)
     result["stream_frames"]=write_array(directory,prefix*"-stream-frames",streamed.images)
     result["stream_captured_rates"]=compare(streamed.rates,first.rates)
     result["stream_captured_frames"]=compare(streamed.images,first.images)
     progress!(result)
-    result["atmosphere_stream"]=timings!(stream;require_zero=false)
+    result["atmosphere_stream"]=timings!(stream.graph;require_zero=false)
     result["complete"]=true
     progress!(result)
     stream=nothing; GC.gc(true); CUDA.reclaim()
     result
 end
 function main(args)
-    2<=length(args)<=3 || error("usage: HARNESS COPPER_ROOT OUTPUT_DIR [480:32,240:96]")
-    copper=realpath(args[1]); directory=abspath(args[2]); mkpath(directory)
+    2<=length(args)<=3 || error("usage: HARNESS INSTRUMENTS_ROOT OUTPUT_DIR [480:32,240:96]")
+    directory=abspath(args[2]); mkpath(directory)
     isempty(readdir(directory)) || error("OUTPUT_DIR must be empty")
-    realpath(dirname(dirname(pathof(REVOLTCopperSim))))==copper || error("loaded Copper source differs from argument")
-    helper=joinpath(copper,"benchmarks","copper_convergence.jl")
-    convergence=Main.CopperConvergence
+    helper=joinpath(@__DIR__, "copper_optical_probes.jl")
     CUDA.functional() || error("functional CUDA required")
     CUDA.allowscalar(false); BLAS.set_num_threads(1); AOS.Backends.set_fft_provider_threads!(1)
     target=AOS.Backends.compute_device(CUDA.zeros(Float32,1))
     project=something(Base.active_project(),"")
-    result=Dict{String,Any}("aos"=>source_record(AOS),"copper"=>source_record(REVOLTCopperSim),
+    result=Dict{String,Any}("aos"=>source_record(AOS),"copper"=>instrument_source_record(INSTRUMENTS_ROOT),
         "julia"=>string(VERSION),"cuda"=>string(pkgversion(CUDA)),"device"=>CUDA.name(CUDA.device()),
         "harness"=>abspath(@__FILE__),"harness_sha256"=>bytes2hex(sha256(read(@__FILE__))),
         "helper_sha256"=>bytes2hex(sha256(read(helper))),"arguments"=>copy(args),
@@ -235,13 +238,13 @@ function main(args)
             result["cases"]["n$(n)-m$(points)"] = partial
             persist(directory,result)
         end
-        run_case!(directory,n,points,target,convergence,progress!)
+        run_case!(directory,n,points,target,progress!)
         persist(directory,result)
     end
     if haskey(ENV,"AOS_MODULATION_MEMORY_ONLY")
         n,points=parse.(Int,split(ENV["AOS_MODULATION_MEMORY_ONLY"],':'))
         GC.gc(true); CUDA.reclaim(); before=pool_record()
-        system=convergence.prepare_case(n,points;target)
+        system=prepare_case(n,points,target)
         result["memory_only"]=Dict("resolution"=>n,"points"=>points,
             "pool_before"=>before,"pool_after"=>pool_record(),
             "modulation"=>modulation_record(system.graph,n,points),
@@ -252,7 +255,7 @@ function main(args)
     println("Wrote ",joinpath(directory,"validation.toml"))
 end
 if abspath(PROGRAM_FILE)==@__FILE__
-    length(ARGS)>=2 || error("usage: HARNESS COPPER_ROOT OUTPUT_DIR [480:32,240:96]")
-    include(joinpath(realpath(ARGS[1]),"benchmarks","copper_convergence.jl"))
+    length(ARGS)>=2 || error("usage: HARNESS INSTRUMENTS_ROOT OUTPUT_DIR [480:32,240:96]")
+    include(joinpath(realpath(ARGS[1]),"benchmarks","copper_jl"))
     main(ARGS)
 end
