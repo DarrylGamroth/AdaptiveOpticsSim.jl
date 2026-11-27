@@ -1,8 +1,8 @@
 # Fresh-process preparation measurement; environment is prepared by the caller.
-# julia --project=ENV --startup-file=no HARNESS COPPER_ROOT OUTPUT_TOML N M
+# julia --project=ENV --startup-file=no HARNESS INSTRUMENTS_ROOT OUTPUT_TOML N M
 # Warm a disposable n60/m4 captured calibration owner, release it, then measure
 # one target preparation while retaining its owner through all measurements.
-using AdaptiveOpticsSim, AdaptiveOpticsSim.AlgorithmGraphs, REVOLTCopperSim
+using AdaptiveOpticsSim, AdaptiveOpticsSim.AlgorithmGraphs
 using LinearAlgebra, TOML, SHA
 import CUDA
 
@@ -11,18 +11,17 @@ import CUDA
 include(joinpath(@__DIR__,"validate_modulation_storage_cuda.jl"))
 
 function preparation_main(args)
-    length(args)==4 || error("usage: HARNESS COPPER_ROOT OUTPUT_TOML N M")
-    root=realpath(args[1]); output=abspath(args[2])
+    length(args)==4 || error("usage: HARNESS INSTRUMENTS_ROOT OUTPUT_TOML N M")
+    output=abspath(args[2])
     n=parse(Int,args[3]); points=parse(Int,args[4])
     n>0 && points>0 || error("N and M must be positive")
     isfile(output) && error("OUTPUT_TOML already exists")
-    realpath(dirname(dirname(pathof(REVOLTCopperSim))))==root || error("loaded Copper source differs from COPPER_ROOT")
     CUDA.functional() || error("functional CUDA required")
     CUDA.allowscalar(false)
     BLAS.set_num_threads(1)
     AOS.Backends.set_fft_provider_threads!(1)
     target=AOS.Backends.compute_device(CUDA.zeros(Float32,1))
-    warm=Main.CopperConvergence.prepare_case(60,4;target)
+    warm=prepare_case(60,4,target)
     step_graph!(warm.graph)
     CUDA.synchronize()
     warm=nothing
@@ -35,7 +34,7 @@ function preparation_main(args)
     # final sync includes all device preparation in the measured interval.
     system=nothing
     measurement=@timed begin
-        system=Main.CopperConvergence.prepare_case(n,points;target)
+        system=prepare_case(n,points,target)
         CUDA.synchronize()
         nothing
     end
@@ -45,7 +44,7 @@ function preparation_main(args)
     direct_host=sum(record["bytes"] for record in values(modulation["arrays"]) if record["backend"]=="host";init=0)
     direct_device=sum(record["bytes"] for record in values(modulation["arrays"]) if record["backend"]=="CUDA";init=0)
     project=something(Base.active_project(),"")
-    helper=joinpath(root,"benchmarks","copper_convergence.jl")
+    helper=joinpath(@__DIR__,"instrument_simulation.jl")
     result=Dict{String,Any}(
         "complete"=>true,"resolution"=>n,"modulation_points"=>points,
         "host_allocated_bytes"=>measurement.bytes,
@@ -57,8 +56,8 @@ function preparation_main(args)
         "modulation"=>modulation,"direct_modulation_host_bytes"=>direct_host,
         "direct_modulation_device_bytes"=>direct_device,
         "warmup"=>"one disposable captured calibration graph n60/m4 and one completed graph frame, then GC/reclaim",
-        "measurement_boundary"=>"one CopperConvergence.prepare_case including captured graph and HIL boundary preparation plus final CUDA synchronization; target owner remains live through memory inspection",
-        "aos"=>source_record(AOS),"copper"=>source_record(REVOLTCopperSim),
+        "measurement_boundary"=>"one declared Copper calibration preparation including captured graph and HIL boundary preparation plus final CUDA synchronization; target owner remains live through memory inspection",
+        "aos"=>source_record(AOS),"copper"=>instrument_source_record(INSTRUMENTS_ROOT),
         "julia"=>string(VERSION),"cuda"=>string(pkgversion(CUDA)),
         "device"=>CUDA.name(CUDA.device()),"julia_threads"=>Threads.nthreads(),
         "active_project"=>project,"arguments"=>copy(args),"harness"=>abspath(@__FILE__),
@@ -79,7 +78,6 @@ function preparation_main(args)
 end
 
 if abspath(PROGRAM_FILE)==@__FILE__
-    length(ARGS)==4 || error("usage: HARNESS COPPER_ROOT OUTPUT_TOML N M")
-    include(joinpath(realpath(ARGS[1]),"benchmarks","copper_convergence.jl"))
+    length(ARGS)==4 || error("usage: HARNESS INSTRUMENTS_ROOT OUTPUT_TOML N M")
     preparation_main(ARGS)
 end

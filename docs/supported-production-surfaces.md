@@ -98,11 +98,9 @@ lockstep HIL boundary used by downstream instrument packages. It does not own
 an instrument's command geometry, detector profile, calibration policy, or
 scientific acceptance claim.
 
-[REVOLTClassicSim.jl](https://github.com/DarrylGamroth/REVOLTClassicSim.jl)
-and
-[REVOLTCopperSim.jl](https://github.com/DarrylGamroth/REVOLTCopperSim.jl)
-maintain their executable graph files and pyRTC validation separately. Their
-support status is governed by their own tests and documented assumptions.
+`adaptive-optics-simulations`
+maintains the REVOLT instrument definitions, execution profiles, and
+validation. Its tests and documented assumptions define their support status.
 
 ## Accelerator Surfaces
 

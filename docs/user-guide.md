@@ -312,11 +312,9 @@ Maintained package-level reference examples include:
 - `examples/graphs/pyramid_hil_reference.yaml`
 
 Instrument definitions, calibration inputs, and operational acceptance tests
-belong in downstream instrument packages. REVOLT Classic and Copper are
-maintained by
-[REVOLTClassicSim.jl](https://github.com/DarrylGamroth/REVOLTClassicSim.jl)
-and
-[REVOLTCopperSim.jl](https://github.com/DarrylGamroth/REVOLTCopperSim.jl).
+belong with the instrument definitions. REVOLT Classic and Copper are
+maintained in
+`adaptive-optics-simulations`.
 
 ## External RTC Lockstep
 

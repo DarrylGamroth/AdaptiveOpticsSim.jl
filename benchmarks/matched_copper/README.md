@@ -59,10 +59,15 @@ Report that output-work difference when interpreting performance.
 ## Reproduce the captured campaign
 
 The archived fixture is the comparison input. Reuse its `fixture/` directory
-unchanged for validation and performance runs; `common.py` checks the saved
-array metadata and checksums. Regenerate it only when intentionally creating a
-new campaign from the exact AOS and Copper source revisions recorded in
-`fixture.toml`.
+unchanged for validation and performance runs. `common.py` checks the saved
+array metadata and checksums. For a new campaign, use the Copper declaration
+from an `adaptive-optics-simulations` checkout and record its revision.
+
+```sh
+julia --project=BENCH_ENV benchmarks/matched_copper/fixture.jl INSTRUMENTS_ROOT OUTPUT_DIRECTORY
+```
+
+Use a benchmark environment with the selected AOS checkout and PipeWireAORTC.
 
 Use one campaign root with this layout:
 
@@ -107,16 +112,12 @@ The Julia environment was captured with Julia 1.13.2. Its Manifest pins
 AdaptiveOpticsCalibration 0.17.0, CUDA 6.4.2, FixedSizeArrays 1.4.2,
 KernelAbstractions 0.9.45, AdaptiveOpticsSim 0.2.2 and REVOLTCopperSim 0.2.0.
 The captured AOS and Copper source commits are recorded in `fixture.toml`; the
-Python repositories are pinned in `sources.json`. AOS and Copper are local path sources. Prepare separate clean library
-checkouts at the commits in `fixture.toml` (AOS `b590aa26`, Copper `781f41d3`).
-The benchmark harness lives in the later results commit; using that commit as
-the library source against this archived fixture intentionally fails the exact
-revision check. A new source revision needs a new fixture campaign. The archived `Project.toml` and
-`Manifest.toml` must travel together. Their local source paths are absolute;
-when moving the campaign, update the `[sources]` entries in `Project.toml` and
-the matching `path` entries in `Manifest.toml` to the new checkout locations,
-then instantiate without updating or re-resolving package versions. Keep the
-manifest's other package versions unchanged.
+Python repositories are pinned in `sources.json`. The AOS and Copper commits
+identify the inputs to the archived fixture. The stored coordinates and basis
+are the inputs for the comparison drivers. The archived AOS driver checks its
+library revision against `fixture.toml`; preserve the archived environment when
+reproducing that exact run. For a new campaign, generate a fixture from the
+current declaration with the command above.
 
 Run the complete numerical validation before measuring service time. The default
 configuration list includes CPU and CUDA runs for all three engines, and the

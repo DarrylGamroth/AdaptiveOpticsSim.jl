@@ -1,5 +1,5 @@
-# julia --project=BENCH_ENV fixture.jl OUTPUT_DIRECTORY
-using AdaptiveOpticsSim, REVOLTCopperSim
+# julia --project=BENCH_ENV fixture.jl INSTRUMENTS_ROOT OUTPUT_DIRECTORY
+using AdaptiveOpticsSim, PipeWireAORTC
 using AdaptiveOpticsSim.Optics, AdaptiveOpticsSim.WavefrontSensors
 using Random, LinearAlgebra, TOML, SHA
 const FixtureWFS = AdaptiveOpticsSim.WavefrontSensors
@@ -10,7 +10,7 @@ function save_array(directory, name, array)
     return Dict("file"=>basename(path),"shape"=>collect(size(values)),
         "dtype"=>"float32","order"=>"F","sha256"=>bytes2hex(sha256(read(path))))
 end
-function create_fixture(directory)
+function create_fixture(instruments_root, directory)
     isdir(directory) && !isempty(readdir(directory)) && error("fixture output must be empty")
     mkpath(directory)
     n=240
@@ -18,7 +18,12 @@ function create_fixture(directory)
     src=Source(band=:V,magnitude=5.752574989159953,T=Float32)
     pupil=PupilFunction(tel;T=Float32)
     amplitude=Array(pupil.amplitude)
-    coords=REVOLTCopperSim.actuator_coordinates()
+    configuration = PipeWireAORTC.InstrumentConfiguration
+    definition = joinpath(instruments_root, "revolt-copper", "simulation", "definition.yaml")
+    declaration = configuration.load_simulation(definition)
+    configured = configuration.settings(declaration, (; profile="coordinate_gaussian"))
+    binding = declaration.document["bindings"]["actuator_coordinates"]
+    coords = configuration.binding_values(declaration, configured, binding)
     topology=AdaptiveOpticsSim.Optics.SampledActuatorTopology(coords;T=Float32)
     dm=DeformableMirror(tel;topology,influence_width=0.08626550214129701,T=Float32)
     basis=reshape(AdaptiveOpticsSim.Optics.materialize_influence_matrix(dm),n,n,277)
@@ -72,12 +77,13 @@ function create_fixture(directory)
         "actuator_coordinates"=>save_array(directory,"actuator_coordinates",coords),
         "generator_sha256"=>bytes2hex(sha256(read(@__FILE__))),"seed"=>823,
         "aos_revision"=>readchomp(`git -C $(dirname(dirname(pathof(AdaptiveOpticsSim)))) rev-parse HEAD`),
-        "copper_revision"=>readchomp(`git -C $(dirname(dirname(pathof(REVOLTCopperSim)))) rev-parse HEAD`),
+        "copper_revision"=>readchomp(`git -C $instruments_root rev-parse HEAD`),
         "calibration_basis_scope"=>"AOS sampled provisional Copper Gaussian operator, unit surface OPD coefficients. Shared as input; external DM implementations are not tested.",
         "bandlimited_probe_scope"=>"Deterministic finite Fourier probes, not a validated atmospheric realization.")
     open(io->TOML.print(io,result;sorted=true),joinpath(directory,"fixture.toml"),"w")
     return result
 end
 if abspath(PROGRAM_FILE)==@__FILE__
-    create_fixture(only(ARGS))
+    length(ARGS) == 2 || error("expected INSTRUMENTS_ROOT OUTPUT_DIRECTORY")
+    create_fixture(realpath(ARGS[1]), ARGS[2])
 end

@@ -1,10 +1,9 @@
-# Run in an isolated environment containing CUDA, local AOS, and Copper:
+# Run in an isolated environment containing CUDA, local AOS, and the shared instrument tools’ dependencies:
 # julia --project=/tmp/copper-profile-env --startup-file=no \
-#   benchmarks/profile_copper_cuda.jl /path/to/REVOLTCopperSim.jl output.toml 128
+#   benchmarks/profile_copper_cuda.jl /path/to/adaptive-optics-simulations output.toml 128
 # AOS_COPPER_PROFILE=1 adds separate, untimed CUDA profiler passes.
 # No environment activation, package installation, or source overrides occur here.
 using AdaptiveOpticsSim, AdaptiveOpticsSim.AlgorithmGraphs
-using REVOLTCopperSim
 using LinearAlgebra, Statistics, TOML, SHA
 import CUDA
 
@@ -91,12 +90,9 @@ function node_samples!(graph, repeats, warmups, captured::Bool)
     ) for (index, name) in enumerate(names))
 end
 
-function main(args)
+function main(args, copper_root)
     2 <= length(args) <= 3 || error(
-        "usage: profile_copper_cuda.jl COPPER_ROOT OUTPUT_TOML [REPEATS=128]")
-    copper_root = realpath(args[1])
-    realpath(dirname(dirname(pathof(REVOLTCopperSim)))) == copper_root ||
-        error("loaded Copper source does not match COPPER_ROOT")
+        "usage: profile_copper_cuda.jl INSTRUMENTS_ROOT OUTPUT_TOML [REPEATS=128]")
     realpath(dirname(dirname(pathof(AdaptiveOpticsSim)))) == realpath(joinpath(@__DIR__, "..")) ||
         error("isolated environment must load this AOS checkout")
     repeats = length(args) == 3 ? parse(Int, args[3]) : 128
@@ -111,7 +107,7 @@ function main(args)
         "julia" => string(VERSION), "cuda" => string(pkgversion(CUDA)),
         "device" => CUDA.name(CUDA.device()), "repeats" => repeats,
         "warmups" => warmups, "aos" => source_record(AdaptiveOpticsSim),
-        "copper" => source_record(REVOLTCopperSim),
+        "copper" => instrument_source_record(dirname(copper_root)),
         "harness_sha256" => bytes2hex(sha256(read(@__FILE__))),
         "active_project" => something(Base.active_project(), ""),
         "script" => abspath(@__FILE__), "arguments" => copy(args),
@@ -122,7 +118,7 @@ function main(args)
     )
     for (label, execution) in (("stream", StreamGraphExecution()),
             ("captured", CapturedGraphExecution()))
-        system = prepare_hil_system(; target, execution)
+        system = instrument_system(copper_root; target, execution)
         result[label] = complete_samples!(system.graph, repeats, warmups)
         if get(ENV, "AOS_COPPER_PROFILE", "0") == "1"
             println("Untimed CUDA profile: ", label)
@@ -141,7 +137,7 @@ function main(args)
     for (label, execution, captured) in (
             ("nodes_stream", StreamGraphExecution(), false),
             ("nodes_captured", CapturedGraphExecution(), true))
-        system = prepare_hil_system(; target, execution)
+        system = instrument_system(copper_root; target, execution)
         result[label] = node_samples!(system.graph, repeats, warmups, captured)
         system = nothing
         GC.gc(true)
@@ -158,5 +154,8 @@ function main(args)
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    main(ARGS)
+    isempty(ARGS) && error("expected INSTRUMENTS_ROOT OUTPUT_TOML [REPEATS=128]")
+    const INSTRUMENTS_ROOT = realpath(first(ARGS))
+    include("instrument_simulation.jl")
+    main(ARGS, joinpath(INSTRUMENTS_ROOT, "revolt-copper"))
 end
