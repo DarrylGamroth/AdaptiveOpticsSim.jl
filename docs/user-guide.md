@@ -314,7 +314,7 @@ Maintained package-level reference examples include:
 Instrument definitions, calibration inputs, and operational acceptance tests
 belong with the instrument definitions. REVOLT Classic and Copper are
 maintained in
-[adaptive-optics-simulations](https://github.com/DarrylGamroth/adaptive-optics-simulations).
+`adaptive-optics-simulations`.
 
 ## External RTC Lockstep
 

@@ -98,7 +98,7 @@ lockstep HIL boundary used by downstream instrument packages. It does not own
 an instrument's command geometry, detector profile, calibration policy, or
 scientific acceptance claim.
 
-[adaptive-optics-simulations](https://github.com/DarrylGamroth/adaptive-optics-simulations)
+`adaptive-optics-simulations`
 maintains the REVOLT instrument definitions, execution profiles, and
 validation. Its tests and documented assumptions define their support status.
 

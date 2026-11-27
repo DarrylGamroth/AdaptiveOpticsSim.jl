@@ -680,7 +680,7 @@ AOS owns the reusable plant graph nodes, static YAML schema, lockstep HIL
 boundary, and pyRTC-compatible shared-memory adapter. Instrument command geometry,
 detector settings, calibration policy, complete graph files, and scientific
 acceptance tests belong to the instrument owner. The
-[adaptive-optics-simulations](https://github.com/DarrylGamroth/adaptive-optics-simulations)
+`adaptive-optics-simulations`
 repository supplies the Classic Shack–Hartmann, Copper pyramid, and SPIDERS
 optical declarations to the shared AOS compiler. Their influence functions,
 registration assumptions, and calibration artifacts are documented and tested
